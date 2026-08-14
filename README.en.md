@@ -13,7 +13,7 @@
 
 ## Features
 
-- SSH, Telnet, and local shell terminals.
+- SSH, Telnet, and local shell terminals (local shell is supported on macOS and Linux).
 - SFTP and FTP file browsing with a transfer queue.
 - Site groups, tab restoration, and ZIP backup and restore.
 - A local MCP Streamable HTTP server for AI and automation integrations.
@@ -28,11 +28,12 @@ On first launch, the application attempts to migrate sites, settings, known host
 
 ## Development Requirements
 
-- macOS 12 or later
+- macOS 12 or later on Apple Silicon, Windows 10/11 x64, or Linux x64
 - Go 1.23 or later
 - Node.js and npm
-- Xcode Command Line Tools
-- Wails v2 CLI; if it is not installed, the project scripts install it through `go install`
+- Xcode Command Line Tools for macOS builds
+- GTK3, WebKitGTK, AppIndicator, and `pkg-config` for Linux builds
+- The project scripts automatically use the Wails v2 CLI version declared by `go.mod`
 
 ## Run in Development Mode
 
@@ -44,7 +45,9 @@ cd Integrate-Terminal
 
 `run.sh` creates a development mirror in a local temporary directory to prevent AppleDouble files generated on external drives from interfering with the Wails build.
 
-## Build the macOS App
+## Build Desktop Executables
+
+### macOS Apple Silicon
 
 ```bash
 ./build.sh
@@ -52,11 +55,27 @@ cd Integrate-Terminal
 
 The output is written to `build/bin/IntegTERM.app`. By default, the app uses an ad-hoc signature and does not enable App Sandbox, so it can be opened locally after the build finishes.
 
-The public GitHub repository provides only the standard `.app` build workflow. It does not include Developer ID, Apple notarization, or DMG release scripts. Anyone distributing a self-built app must handle the required Apple signing and release process separately.
+### Windows x64
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
+
+The output is written to `build\bin\IntegTERM.exe`. The script creates only an x64 executable and does not create an installer or apply a signature.
+
+### Linux x64
+
+```bash
+./build-linux.sh
+```
+
+The output is written to `build/bin/IntegTERM`. The script detects the installed WebKitGTK and AppIndicator versions and creates only an x64 executable, without AppImage, DEB, or RPM packaging.
+
+Intel-based Macs are not supported. The public GitHub repository does not include Developer ID, Apple notarization, DMG, or release packaging for other platforms. Distributors must handle signing, installers, and release requirements separately.
 
 ## Data and Security
 
-Application data is stored in `~/Library/Application Support/IntegTERM` by default. Site passwords and PPK passphrases are currently stored in local site data and site backup ZIP files. Restrict file permissions and protect backups appropriately. The REST/MCP service binds only to `127.0.0.1` by default; configure the IP allowlist correctly before permitting external sources.
+Application data is stored in the `IntegTERM` directory under the platform's `os.UserConfigDir()`, such as `~/Library/Application Support/IntegTERM` on macOS, `%AppData%\IntegTERM` on Windows, and `~/.config/IntegTERM` on Linux. Site passwords and PPK passphrases are currently stored in local site data and site backup ZIP files. Restrict file permissions and protect backups appropriately. The REST/MCP service binds only to `127.0.0.1` by default; configure the IP allowlist correctly before permitting external sources.
 
 Do not commit `cert/`, `data/`, `.env*`, installers, signing assets, or files containing real credentials. See [SECURITY.md](SECURITY.md) for security reporting instructions.
 

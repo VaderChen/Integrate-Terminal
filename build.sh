@@ -22,6 +22,11 @@ if (( $# > 0 )); then
   exit 1
 fi
 
+if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
+  echo "此腳本只支援 Apple Silicon macOS。"
+  exit 1
+fi
+
 cleanup_tmp_root() {
   if [[ -n "$TMP_ROOT" && -d "$TMP_ROOT" ]]; then
     rm -rf "$TMP_ROOT"

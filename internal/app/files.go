@@ -8,9 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
-"github.com/VaderChen/Integrate-Terminal/internal/fileaccess"
+	"github.com/VaderChen/Integrate-Terminal/internal/fileaccess"
 	"github.com/VaderChen/Integrate-Terminal/internal/keystore"
 	"github.com/VaderChen/Integrate-Terminal/internal/model"
 
@@ -241,13 +240,12 @@ func (a *App) ExecuteLocalPath(targetPath string) error {
 	if info.IsDir() {
 		return fmt.Errorf("cannot execute a directory")
 	}
-	if info.Mode()&0o111 == 0 {
-		return fmt.Errorf("file is not executable")
+	cmd, err := executableCommand(targetPath, info)
+	if err != nil {
+		return err
 	}
-
-	cmd := exec.Command(targetPath)
 	cmd.Dir = filepath.Dir(targetPath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	configureDetachedCommand(cmd)
 	if err := cmd.Start(); err != nil {
 		a.sessionManager.AppendLog(fmt.Sprintf("執行本機檔案失敗: %s", targetPath), "failed")
 		return err
