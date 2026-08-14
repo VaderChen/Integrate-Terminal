@@ -111,4 +111,8 @@ GitHub 공개 버전에는 Developer ID, Apple notarization, DMG 또는 다른 �
 1. 오픈 소스 사용에는 [GNU General Public License v3.0](LICENSE)이 적용됩니다.
 2. GPLv3를 준수할 수 없거나 비공개 소스 통합 또는 기타 상업적 조건이 필요한 경우 별도의 [상업용 라이선스](COMMERCIAL-LICENSE.md)를 이용할 수 있습니다.
 
+상업용 라이선스는 라이선스 제공자가 별도로 라이선스할 권리를 가진 코드와 자산에만 적용됩니다. 타사 패키지, 아이콘, 글꼴, 데이터 세트, AI 모델 및 기타 타사 콘텐츠는 포함되지 않으며 각각의 라이선스 조건이 계속 적용됩니다. 전체 목록은 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)와 [THIRD-PARTY-LICENSES.txt](THIRD-PARTY-LICENSES.txt)를 참조하십시오.
+
+빌드 과정은 GPLv3 전문, 타사 라이선스 문서 및 `build-metadata.json`을 배포 결과물에 포함합니다. 메타데이터에는 소스 Git tag, commit 및 작업 트리 상태가 기록되어 바이너리를 해당 소스 리비전으로 추적할 수 있습니다.
+
 정식 Contributor License Agreement가 마련되기 전까지는 문제 보고와 토론만 받습니다. 자세한 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참조하십시오.

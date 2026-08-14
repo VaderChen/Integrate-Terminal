@@ -15,6 +15,7 @@ export COPYFILE_DISABLE=1
 export COPY_EXTENDED_ATTRIBUTES_DISABLE=1
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
 APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.vader.integterm}"
+BUILD_SOURCE_URL="${BUILD_SOURCE_URL:-https://github.com/VaderChen/Integrate-Terminal}"
 
 if (( $# > 0 )); then
   echo "用法：$0"
@@ -151,6 +152,9 @@ cd "$SCRIPT_DIR"
 echo "整理 Go 模組..."
 go mod tidy
 
+echo "產生第三方授權清冊..."
+node "$SCRIPT_DIR/scripts/generate-third-party-notices.mjs"
+
 echo "同步 App Icon..."
 "$SCRIPT_DIR/sync-app-icon.sh"
 
@@ -181,6 +185,34 @@ npm run build
 cleanup_appledouble "$FRONTEND_DIR/dist"
 
 cd "$SCRIPT_DIR"
+if [[ -z "${BUILD_COMMIT:-}" || -z "${BUILD_TAG:-}" || -z "${BUILD_STATE:-}" ]]; then
+  if command -v git >/dev/null 2>&1 && git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    BUILD_COMMIT="${BUILD_COMMIT:-$(git -C "$SCRIPT_DIR" rev-parse HEAD)}"
+    exact_tag="$(git -C "$SCRIPT_DIR" describe --tags --exact-match HEAD 2>/dev/null || true)"
+    BUILD_TAG="${BUILD_TAG:-${exact_tag:-untagged}}"
+    if [[ -z "${BUILD_STATE:-}" ]]; then
+      if [[ -n "$(git -C "$SCRIPT_DIR" status --porcelain=v1 --untracked-files=normal)" ]]; then
+        BUILD_STATE="dirty"
+      else
+        BUILD_STATE="clean"
+      fi
+    fi
+  else
+    BUILD_COMMIT="${BUILD_COMMIT:-unknown}"
+    BUILD_TAG="${BUILD_TAG:-untagged}"
+    BUILD_STATE="${BUILD_STATE:-unknown}"
+  fi
+fi
+
+for metadata_value in "$BUILD_COMMIT" "$BUILD_TAG" "$BUILD_STATE" "$BUILD_SOURCE_URL"; do
+  if [[ ! "$metadata_value" =~ '^[A-Za-z0-9._/:+-]+$' ]]; then
+    echo "建置中繼資料包含不支援的字元：$metadata_value"
+    exit 1
+  fi
+done
+
+BUILD_LDFLAGS="-X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BUILD_COMMIT -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BUILD_TAG -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BUILD_STATE -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BUILD_SOURCE_URL"
+
 mkdir -p "$BUILD_BIN_DIR"
 rm -rf "$APP_PATH"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/integterm-build.XXXXXX")"
@@ -213,7 +245,7 @@ fi
 echo "開始打包 Wails 應用程式..."
 (
   cd "$STAGING_DIR"
-  "$WAILS_BIN" build -clean -s
+  "$WAILS_BIN" build -clean -s -ldflags "$BUILD_LDFLAGS"
 )
 
 if [[ ! -d "$STAGING_APP_PATH" ]]; then
@@ -223,6 +255,18 @@ fi
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_BUNDLE_VERSION" "$STAGING_APP_PATH/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_BUNDLE_ID" "$STAGING_APP_PATH/Contents/Info.plist"
+APP_LICENSE_DIR="$STAGING_APP_PATH/Contents/Resources/Licenses"
+mkdir -p "$APP_LICENSE_DIR"
+cp "$STAGING_DIR/LICENSE" "$APP_LICENSE_DIR/GPL-3.0.txt"
+cp "$STAGING_DIR/THIRD-PARTY-NOTICES.md" "$APP_LICENSE_DIR/THIRD-PARTY-NOTICES.md"
+cp "$STAGING_DIR/THIRD-PARTY-LICENSES.txt" "$APP_LICENSE_DIR/THIRD-PARTY-LICENSES.txt"
+node "$STAGING_DIR/scripts/write-build-metadata.mjs" \
+  "$STAGING_APP_PATH/Contents/Resources/build-metadata.json" \
+  "$APP_MARKETING_VERSION" \
+  "$BUILD_COMMIT" \
+  "$BUILD_TAG" \
+  "$BUILD_STATE" \
+  "$BUILD_SOURCE_URL"
 cleanup_appledouble "$STAGING_APP_PATH"
 cleanup_codesign_artifacts "$STAGING_APP_PATH"
 normalize_bundle_permissions "$STAGING_APP_PATH"
@@ -251,6 +295,7 @@ fi
 
 echo "完成：$APP_PATH"
 echo "Bundle ID：$BUILT_BUNDLE_ID"
+echo "來源版本：$BUILD_TAG ($BUILD_COMMIT, $BUILD_STATE)"
 if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
   echo "本機驗證版採 ad-hoc 簽章，不適合直接對外發布。"
 else
