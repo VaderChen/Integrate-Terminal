@@ -13,7 +13,7 @@
 
 ## 기능
 
-- SSH, Telnet 및 로컬 Shell 터미널.
+- SSH, Telnet 및 로컬 Shell 터미널(로컬 Shell은 macOS와 Linux에서 지원).
 - SFTP 및 FTP 파일 탐색과 전송 대기열.
 - 사이트 그룹, 탭 복원, ZIP 백업 및 복원.
 - AI 및 자동화 도구 연동을 위한 로컬 MCP Streamable HTTP Server.
@@ -28,11 +28,12 @@
 
 ## 개발 환경
 
-- macOS 12 이상
+- Apple Silicon 기반 macOS 12 이상, Windows 10/11 x64 또는 Linux x64
 - Go 1.23 이상
 - Node.js 및 npm
-- Xcode Command Line Tools
-- Wails v2 CLI. 설치되어 있지 않으면 프로젝트 스크립트가 `go install`을 통해 설치합니다.
+- macOS 빌드용 Xcode Command Line Tools
+- Linux 빌드용 GTK3, WebKitGTK, AppIndicator 및 `pkg-config`
+- 프로젝트 스크립트는 `go.mod`에 선언된 Wails v2 CLI 버전을 자동으로 사용합니다.
 
 ## 개발 모드 실행
 
@@ -44,7 +45,9 @@ cd Integrate-Terminal
 
 `run.sh`는 로컬 임시 디렉터리에 개발용 미러를 생성하여 외장 드라이브에서 만들어지는 AppleDouble 파일이 Wails 빌드를 방해하지 않도록 합니다.
 
-## macOS App 빌드
+## 데스크톱 실행 파일 빌드
+
+### macOS Apple Silicon
 
 ```bash
 ./build.sh
@@ -52,11 +55,27 @@ cd Integrate-Terminal
 
 출력 파일은 `build/bin/IntegTERM.app`에 생성됩니다. 기본적으로 ad-hoc 서명을 사용하고 App Sandbox를 활성화하지 않으므로 빌드 완료 후 로컬에서 바로 실행할 수 있습니다.
 
-GitHub 공개 버전은 일반적인 `.app` 빌드 절차만 제공합니다. Developer ID, Apple notarization 또는 DMG 배포 스크립트는 포함하지 않습니다. 직접 빌드한 App을 배포하려면 배포자가 Apple 서명 및 배포 요구 사항을 별도로 처리해야 합니다.
+### Windows x64
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
+
+출력 파일은 `build\bin\IntegTERM.exe`에 생성됩니다. 스크립트는 x64 실행 파일만 만들며 설치 프로그램 생성이나 서명은 수행하지 않습니다.
+
+### Linux x64
+
+```bash
+./build-linux.sh
+```
+
+출력 파일은 `build/bin/IntegTERM`에 생성됩니다. 스크립트는 설치된 WebKitGTK와 AppIndicator 버전을 감지하며 AppImage, DEB 또는 RPM 없이 x64 실행 파일만 생성합니다.
+
+Intel Mac은 지원하지 않습니다. GitHub 공개 버전에는 Developer ID, Apple notarization, DMG 또는 다른 플랫폼용 배포 패키징 절차가 포함되지 않습니다. 서명, 설치 프로그램 및 배포 요구 사항은 배포자가 별도로 처리해야 합니다.
 
 ## 데이터 및 보안
 
-애플리케이션 데이터는 기본적으로 `~/Library/Application Support/IntegTERM`에 저장됩니다. 사이트 비밀번호와 PPK 암호 문구는 현재 로컬 사이트 데이터 및 사이트 백업 ZIP 파일에 저장됩니다. 파일 권한을 제한하고 백업을 안전하게 보관하십시오. REST/MCP 서비스는 기본적으로 `127.0.0.1`에만 바인딩됩니다. 외부 연결을 허용하기 전에 IP 허용 목록을 올바르게 설정하십시오.
+애플리케이션 데이터는 각 플랫폼의 `os.UserConfigDir()` 아래 `IntegTERM` 디렉터리에 저장됩니다. 예를 들어 macOS에서는 `~/Library/Application Support/IntegTERM`, Windows에서는 `%AppData%\IntegTERM`, Linux에서는 `~/.config/IntegTERM`입니다. 사이트 비밀번호와 PPK 암호 문구는 현재 로컬 사이트 데이터 및 사이트 백업 ZIP 파일에 저장됩니다. 파일 권한을 제한하고 백업을 안전하게 보관하십시오. REST/MCP 서비스는 기본적으로 `127.0.0.1`에만 바인딩됩니다. 외부 연결을 허용하기 전에 IP 허용 목록을 올바르게 설정하십시오.
 
 `cert/`, `data/`, `.env*`, 설치 패키지, 서명 자산 또는 실제 인증 정보가 포함된 파일을 커밋하지 마십시오. 보안 문제 신고 방법은 [SECURITY.md](SECURITY.md)를 참조하십시오.
 

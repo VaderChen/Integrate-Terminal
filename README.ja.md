@@ -13,7 +13,7 @@
 
 ## 機能
 
-- SSH、Telnet、ローカル Shell ターミナル。
+- SSH、Telnet、ローカル Shell ターミナル（ローカル Shell は macOS と Linux に対応）。
 - SFTP、FTP のファイル閲覧および転送キュー。
 - サイトのグループ化、タブの復元、ZIP 形式のバックアップと復元。
 - AI および自動化ツールと連携するローカル MCP Streamable HTTP Server。
@@ -28,11 +28,12 @@
 
 ## 開発環境
 
-- macOS 12 以降
+- Apple Silicon 搭載 macOS 12 以降、Windows 10/11 x64、または Linux x64
 - Go 1.23 以降
 - Node.js および npm
-- Xcode Command Line Tools
-- Wails v2 CLI（未インストールの場合は、プロジェクトのスクリプトが `go install` を使用してインストールします）
+- macOS のビルドには Xcode Command Line Tools
+- Linux のビルドには GTK3、WebKitGTK、AppIndicator、`pkg-config`
+- プロジェクトのスクリプトは `go.mod` に記載された Wails v2 CLI を自動的に使用します
 
 ## 開発モードで起動
 
@@ -44,7 +45,9 @@ cd Integrate-Terminal
 
 `run.sh` はローカルの一時ディレクトリに開発用ミラーを作成し、外付けドライブで生成される AppleDouble ファイルが Wails のビルドに影響することを防ぎます。
 
-## macOS App のビルド
+## デスクトップ実行ファイルのビルド
+
+### macOS Apple Silicon
 
 ```bash
 ./build.sh
@@ -52,11 +55,27 @@ cd Integrate-Terminal
 
 出力先は `build/bin/IntegTERM.app` です。デフォルトでは ad-hoc 署名を使用し、App Sandbox は有効にしないため、ビルド完了後にローカル環境で直接起動できます。
 
-GitHub の公開版では、通常の `.app` ビルド手順のみを提供しています。Developer ID、Apple notarization、DMG リリース用スクリプトは含まれません。自身でビルドした App を配布する場合は、配布者が Apple の署名およびリリース要件に別途対応する必要があります。
+### Windows x64
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
+
+出力先は `build\bin\IntegTERM.exe` です。スクリプトは x64 実行ファイルのみを作成し、インストーラーの作成や署名は行いません。
+
+### Linux x64
+
+```bash
+./build-linux.sh
+```
+
+出力先は `build/bin/IntegTERM` です。スクリプトはインストール済みの WebKitGTK と AppIndicator のバージョンを検出し、AppImage、DEB、RPM を作成せず、x64 実行ファイルのみを生成します。
+
+Intel Mac はサポート対象外です。GitHub の公開版には Developer ID、Apple notarization、DMG、その他のプラットフォーム向けリリースパッケージ処理は含まれません。署名、インストーラー、配布要件は配布者が別途対応してください。
 
 ## データとセキュリティ
 
-アプリケーションデータは、デフォルトで `~/Library/Application Support/IntegTERM` に保存されます。サイトのパスワードと PPK パスフレーズは、現在ローカルのサイトデータおよびサイトバックアップ用 ZIP ファイルに保存されます。ファイルのアクセス権を制限し、バックアップを適切に管理してください。REST/MCP サービスはデフォルトで `127.0.0.1` のみにバインドされます。外部からの接続を許可する前に、IP 許可リストを正しく設定してください。
+アプリケーションデータは、各プラットフォームの `os.UserConfigDir()` 配下にある `IntegTERM` ディレクトリに保存されます。たとえば macOS では `~/Library/Application Support/IntegTERM`、Windows では `%AppData%\IntegTERM`、Linux では `~/.config/IntegTERM` です。サイトのパスワードと PPK パスフレーズは、現在ローカルのサイトデータおよびサイトバックアップ用 ZIP ファイルに保存されます。ファイルのアクセス権を制限し、バックアップを適切に管理してください。REST/MCP サービスはデフォルトで `127.0.0.1` のみにバインドされます。外部からの接続を許可する前に、IP 許可リストを正しく設定してください。
 
 `cert/`、`data/`、`.env*`、インストーラー、署名用資産、実際の認証情報を含むファイルはコミットしないでください。セキュリティ問題の報告方法については、[SECURITY.md](SECURITY.md) を参照してください。
 

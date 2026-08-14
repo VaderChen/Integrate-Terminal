@@ -33,13 +33,31 @@ Integrate Terminal 是以 Wails v2 建立的桌面應用，整合 SSH、SFTP、F
 
 ## 建置
 
+macOS Apple Silicon：
+
 ```bash
 ./build.sh
 ```
 
 輸出為 `build/bin/IntegTERM.app`。建置腳本預設建立非沙盒、ad-hoc 簽章的本機版本，不讀取 `cert/`，也不嵌入 Provisioning Profile；建置完成後可直接在本機開啟 App。
 
-公開 Repository 不包含 Developer ID、Apple notarization 或 DMG 發布流程。一般開發與原始碼使用只需執行 `build.sh`；如需對外散布，應由散布者自行準備簽章與發布流程。
+Windows x64：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+```
+
+輸出為 `build\bin\IntegTERM.exe`。
+
+Linux x64：
+
+```bash
+./build-linux.sh
+```
+
+輸出為 `build/bin/IntegTERM`。Linux 腳本會偵測 WebKitGTK 4.0／4.1 與 Ayatana／Legacy AppIndicator，並帶入對應的 Wails build tags。
+
+Windows 與 Linux 腳本只建立執行檔，不負責簽章、安裝程式或發行封裝。macOS Intel 不在支援範圍。公開 Repository 不包含 Developer ID、Apple notarization、DMG 或其他發布封裝流程。
 
 ## 資料遷移
 
@@ -53,7 +71,8 @@ Integrate Terminal 是以 Wails v2 建立的桌面應用，整合 SSH、SFTP、F
 ## 公開前檢查
 
 ```bash
-zsh -n build.sh run.sh install.sh backup.sh
+zsh -n build.sh run.sh
+bash -n build-linux.sh
 gofmt -w ./internal ./main.go
 go test -exec /usr/bin/true ./...
 cd frontend && npm run build

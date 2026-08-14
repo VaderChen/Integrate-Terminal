@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/model"
 )
 
 func (a *App) ReloadConfig() model.Config {
@@ -61,7 +60,7 @@ func (a *App) ensureBackgroundService() error {
 	}
 
 	cmd := exec.Command(executablePath, "serve")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	configureBackgroundCommand(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -106,12 +105,7 @@ func (a *App) backgroundServiceRunning() bool {
 		return false
 	}
 
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		_ = os.Remove(a.backgroundServicePIDPath())
-		return false
-	}
-	if err := process.Signal(syscall.Signal(0)); err != nil {
+	if !backgroundProcessRunning(pid) {
 		_ = os.Remove(a.backgroundServicePIDPath())
 		return false
 	}

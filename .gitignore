@@ -43,6 +43,12 @@ IntegTERM_*.zip
 /package-dmg.command
 /package-dmg.sh
 
+# 本機維護工具
+/backup.command
+/backup.sh
+/install.command
+/install.sh
+
 # 舊 App Store 私有流程
 /internal/purchase/
 /package-appstore.command
