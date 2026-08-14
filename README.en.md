@@ -111,4 +111,8 @@ This project uses dual licensing:
 1. Open source use is licensed under the [GNU General Public License v3.0](LICENSE).
 2. A separate [commercial license](COMMERCIAL-LICENSE.md) is available for users who cannot comply with GPLv3, require closed-source integration, or need other commercial terms.
 
+The commercial license only covers code and assets that the licensor has the right to license separately. It excludes third-party packages, icons, fonts, datasets, AI models, and other third-party content, which remain subject to their respective terms. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and [THIRD-PARTY-LICENSES.txt](THIRD-PARTY-LICENSES.txt) for the complete inventory.
+
+The build process places the GPLv3 text, third-party licensing documents, and `build-metadata.json` in release artifacts. The metadata records the source Git tag, commit, and working-tree state so that a binary can be traced back to its source revision.
+
 Until a formal Contributor License Agreement is available, only issue reports and discussions are accepted. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.

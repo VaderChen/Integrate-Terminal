@@ -111,4 +111,8 @@ GitHub 公開版本不包含 Developer ID、Apple notarization、DMG 或其他�
 1. 開放原始碼使用遵循 [GNU General Public License v3.0](LICENSE)。
 2. 無法遵循 GPLv3、需要閉源整合或其他商業條款者，可另行取得[商業授權](COMMERCIAL-LICENSE.md)。
 
+商業授權僅涵蓋授權方有權另行授權的程式碼與資產，不包含第三方套件、圖示、字型、資料集、AI 模型或其他第三方內容；這些項目仍適用各自的授權條款。完整清冊請參閱 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 與 [THIRD-PARTY-LICENSES.txt](THIRD-PARTY-LICENSES.txt)。
+
+建置流程會將 GPLv3、第三方授權文件及 `build-metadata.json` 放入發行產物。中繼資料記錄來源 Git tag、commit 與工作區狀態，讓執行檔可追溯至對應原始碼。
+
 目前在正式 Contributor License Agreement 完成前，僅接受問題回報與討論；詳細說明請參閱 [CONTRIBUTING.md](CONTRIBUTING.md)。
