@@ -26,6 +26,31 @@ The open source edition does not use StoreKit, limit the number of connections, 
 
 On first launch, the application attempts to migrate sites, settings, known hosts, PPK copies, and the REST API token from the previous sandboxed edition. The public source code does not include Apple signing certificates, provisioning profiles, private keys, or personal site data.
 
+## MCP Integration
+
+IntegTERM includes a standard MCP server over Streamable HTTP. MCP-compatible AI and automation clients can manage saved sites, open SSH, Telnet, SFTP, FTP, and macOS/Linux local terminal tabs, execute SSH commands, interact with terminal sessions, transfer files, and inspect transfer queues and operation logs.
+
+### Enable the MCP Server
+
+1. Start IntegTERM and open **Settings** → **MCP**.
+2. Review the listening port and IP allowlist. The default port is `18080`, and the default allowlist is `127.0.0.1`.
+3. Enable the MCP Server. The default endpoint is `http://127.0.0.1:18080/mcp`.
+
+### MCP Client Configuration
+
+```json
+{
+  "mcpServers": {
+    "integterm": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:18080/mcp"
+    }
+  }
+}
+```
+
+The MCP endpoint does not require an API token or custom authentication header. Access control relies entirely on the source IP/CIDR allowlist. Keep the default `127.0.0.1` unless a trusted remote client must connect, and do not add unnecessarily broad networks. The in-app MCP page displays the current endpoint and complete tool documentation generated from the running configuration. Clients should call `tools/list` before using tools so they receive the current schemas.
+
 ## Development Requirements
 
 - macOS 12 or later on Apple Silicon, Windows 10/11 x64, or Linux x64

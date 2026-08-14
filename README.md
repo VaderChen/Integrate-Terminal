@@ -26,6 +26,31 @@
 
 程式會在第一次啟動時嘗試搬移舊沙盒版的站台、設定、known hosts、PPK 副本與 REST API token。公開原始碼不包含任何 Apple 簽章憑證、Provisioning Profile、私鑰或個人站台資料。
 
+## MCP 整合
+
+IntegTERM 內建標準 MCP Streamable HTTP Server。支援 MCP 的 AI 或自動化客戶端可以管理已儲存站台、開啟 SSH、Telnet、SFTP、FTP 與 macOS／Linux 本機終端分頁、執行 SSH 指令、讀寫互動式終端、處理檔案傳輸，以及查詢傳輸佇列與執行紀錄。
+
+### 啟用 MCP Server
+
+1. 啟動 IntegTERM，開啟「設定」→「MCP」。
+2. 確認監聽埠與 IP 白名單。預設埠為 `18080`，白名單為 `127.0.0.1`。
+3. 開啟 MCP Server；預設端點為 `http://127.0.0.1:18080/mcp`。
+
+### MCP 客戶端設定
+
+```json
+{
+  "mcpServers": {
+    "integterm": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:18080/mcp"
+    }
+  }
+}
+```
+
+MCP 端點不需要 API token 或自訂驗證標頭，存取控制完全依賴來源 IP／CIDR 白名單。除非受信任的遠端客戶端確實需要連線，否則請維持預設的 `127.0.0.1`，不要加入過大的網段。App 內的 MCP 頁面會顯示目前連線位置與依執行狀態產生的完整工具文件；客戶端應先透過 `tools/list` 取得實際工具結構。
+
 ## 開發環境
 
 - macOS 12 或更新版本（Apple Silicon）、Windows 10/11 x64，或 Linux x64
