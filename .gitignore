@@ -24,6 +24,7 @@
 coverage.out
 /build/bin/
 /dist/
+/THIRD-PARTY-LICENSES.txt
 /frontend/dist/
 /frontend/node_modules/
 /internal/purchase/native/
