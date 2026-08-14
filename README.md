@@ -71,7 +71,7 @@ powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
 
 輸出位於 `build/bin/IntegTERM`。腳本會偵測 WebKitGTK 與 AppIndicator 版本，只建立 x64 執行檔，不建立 AppImage、DEB 或 RPM。
 
-macOS Intel 不在支援範圍。GitHub 公開版本不包含 Developer ID、Apple notarization、DMG 或其他平台的發布封裝流程；散布者須自行處理簽章、安裝程式與發布要求。
+GitHub 公開版本不包含 Developer ID、Apple notarization、DMG 或其他平台的發布封裝流程；散布者須自行處理簽章、安裝程式與發布要求。
 
 ## 資料與安全
 
