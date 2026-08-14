@@ -1,0 +1,66 @@
+# macOS 與編輯器
+.DS_Store
+._*
+.idea/
+.vscode/
+*.bak
+*.swp
+
+# 環境與敏感設定
+.env
+.env.*
+!.env.example
+/cert/
+/data/
+*.cer
+*.key
+*.p12
+*.pem
+*.provisionprofile
+
+# Go、Wails 與前端產物
+*.test
+*.out
+coverage.out
+/build/bin/
+/dist/
+/frontend/dist/
+/frontend/node_modules/
+/internal/purchase/native/
+*.dylib
+*.exe
+*.syso
+
+# 安裝包與本機備份
+*.app
+*.dmg
+*.pkg
+*.zip
+IntegTERM_*.zip
+/.codex-tmp/
+
+# 私有 macOS 發布流程
+/package-dmg.command
+/package-dmg.sh
+
+# 舊 App Store 私有流程
+/internal/purchase/
+/package-appstore.command
+/package-appstore.sh
+/scripts/build-storekit2-bridge.sh
+/scripts/diagnose-signing.sh
+/scripts/sign-old-app.sh
+/assets/integterm-pro-iap.jpg
+/assets/integterm-pro-iap.png
+/assets/appicon-v1.png
+/assets/appicon-v2.png
+/frontend/package.json.md5
+
+# 內部發行與商務資料
+/doc/review.md
+/doc/release_*.md
+/doc/*/update_log_*.log
+/doc/PurchThankU.jpg
+/doc/PurchThankU.png
+/doc/測試用優惠碼.csv
+/doc/2026-04-08 16.30.55.png

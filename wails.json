@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "IntegTERM",
+  "outputfilename": "IntegTERM",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "info": {
+    "productVersion": "1.26.0814"
+  },
+  "author": {
+    "name": "Vader Chen",
+    "email": "8309425+VaderChen@users.noreply.github.com"
+  }
+}
