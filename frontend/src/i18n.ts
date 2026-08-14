@@ -1,0 +1,277 @@
+import { enMessages } from './i18n/en';
+import { jaMessages } from './i18n/ja';
+import { koMessages } from './i18n/ko';
+import { zhCNMessages } from './i18n/zhCN';
+import { zhTWMessages } from './i18n/zhTW';
+
+export type Locale = 'zh-TW' | 'zh-CN' | 'en' | 'ja' | 'ko';
+export type LanguageSetting = '' | Locale;
+
+export type Messages = {
+  loading: string;
+  brandEyebrow: string;
+  brandTitle: string;
+  brandSubtitle: string;
+  settingsLabel: string;
+  settingsTitle: string;
+  settingsButton: string;
+  close: string;
+  settingsNavGeneral: string;
+  settingsNavDisplay: string;
+  settingsNavSystem: string;
+  settingsNavSkill: string;
+  settingsNavAbout: string;
+  settingsLanguage: string;
+  settingsLanguageHint: string;
+  settingsLanguageAuto: string;
+  settingsLanguageEnglish: string;
+  settingsLanguageJapanese: string;
+  settingsLanguageKorean: string;
+  settingsLanguageTraditionalChinese: string;
+  settingsLanguageSimplifiedChinese: string;
+  settingsRestoreTabs: string;
+  settingsRestoreTabsHint: string;
+  settingsCloseTerminalTab: string;
+  settingsCloseTerminalTabHint: string;
+  settingsHideHiddenFiles: string;
+  settingsHideHiddenFilesHint: string;
+  settingsSiteStorageTitle: string;
+  settingsSiteStorageHint: string;
+  settingsSiteStoragePathLabel: string;
+  settingsSiteStorageUnavailable: string;
+  settingsSiteStorageOpen: string;
+  settingsSiteBackup: string;
+  settingsSiteRestore: string;
+  settingsSiteStorageSensitiveHint: string;
+  settingsSiteRestoreConfirm: string;
+  settingsSiteBackupSuccess: string;
+  settingsSiteRestoreSuccess: string;
+  settingsSiteStorageOperationFailed: string;
+  settingsOn: string;
+  settingsOff: string;
+  settingsTheme: string;
+  settingsThemeHint: string;
+  settingsThemeNeutral: string;
+  settingsThemeLight: string;
+  settingsThemeDark: string;
+  settingsThemeContrast: string;
+  settingsFontScale: string;
+  settingsFontScaleHint: string;
+  settingsShowTrayIcon: string;
+  settingsShowTrayIconHint: string;
+  settingsShowTrayIconRequired: string;
+  settingsRememberWindowPosition: string;
+  settingsRememberWindowPositionHint: string;
+  settingsTelnetLocalEcho: string;
+  settingsTelnetLocalEchoHint: string;
+  settingsSystemHint: string;
+  settingsSkillTitle: string;
+  settingsSkillHint: string;
+  settingsSkillExport: string;
+  settingsSkillCopy: string;
+  settingsSkillCopySuccess: string;
+  settingsSkillCopyFailed: string;
+  settingsSkillEmpty: string;
+  settingsRestServer: string;
+  settingsRestServerPort: string;
+  settingsRestServerPortHint: string;
+  settingsRestServerAllowlist: string;
+  settingsRestServerAllowlistHint: string;
+  settingsRestServerStatusRunning: (baseURL: string) => string;
+  settingsRestServerStatusAttached: (baseURL: string) => string;
+  settingsRestServerStatusStopped: (port: number) => string;
+  settingsAboutVersion: string;
+  settingsAboutAuthor: string;
+  fontScaleXSmall: string;
+  fontScaleSmall: string;
+  fontScaleMedium: string;
+  fontScaleLarge: string;
+  fontScaleXLarge: string;
+  currentSession: string;
+  noActiveTab: string;
+  chooseSiteHint: string;
+  connect: string;
+  disconnect: string;
+  localFiles: string;
+  remoteFiles: string;
+  sshTerminal: string;
+  noTabs: string;
+  siteListTitle: string;
+  siteListCount: (count: number) => string;
+  siteViewSwitcher: string;
+  siteViewCard: string;
+  siteViewCompact: string;
+  siteViewList: string;
+  edit: string;
+  copy: string;
+  delete: string;
+  sortByName: string;
+  connectSite: string;
+  editSite: string;
+  quickAdd: string;
+  collapse: string;
+  expand: string;
+  fieldName: string;
+  fieldFolder: string;
+  fieldProtocol: string;
+  fieldHost: string;
+  fieldPort: string;
+  fieldUsername: string;
+  fieldPassword: string;
+  placeholderHost: string;
+  placeholderPort: string;
+  placeholderUsername: string;
+  fieldPPKPath: string;
+  fieldPPKPassphrase: string;
+  placeholderPPKPath: string;
+  choosePPK: string;
+  authorizeKeyDirectory: string;
+  authorizeKeyDirectoryHint: string;
+  fieldLocalPath: string;
+  fieldRemotePath: string;
+  saveSite: string;
+  siteCopySuffix: string;
+  refresh: string;
+  fileName: string;
+  modified: string;
+  size: string;
+  transferQueue: string;
+  transferLog: string;
+  transferCount: (count: number) => string;
+  clearCompleted: string;
+  clearAll: string;
+  pauseAll: string;
+  resumeAll: string;
+  clearLogs: string;
+  expandPanel: string;
+  collapsePanel: string;
+  newFolder: string;
+  renameItem: string;
+  deleteItem: string;
+  refreshNow: string;
+  openItem: string;
+  executeItem: string;
+  openInFinder: string;
+  openInSSH: string;
+  copyPath: string;
+  downloadTo: string;
+  enterDirectoryName: string;
+  enterNewName: string;
+  confirmDelete: string;
+  create: string;
+  confirm: string;
+  cancel: string;
+  pause: string;
+  resume: string;
+  folderNamePlaceholder: string;
+  deleteTarget: (name: string) => string;
+  deleteTargets: (count: number) => string;
+  directionUpload: string;
+  directionDownload: string;
+  statusRunning: string;
+  statusPaused: string;
+  statusDone: string;
+  statusFailed: string;
+  statusCancelled: string;
+  protocolSecure: string;
+  protocolInsecure: string;
+  protocolSSHSFTP: string;
+  protocolTelnetFTP: string;
+  defaultSiteFolder: string;
+  siteFolderCreate: string;
+  siteFolderSort: string;
+  siteFolderDelete: string;
+  siteFolderNameLabel: string;
+  siteFolderDeleteConfirm: (name: string, count: number) => string;
+  placeholderSiteName: string;
+  placeholderFolder: string;
+  placeholderPassword: string;
+  placeholderPPKPassphrase: string;
+  tabListLabel: string;
+  closeTab: string;
+  openLocalTerminal: string;
+  connectMethodLabel: string;
+  chooseSecureConnectionMethod: string;
+  chooseLegacyConnectionMethod: string;
+  sshConnectHint: string;
+  ftpConnectHint: string;
+  telnetUnsupported: string;
+  connectingSSH: string;
+  connectingSFTP: string;
+  connectingFTP: string;
+  connectingTelnet: string;
+  sshConnectionClosed: string;
+  errorPrefix: string;
+  connectionFailed: string;
+  localNetworkAccessHint: string;
+  moveCompleted: (count: number, targetDirectory: string) => string;
+  moveIntoSelfFailed: string;
+  closeSSH: string;
+  terminalThemeGroup: string;
+  terminalFontGroup: string;
+  terminalFontSmall: string;
+  terminalFontMedium: string;
+  terminalFontLarge: string;
+  terminalCopy: string;
+  terminalPaste: string;
+  terminalSelectAll: string;
+  terminalClear: string;
+  terminalScaleReset: string;
+  terminalScaleResetConfirm: string;
+  terminalOpenSFTP: string;
+  hostTrustLabel: string;
+  hostTrustDescription: (host: string, port: number) => string;
+  hostTrustFingerprint: string;
+  hostTrustKeyType: string;
+  hostTrustHint: string;
+  hostTrustApprove: string;
+  confirmUploadToSSH: string;
+  confirmUploadToSSHDescription: (count: number, remotePath: string) => string;
+};
+
+const messages: Record<Locale, Messages> = {
+  'zh-TW': zhTWMessages,
+  'zh-CN': zhCNMessages,
+  en: enMessages,
+  ja: jaMessages,
+  ko: koMessages,
+};
+
+const defaultLocale: Locale = 'zh-TW';
+
+function normalizeLocale(value: string | undefined | null): Locale | null {
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+  if (normalized === 'zh-tw' || normalized === 'zh-hk' || normalized === 'zh-mo') return 'zh-TW';
+  if (normalized === 'zh-cn' || normalized === 'zh-sg') return 'zh-CN';
+  if (normalized.startsWith('en')) return 'en';
+  if (normalized.startsWith('ja')) return 'ja';
+  if (normalized.startsWith('ko')) return 'ko';
+  if (normalized.startsWith('zh')) return 'zh-CN';
+  return null;
+}
+
+export function detectLocale(): Locale {
+  if (typeof navigator !== 'undefined') {
+    const candidates = [navigator.language, ...(navigator.languages ?? [])];
+    for (const candidate of candidates) {
+      const locale = normalizeLocale(candidate);
+      if (locale) {
+        return locale;
+      }
+    }
+  }
+  return defaultLocale;
+}
+
+export function resolveLocale(language: LanguageSetting): Locale {
+  return normalizeLocale(language) ?? detectLocale();
+}
+
+export function getMessages(locale: Locale): Messages {
+  return messages[locale] ?? messages[defaultLocale];
+}
+
+export function useI18n(locale: Locale = defaultLocale) {
+  return getMessages(locale);
+}
