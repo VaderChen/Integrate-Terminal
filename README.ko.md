@@ -26,6 +26,31 @@
 
 처음 실행할 때 이전 샌드박스 버전의 사이트, 설정, known hosts, PPK 복사본 및 REST API 토큰 마이그레이션을 시도합니다. 공개 소스 코드에는 Apple 서명 인증서, Provisioning Profile, 개인 키 또는 개인 사이트 데이터가 포함되지 않습니다.
 
+## MCP 연동
+
+IntegTERM은 Streamable HTTP를 사용하는 표준 MCP Server를 내장합니다. MCP 호환 AI 및 자동화 클라이언트에서 저장된 사이트 관리, SSH, Telnet, SFTP, FTP 및 macOS/Linux 로컬 터미널 탭 열기, SSH 명령 실행, 대화형 터미널 제어, 파일 전송, 전송 대기열 및 실행 로그 조회를 수행할 수 있습니다.
+
+### MCP Server 활성화
+
+1. IntegTERM을 실행하고 **설정** → **MCP**를 엽니다.
+2. 수신 포트와 IP 허용 목록을 확인합니다. 기본 포트는 `18080`이며 기본 허용 목록은 `127.0.0.1`입니다.
+3. MCP Server를 활성화합니다. 기본 엔드포인트는 `http://127.0.0.1:18080/mcp`입니다.
+
+### MCP 클라이언트 설정
+
+```json
+{
+  "mcpServers": {
+    "integterm": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:18080/mcp"
+    }
+  }
+}
+```
+
+MCP 엔드포인트에는 API token이나 사용자 지정 인증 헤더가 필요하지 않으며 접근 제어는 소스 IP/CIDR 허용 목록에 전적으로 의존합니다. 신뢰할 수 있는 원격 클라이언트의 연결이 반드시 필요한 경우가 아니라면 기본값인 `127.0.0.1`을 유지하고 불필요하게 넓은 네트워크를 추가하지 마십시오. App 내 MCP 페이지에는 현재 엔드포인트와 실행 중인 설정에서 생성된 전체 도구 문서가 표시됩니다. 클라이언트는 도구를 사용하기 전에 `tools/list`를 호출하여 현재 스키마를 확인해야 합니다.
+
 ## 개발 환경
 
 - Apple Silicon 기반 macOS 12 이상, Windows 10/11 x64 또는 Linux x64
