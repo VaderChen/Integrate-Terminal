@@ -71,7 +71,7 @@ The output is written to `build\bin\IntegTERM.exe`. The script creates only an x
 
 The output is written to `build/bin/IntegTERM`. The script detects the installed WebKitGTK and AppIndicator versions and creates only an x64 executable, without AppImage, DEB, or RPM packaging.
 
-Intel-based Macs are not supported. The public GitHub repository does not include Developer ID, Apple notarization, DMG, or release packaging for other platforms. Distributors must handle signing, installers, and release requirements separately.
+The public GitHub repository does not include Developer ID, Apple notarization, DMG, or release packaging for other platforms. Distributors must handle signing, installers, and release requirements separately.
 
 ## Data and Security
 
