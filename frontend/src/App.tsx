@@ -46,11 +46,13 @@ import { useSettingsActions } from "./hooks/useSettingsActions";
 import { useSiteLibraryActions } from "./hooks/useSiteLibraryActions";
 import { useTransferActions } from "./hooks/useTransferActions";
 import { useTerminalEvents } from "./hooks/useTerminalEvents";
+import { useUpdateActions } from "./hooks/useUpdateActions";
 import { SSHConsolePanel } from "./components/SSHConsolePanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { SiteList } from "./components/SiteList";
 import { TabBar } from "./components/TabBar";
 import { TransferPanel } from "./components/TransferPanel";
+import { UpdateDialog } from "./components/UpdateDialog";
 import { getMessages, resolveLocale } from "./i18n";
 import type {
   Config,
@@ -685,6 +687,8 @@ export default function App() {
     refreshPanels,
   });
 
+  const updateActions = useUpdateActions({ enabled: !loading, locale });
+
   const toggleSort = (side: "local" | "remote", key: FileSortState["key"]) => {
     const setter = side === "local" ? setLocalSort : setRemoteSort;
     setter((current) => ({
@@ -937,6 +941,20 @@ export default function App() {
         onOpenSiteDataDirectory={handleOpenSiteDataDirectory}
         onBackupSiteLibrary={handleBackupSiteLibrary}
         onRestoreSiteLibraryBackup={handleRestoreSiteLibraryBackup}
+        updateChecking={updateActions.checking}
+        updateFeedback={updateActions.feedback}
+        updateFeedbackError={updateActions.feedbackError}
+        onCheckForUpdates={() => void updateActions.checkForUpdates("manual")}
+      />
+
+      <UpdateDialog
+        locale={locale}
+        result={updateActions.checkResult}
+        actionBusy={updateActions.actionBusy}
+        actionResult={updateActions.actionResult}
+        actionError={updateActions.actionError}
+        onClose={updateActions.closeDialog}
+        onStartUpdate={() => void updateActions.startUpdate()}
       />
 
       <main className="workspace">
