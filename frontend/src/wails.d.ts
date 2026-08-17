@@ -75,6 +75,8 @@ declare global {
           GetRestAPIDocsMarkdown: () => Promise<string>;
           ExportRestAPIDocsMarkdown: () => Promise<string>;
           GetRESTServerStatus: () => Promise<import('./types').RestServerStatus>;
+          CheckForUpdates: () => Promise<import('./types').UpdateCheckResult>;
+          StartUpdate: (expectedTag: string) => Promise<import('./types').UpdateActionResult>;
         };
       };
     };

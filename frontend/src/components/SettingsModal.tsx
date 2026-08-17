@@ -4,7 +4,7 @@ import { faCopy, faDownload, faFolderOpen, faRotateLeft, faXmark } from '@fortaw
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
-import type { Config, RestServerStatus } from '../types';
+import type { Config, RestServerStatus, UpdateActionResult, UpdateCheckResult } from '../types';
 import { type Locale, useI18n } from '../i18n';
 
 type SettingsSection = 'general' | 'display' | 'system' | 'skill' | 'about';
@@ -68,6 +68,13 @@ export function SettingsModal({
   const [siteStorageBusy, setSiteStorageBusy] = useState<'backup' | 'restore' | ''>('');
   const [siteStorageFeedback, setSiteStorageFeedback] = useState('');
   const [siteStorageFeedbackError, setSiteStorageFeedbackError] = useState(false);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateFeedback, setUpdateFeedback] = useState('');
+  const [updateFeedbackError, setUpdateFeedbackError] = useState(false);
+  const [updateCheckResult, setUpdateCheckResult] = useState<UpdateCheckResult | null>(null);
+  const [updateActionBusy, setUpdateActionBusy] = useState(false);
+  const [updateActionResult, setUpdateActionResult] = useState<UpdateActionResult | null>(null);
+  const [updateActionError, setUpdateActionError] = useState('');
 
   useEffect(() => {
     setRestPortDraft(String(config.restServerPort));
@@ -153,6 +160,19 @@ export function SettingsModal({
     const timer = window.setTimeout(() => setTrayReminder(''), 2600);
     return () => window.clearTimeout(timer);
   }, [trayReminder]);
+
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+    setUpdateChecking(false);
+    setUpdateFeedback('');
+    setUpdateFeedbackError(false);
+    setUpdateCheckResult(null);
+    setUpdateActionBusy(false);
+    setUpdateActionResult(null);
+    setUpdateActionError('');
+  }, [open]);
 
   if (!open) return null;
 
@@ -269,6 +289,64 @@ export function SettingsModal({
       setSiteStorageFeedbackError(true);
     } finally {
       setSiteStorageBusy('');
+    }
+  };
+
+  const handleCheckForUpdates = async () => {
+    if (updateChecking) {
+      return;
+    }
+    try {
+      setUpdateChecking(true);
+      setUpdateFeedback('');
+      setUpdateFeedbackError(false);
+      setUpdateActionResult(null);
+      setUpdateActionError('');
+      const result = await window.go?.app?.App?.CheckForUpdates?.();
+      if (!result) {
+        throw new Error('update check returned no result');
+      }
+      if (result.updateAvailable) {
+        setUpdateCheckResult(result);
+      } else {
+        setUpdateCheckResult(null);
+        setUpdateFeedback(t.settingsUpdateUpToDate(result.currentVersion));
+      }
+    } catch {
+      setUpdateCheckResult(null);
+      setUpdateFeedback(t.settingsUpdateFailed);
+      setUpdateFeedbackError(true);
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
+  const handleCloseUpdateDialog = () => {
+    if (updateActionBusy) {
+      return;
+    }
+    setUpdateCheckResult(null);
+    setUpdateActionResult(null);
+    setUpdateActionError('');
+  };
+
+  const handleStartUpdate = async () => {
+    if (!updateCheckResult || updateActionBusy) {
+      return;
+    }
+    try {
+      setUpdateActionBusy(true);
+      setUpdateActionResult(null);
+      setUpdateActionError('');
+      const result = await window.go?.app?.App?.StartUpdate?.(updateCheckResult.latestTag);
+      if (!result) {
+        throw new Error('update action returned no result');
+      }
+      setUpdateActionResult(result);
+    } catch {
+      setUpdateActionError(t.settingsUpdateFailed);
+    } finally {
+      setUpdateActionBusy(false);
     }
   };
 
@@ -676,10 +754,27 @@ export function SettingsModal({
 
             {activeSection === 'about' ? (
               <div className="settings-section-card settings-section-stack">
-                <div className="settings-section-copy">
-                  <strong>{t.brandTitle}</strong>
-                  <span>{t.brandSubtitle}</span>
+                <div className="settings-about-header">
+                  <div className="settings-section-copy">
+                    <strong>{t.brandTitle}</strong>
+                    <span>{t.brandSubtitle}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-update-check-button"
+                    onClick={() => void handleCheckForUpdates()}
+                    disabled={updateChecking}
+                    title={t.settingsUpdateCheck}
+                  >
+                    <FontAwesomeIcon icon={faDownload} />
+                    <span>{updateChecking ? t.settingsUpdateChecking : t.settingsUpdateCheck}</span>
+                  </button>
                 </div>
+                {updateFeedback ? (
+                  <span className={`settings-update-feedback ${updateFeedbackError ? 'error' : 'success'}`} aria-live="polite">
+                    {updateFeedback}
+                  </span>
+                ) : null}
                 <div className="settings-about-meta">
                   <div className="settings-about-row">
                     <strong>{t.settingsAboutVersion}</strong>
@@ -695,6 +790,84 @@ export function SettingsModal({
           </section>
         </div>
       </section>
+      {updateCheckResult ? (
+        <div
+          className="modal-overlay update-modal-overlay"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleCloseUpdateDialog();
+          }}
+        >
+          <section
+            className="settings-modal action-modal update-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="update-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-header">
+              <div>
+                <p className="eyebrow action-dialog-eyebrow">{t.settingsUpdateCheck}</p>
+                <h2 id="update-dialog-title">{t.settingsUpdateAvailableTitle}</h2>
+              </div>
+              <button
+                className="ghost icon-button action-cancel-button"
+                onClick={handleCloseUpdateDialog}
+                disabled={updateActionBusy}
+                aria-label={t.close}
+              >
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+            <div className="update-dialog-body">
+              <p className="action-message">
+                {t.settingsUpdateAvailableMessage(updateCheckResult.currentVersion, updateCheckResult.latestVersion)}
+              </p>
+              <div className="update-version-grid">
+                <div>
+                  <span>{t.settingsUpdateCurrentVersion}</span>
+                  <strong>{updateCheckResult.currentVersion}</strong>
+                </div>
+                <div>
+                  <span>{t.settingsUpdateLatestVersion}</span>
+                  <strong>{updateCheckResult.latestVersion}</strong>
+                </div>
+                {updateCheckResult.canDownload ? (
+                  <div className="update-asset-row">
+                    <span>{t.settingsUpdateAsset}</span>
+                    <strong>{updateCheckResult.assetName}</strong>
+                  </div>
+                ) : null}
+              </div>
+              {!updateCheckResult.canDownload ? <p className="update-dialog-note">{t.settingsUpdateNoCompatibleAsset}</p> : null}
+              {updateActionError ? <p className="update-dialog-status error" aria-live="polite">{updateActionError}</p> : null}
+              {updateActionResult ? (
+                <p className="update-dialog-status success" aria-live="polite">
+                  {updateActionResult.downloaded ? t.settingsUpdateInstallerOpened : t.settingsUpdateReleaseOpened}
+                </p>
+              ) : null}
+            </div>
+            <div className="action-buttons">
+              {updateActionResult ? (
+                <button className="primary" onClick={handleCloseUpdateDialog}>{t.close}</button>
+              ) : (
+                <>
+                  <button className="ghost action-cancel-button" onClick={handleCloseUpdateDialog} disabled={updateActionBusy}>
+                    {t.cancel}
+                  </button>
+                  <button className="primary" onClick={() => void handleStartUpdate()} disabled={updateActionBusy}>
+                    {updateActionBusy
+                      ? t.settingsUpdatePreparing
+                      : updateCheckResult.canDownload
+                        ? t.settingsUpdateDownloadAndOpen
+                        : t.settingsUpdateOpenRelease}
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1441,6 +1441,47 @@ select {
   gap: 10px;
 }
 
+.settings-about-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-update-check-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 38%, var(--app-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--app-primary) 10%, var(--app-surface));
+  color: var(--app-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.settings-update-check-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-primary) 18%, var(--app-surface));
+}
+
+.settings-update-check-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.settings-update-feedback {
+  color: #15803d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-update-feedback.error {
+  color: #b91c1c;
+}
+
 .settings-about-row {
   display: flex;
   align-items: center;
@@ -1455,6 +1496,96 @@ select {
 .settings-about-row strong,
 .settings-about-row span {
   display: block;
+}
+
+.update-modal-overlay {
+  z-index: 31;
+}
+
+.settings-modal.action-modal.update-modal {
+  width: min(500px, 100%);
+  max-width: 500px;
+}
+
+.update-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.update-version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.update-version-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.update-version-grid span {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.update-version-grid strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.update-version-grid .update-asset-row {
+  grid-column: 1 / -1;
+}
+
+.update-dialog-note,
+.update-dialog-status {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.update-dialog-note {
+  background: color-mix(in srgb, #b45309 10%, var(--app-surface));
+  color: #9a5a13;
+}
+
+.update-dialog-status.error {
+  background: color-mix(in srgb, #b91c1c 10%, var(--app-surface));
+  color: #b91c1c;
+}
+
+.update-dialog-status.success {
+  background: color-mix(in srgb, #15803d 10%, var(--app-surface));
+  color: #15803d;
+}
+
+@media (max-width: 560px) {
+  .settings-about-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-update-check-button {
+    width: 100%;
+  }
+
+  .update-version-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .update-version-grid .update-asset-row {
+    grid-column: auto;
+  }
 }
 
 .settings-section-card {

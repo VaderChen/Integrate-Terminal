@@ -111,6 +111,19 @@ type RESTServerStatus struct {
 	Allowlist []string `json:"allowlist"`
 }
 
+type UpdateCheckResult struct {
+	CurrentVersion  string `json:"currentVersion"`
+	LatestVersion   string `json:"latestVersion"`
+	LatestTag       string `json:"latestTag"`
+	UpdateAvailable bool   `json:"updateAvailable"`
+	CanDownload     bool   `json:"canDownload"`
+	AssetName       string `json:"assetName"`
+}
+
+type UpdateActionResult struct {
+	Downloaded bool `json:"downloaded"`
+}
+
 type HostTrustPrompt struct {
 	Host              string `json:"host"`
 	Port              int    `json:"port"`

@@ -88,7 +88,7 @@ for metadata_value in "$BUILD_COMMIT" "$BUILD_TAG" "$BUILD_STATE" "$BUILD_SOURCE
   fi
 done
 
-BUILD_LDFLAGS="-X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BUILD_COMMIT -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BUILD_TAG -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BUILD_STATE -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BUILD_SOURCE_URL"
+BUILD_LDFLAGS="-X github.com/VaderChen/Integrate-Terminal/internal/version.Product=$APP_VERSION -X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BUILD_COMMIT -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BUILD_TAG -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BUILD_STATE -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BUILD_SOURCE_URL"
 
 build_arguments=(build -clean -nopackage -platform linux/amd64 -ldflags "$BUILD_LDFLAGS")
 if (( ${#build_tags[@]} > 0 )); then
