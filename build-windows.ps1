@@ -78,7 +78,7 @@ try {
         }
     }
 
-    $BuildLdflags = "-X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BuildCommit -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BuildTag -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BuildState -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BuildSourceUrl"
+    $BuildLdflags = "-X github.com/VaderChen/Integrate-Terminal/internal/version.Product=$AppVersion -X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BuildCommit -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BuildTag -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BuildState -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BuildSourceUrl"
 
     Write-Host "建置 Windows x64 執行檔..."
     & go run "github.com/wailsapp/wails/v2/cmd/wails@$WailsVersion" build -clean -nopackage -platform windows/amd64 -ldflags $BuildLdflags

@@ -18,6 +18,10 @@ export function CancelTransfer(arg1) {
   return window['go']['app']['App']['CancelTransfer'](arg1);
 }
 
+export function CheckForUpdates() {
+  return window['go']['app']['App']['CheckForUpdates']();
+}
+
 export function ClearAllTransfers() {
   return window['go']['app']['App']['ClearAllTransfers']();
 }
@@ -260,6 +264,10 @@ export function SortSitesByName() {
 
 export function StartSSHSession(arg1) {
   return window['go']['app']['App']['StartSSHSession'](arg1);
+}
+
+export function StartUpdate(arg1) {
+  return window['go']['app']['App']['StartUpdate'](arg1);
 }
 
 export function StartTelnetSession(arg1) {

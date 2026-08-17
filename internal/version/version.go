@@ -21,6 +21,7 @@ type BuildInfo struct {
 }
 
 var (
+	Product    = ""
 	Commit     = "unknown"
 	Tag        = "untagged"
 	BuildState = "unknown"
@@ -28,15 +29,22 @@ var (
 )
 
 func Current() string {
+	return "IntegTERM " + ProductVersion()
+}
+
+func ProductVersion() string {
+	if productVersion := strings.TrimSpace(Product); productVersion != "" {
+		return productVersion
+	}
 	var cfg configFile
 	if err := json.Unmarshal(versionJSON, &cfg); err != nil {
-		return "IntegTERM 1.00.00"
+		return "1.00.00"
 	}
 	version := strings.TrimSpace(cfg.ProductVersion)
 	if version == "" {
 		version = "1.00.00"
 	}
-	return "IntegTERM " + version
+	return version
 }
 
 func Metadata() BuildInfo {

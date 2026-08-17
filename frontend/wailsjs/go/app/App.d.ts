@@ -11,6 +11,8 @@ export function BackupSiteLibrary():Promise<string>;
 
 export function CancelTransfer(arg1:string):Promise<Array<model.TransferItem>>;
 
+export function CheckForUpdates():Promise<model.UpdateCheckResult>;
+
 export function ClearAllTransfers():Promise<Array<model.TransferItem>>;
 
 export function ClearBackgroundConnections():Promise<number>;
@@ -133,6 +135,8 @@ export function SortSiteFolders():Promise<model.Config>;
 export function SortSitesByName():Promise<Array<model.Site>>;
 
 export function StartSSHSession(arg1:model.Site):Promise<string>;
+
+export function StartUpdate(arg1:string):Promise<model.UpdateActionResult>;
 
 export function StartTelnetSession(arg1:model.Site):Promise<string>;
 

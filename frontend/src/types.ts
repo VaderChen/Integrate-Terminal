@@ -96,6 +96,19 @@ export type RestServerStatus = {
   allowlist: string[];
 };
 
+export type UpdateCheckResult = {
+  currentVersion: string;
+  latestVersion: string;
+  latestTag: string;
+  updateAvailable: boolean;
+  canDownload: boolean;
+  assetName: string;
+};
+
+export type UpdateActionResult = {
+  downloaded: boolean;
+};
+
 export type BootstrapPayload = {
   sites: Site[];
   tabs: Tab[];

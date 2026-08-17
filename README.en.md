@@ -18,6 +18,7 @@
 - Site groups, tab restoration, and ZIP backup and restore.
 - A local MCP Streamable HTTP server for AI and automation integrations.
 - Background service and system tray controls.
+- GitHub Release checks in Settings with verified platform update downloads.
 - English, Japanese, Korean, Traditional Chinese, and Simplified Chinese interfaces.
 
 ## Open Source Edition

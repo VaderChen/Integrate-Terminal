@@ -287,7 +287,41 @@ export namespace model {
 	        this.allowlist = source["allowlist"];
 	    }
 	}
-	
+	export class UpdateActionResult {
+	    downloaded: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateActionResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.downloaded = source["downloaded"];
+	    }
+	}
+	export class UpdateCheckResult {
+	    currentVersion: string;
+	    latestVersion: string;
+	    latestTag: string;
+	    updateAvailable: boolean;
+	    canDownload: boolean;
+	    assetName: string;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateCheckResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.latestTag = source["latestTag"];
+	        this.updateAvailable = source["updateAvailable"];
+	        this.canDownload = source["canDownload"];
+	        this.assetName = source["assetName"];
+	    }
+	}
+
 	export class SiteLibraryMutationResult {
 	    sites: Site[];
 	    config: Config;
