@@ -190,7 +190,7 @@ const noticeLines = [
   "# Third-Party Notices",
   "",
   "This project includes third-party software. Each dependency remains subject to its own license terms.",
-  "The complete, deduplicated license and notice texts are provided in `THIRD-PARTY-LICENSES.txt`.",
+  "The complete, deduplicated license and notice texts are generated at build time and bundled in release artifacts as `THIRD-PARTY-LICENSES.txt`.",
   "",
   `Covered build targets: ${targetPlatforms.map((target) => `\`${target}\``).join(", ")}.`,
   "",
