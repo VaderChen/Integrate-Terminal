@@ -8,39 +8,65 @@ import (
 	"sync"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/model"
 	"github.com/VaderChen/Integrate-Terminal/internal/transport"
 )
 
 type Manager struct {
-	mu                 sync.RWMutex
-	clients            map[string]transport.Client
-	sshSessions        map[string]*sshTerminalSession
-	telnetSessions     map[string]*telnetTerminalSession
-	localSessions      map[string]*localTerminalSession
-	transfers          []model.TransferItem
-	cancelledTransfers map[string]bool
-	pausedTransfers    map[string]bool
-	pauseAllTransfers  bool
-	logs               []model.LogItem
-	eventCtx           context.Context
-	stateEvents        chan struct{}
+	mu                       sync.RWMutex
+	clients                  map[string]transport.Client
+	sshSessions              map[string]*sshTerminalSession
+	telnetSessions           map[string]*telnetTerminalSession
+	localSessions            map[string]*localTerminalSession
+	transfers                []model.TransferItem
+	cancelledTransfers       map[string]bool
+	pausedTransfers          map[string]bool
+	pauseAllTransfers        bool
+	transferRetryCount       int
+	transferConflictStrategy string
+	logs                     []model.LogItem
+	eventCtx                 context.Context
+	stateEvents              chan struct{}
 }
 
 func NewManager() *Manager {
 	manager := &Manager{
-		clients:            make(map[string]transport.Client),
-		sshSessions:        make(map[string]*sshTerminalSession),
-		telnetSessions:     make(map[string]*telnetTerminalSession),
-		localSessions:      make(map[string]*localTerminalSession),
-		transfers:          make([]model.TransferItem, 0),
-		cancelledTransfers: make(map[string]bool),
-		pausedTransfers:    make(map[string]bool),
-		logs:               make([]model.LogItem, 0),
-		stateEvents:        make(chan struct{}, 1),
+		clients:                  make(map[string]transport.Client),
+		sshSessions:              make(map[string]*sshTerminalSession),
+		telnetSessions:           make(map[string]*telnetTerminalSession),
+		localSessions:            make(map[string]*localTerminalSession),
+		transfers:                make([]model.TransferItem, 0),
+		cancelledTransfers:       make(map[string]bool),
+		pausedTransfers:          make(map[string]bool),
+		transferRetryCount:       2,
+		transferConflictStrategy: "overwrite",
+		logs:                     make([]model.LogItem, 0),
+		stateEvents:              make(chan struct{}, 1),
 	}
 	go manager.runStateEventLoop()
 	return manager
+}
+
+func (m *Manager) ConfigureTransferPolicy(retryCount int, conflictStrategy string) {
+	if retryCount < 0 {
+		retryCount = 0
+	}
+	if retryCount > 10 {
+		retryCount = 10
+	}
+	if conflictStrategy != "skip" && conflictStrategy != "fail" {
+		conflictStrategy = "overwrite"
+	}
+	m.mu.Lock()
+	m.transferRetryCount = retryCount
+	m.transferConflictStrategy = conflictStrategy
+	m.mu.Unlock()
+}
+
+func (m *Manager) transferPolicy() (int, string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.transferRetryCount, m.transferConflictStrategy
 }
 
 func (m *Manager) SetEventContext(ctx context.Context) {

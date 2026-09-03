@@ -2,10 +2,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_PATH="$SCRIPT_DIR/build/bin/IntegTERM"
-LICENSE_OUTPUT_DIR="$SCRIPT_DIR/build/bin/licenses"
-METADATA_OUTPUT_PATH="$SCRIPT_DIR/build/bin/build-metadata.json"
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+BUILD_OUTPUT_PATH="./build/bin/IntegTERM"
+OUTPUT_PATH="./dist/IntegTERM"
+LICENSE_OUTPUT_DIR="./dist/licenses"
+METADATA_OUTPUT_PATH="./dist/build-metadata.json"
 BUILD_SOURCE_URL="${BUILD_SOURCE_URL:-https://github.com/VaderChen/Integrate-Terminal}"
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -47,7 +49,7 @@ else
   exit 1
 fi
 
-cd "$SCRIPT_DIR"
+mkdir -p "./dist"
 WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
 APP_VERSION="$(node -p "require('./wails.json').info.productVersion")"
 
@@ -60,15 +62,15 @@ export CGO_ENABLED=1
 export VITE_APP_VERSION="$APP_VERSION"
 
 echo "產生第三方授權清冊..."
-node "$SCRIPT_DIR/scripts/generate-third-party-notices.mjs"
+node "./scripts/generate-third-party-notices.mjs"
 
 if [[ -z "${BUILD_COMMIT:-}" || -z "${BUILD_TAG:-}" || -z "${BUILD_STATE:-}" ]]; then
-  if command -v git >/dev/null 2>&1 && git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    BUILD_COMMIT="${BUILD_COMMIT:-$(git -C "$SCRIPT_DIR" rev-parse HEAD)}"
-    exact_tag="$(git -C "$SCRIPT_DIR" describe --tags --exact-match HEAD 2>/dev/null || true)"
+  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    BUILD_COMMIT="${BUILD_COMMIT:-$(git rev-parse HEAD)}"
+    exact_tag="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
     BUILD_TAG="${BUILD_TAG:-${exact_tag:-untagged}}"
     if [[ -z "${BUILD_STATE:-}" ]]; then
-      if [[ -n "$(git -C "$SCRIPT_DIR" status --porcelain=v1 --untracked-files=normal)" ]]; then
+      if [[ -n "$(git status --porcelain=v1 --untracked-files=normal)" ]]; then
         BUILD_STATE="dirty"
       else
         BUILD_STATE="clean"
@@ -90,7 +92,7 @@ done
 
 BUILD_LDFLAGS="-X github.com/VaderChen/Integrate-Terminal/internal/version.Product=$APP_VERSION -X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BUILD_COMMIT -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BUILD_TAG -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BUILD_STATE -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BUILD_SOURCE_URL"
 
-build_arguments=(build -clean -nopackage -platform linux/amd64 -ldflags "$BUILD_LDFLAGS")
+build_arguments=(build -clean -nopackage -skipembedcreate -platform linux/amd64 -ldflags "$BUILD_LDFLAGS")
 if (( ${#build_tags[@]} > 0 )); then
   build_arguments+=(-tags "${build_tags[*]}")
 fi
@@ -98,17 +100,18 @@ fi
 echo "建置 Linux x64 執行檔..."
 go run "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION" "${build_arguments[@]}"
 
-if [[ ! -x "$OUTPUT_PATH" ]]; then
-  echo "建置失敗：找不到 $OUTPUT_PATH"
+if [[ ! -x "$BUILD_OUTPUT_PATH" ]]; then
+  echo "建置失敗：找不到 $BUILD_OUTPUT_PATH"
   exit 1
 fi
 
-rm -rf "$LICENSE_OUTPUT_DIR"
+rm -rf "$OUTPUT_PATH" "$LICENSE_OUTPUT_DIR"
+mv "$BUILD_OUTPUT_PATH" "$OUTPUT_PATH"
 mkdir -p "$LICENSE_OUTPUT_DIR"
-cp "$SCRIPT_DIR/LICENSE" "$LICENSE_OUTPUT_DIR/GPL-3.0.txt"
-cp "$SCRIPT_DIR/THIRD-PARTY-NOTICES.md" "$LICENSE_OUTPUT_DIR/THIRD-PARTY-NOTICES.md"
-cp "$SCRIPT_DIR/THIRD-PARTY-LICENSES.txt" "$LICENSE_OUTPUT_DIR/THIRD-PARTY-LICENSES.txt"
-node "$SCRIPT_DIR/scripts/write-build-metadata.mjs" \
+cp "./LICENSE" "$LICENSE_OUTPUT_DIR/GPL-3.0.txt"
+cp "./THIRD-PARTY-NOTICES.md" "$LICENSE_OUTPUT_DIR/THIRD-PARTY-NOTICES.md"
+cp "./THIRD-PARTY-LICENSES.txt" "$LICENSE_OUTPUT_DIR/THIRD-PARTY-LICENSES.txt"
+node "./scripts/write-build-metadata.mjs" \
   "$METADATA_OUTPUT_PATH" \
   "$APP_VERSION" \
   "$BUILD_COMMIT" \

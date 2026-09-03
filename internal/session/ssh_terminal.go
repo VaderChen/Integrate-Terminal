@@ -137,10 +137,13 @@ func (m *Manager) streamSSHOutput(ctx context.Context, session *sshTerminalSessi
 			chunk, rest := splitUTF8SafeChunk(pending, buffer[:n])
 			pending = rest
 			if len(chunk) > 0 {
-				visibleChunk, nextPendingControl, cwdPaths := stripTerminalSignals(pendingControl, chunk)
+				visibleChunk, nextPendingControl, cwdPaths, clipboardTexts := stripTerminalSignals(pendingControl, chunk)
 				pendingControl = nextPendingControl
 				for _, cwdPath := range cwdPaths {
 					emitSessionEvent(ctx, fmt.Sprintf("ssh:cwd:%s", session.id), cwdPath)
+				}
+				for _, clipboardText := range clipboardTexts {
+					emitSessionEvent(ctx, fmt.Sprintf("ssh:clipboard:%s", session.id), clipboardText)
 				}
 				if len(visibleChunk) == 0 {
 					goto afterChunk

@@ -16,6 +16,9 @@ func (a *App) SaveConfig(config model.Config) (model.Config, error) {
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
 	a.config.RESTServerAllowlist = sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
+	a.config.TransferRetryCount = sanitizeTransferRetryCount(a.config.TransferRetryCount)
+	a.config.TransferConflictStrategy = sanitizeTransferConflictStrategy(a.config.TransferConflictStrategy)
+	a.sessionManager.ConfigureTransferPolicy(a.config.TransferRetryCount, a.config.TransferConflictStrategy)
 	if a.config.RESTServerEnabled {
 		a.config.ShowTrayIcon = true
 	}
@@ -142,4 +145,25 @@ func validateSiteByProtocol(site model.Site) error {
 	}
 
 	return nil
+}
+
+func sanitizeTransferRetryCount(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 10 {
+		return 10
+	}
+	return value
+}
+
+func sanitizeTransferConflictStrategy(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "skip":
+		return "skip"
+	case "fail":
+		return "fail"
+	default:
+		return "overwrite"
+	}
 }

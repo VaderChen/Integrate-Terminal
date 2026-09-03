@@ -50,12 +50,15 @@ import { useUpdateActions } from "./hooks/useUpdateActions";
 import { SSHConsolePanel } from "./components/SSHConsolePanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { SiteList } from "./components/SiteList";
+import { SyncDialog } from "./components/SyncDialog";
 import { TabBar } from "./components/TabBar";
 import { TransferPanel } from "./components/TransferPanel";
 import { UpdateDialog } from "./components/UpdateDialog";
 import { getMessages, resolveLocale } from "./i18n";
+import { EventsOn, Quit } from "../wailsjs/runtime/runtime";
 import type {
   Config,
+  FileComparison,
   FileEntry,
   FileSortState,
   LogItem,
@@ -126,6 +129,26 @@ export default function App() {
   const [directoryName, setDirectoryName] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [siteFolderName, setSiteFolderName] = useState("");
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [quitDialogOpen, setQuitDialogOpen] = useState(false);
+  const [syncComparisons, setSyncComparisons] = useState<FileComparison[]>([]);
+  const [syncBusy, setSyncBusy] = useState<"upload" | "download" | "">("");
+  const [syncError, setSyncError] = useState("");
+
+  useEffect(() => {
+    const dispose = EventsOn("app:quit-requested", () => setQuitDialogOpen(true));
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey && event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        setQuitDialogOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      dispose();
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
   const [collapsedPanelsByTabId, setCollapsedPanelsByTabId] = useState<
     Record<string, boolean>
   >({});
@@ -189,13 +212,22 @@ export default function App() {
           restServerAllowlist: payload.config?.restServerAllowlist?.length
             ? payload.config.restServerAllowlist
             : ["127.0.0.1"],
+          transferRetryCount: payload.config?.transferRetryCount ?? 2,
+          transferConflictStrategy:
+            payload.config?.transferConflictStrategy ?? "overwrite",
           language: payload.config?.language ?? "",
           theme: payload.config?.theme ?? "neutral",
           siteFolders: payload.config?.siteFolders ?? [],
         };
         const nextDefaultLocalPath =
           payload.defaultLocalPath || fallbackBootstrap.defaultLocalPath;
-        const nextSites = Array.isArray(payload.sites) ? payload.sites : [];
+        const nextSites = Array.isArray(payload.sites)
+          ? payload.sites.map((site) => ({
+              ...site,
+              tags: site.tags ?? [],
+              favorite: site.favorite ?? false,
+            }))
+          : [];
         const nextTabs = Array.isArray(payload.tabs) ? payload.tabs : [];
         const nextLocalFiles = Array.isArray(payload.localFiles)
           ? payload.localFiles
@@ -474,6 +506,7 @@ export default function App() {
     handleSaveSite,
     handleDeleteSite,
     handleCopySite,
+    handleToggleFavorite,
     handleSortSitesByName,
     handleOpenCreateSiteFolder,
     handlePromptRenameSiteFolder,
@@ -678,6 +711,8 @@ export default function App() {
     handleRESTServerEnabledChange,
     handleRESTServerPortChange,
     handleRESTServerAllowlistChange,
+    handleTransferRetryCountChange,
+    handleTransferConflictStrategyChange,
     handleRestoreTabsChange,
     handleCloseTerminalTabOnDisconnectChange,
   } = useSettingsActions({
@@ -686,6 +721,51 @@ export default function App() {
     activeTabRef,
     refreshPanels,
   });
+
+  const handleOpenSyncDialog = async () => {
+    const currentTab = activeTabRef.current;
+    if (!currentTab || currentTab.mode === "terminal") return;
+    try {
+      const comparisons = await window.go?.app?.App?.CompareDirectories?.(
+        currentTab.id,
+        currentTab.localPath,
+        currentTab.remotePath,
+      );
+      setSyncComparisons(comparisons ?? []);
+      setSyncError("");
+      setSyncDialogOpen(true);
+    } catch (error) {
+      setSyncError(extractErrorMessage(error, t.connectionFailed));
+      setErrorMessage(extractErrorMessage(error, t.connectionFailed));
+    }
+  };
+
+  const handleSyncDirectories = async (direction: "upload" | "download") => {
+    const currentTab = activeTabRef.current;
+    if (!currentTab || currentTab.mode === "terminal") return;
+    try {
+      setSyncBusy(direction);
+      setSyncError("");
+      await window.go?.app?.App?.SyncDirectories?.(
+        currentTab.id,
+        currentTab.localPath,
+        currentTab.remotePath,
+        direction,
+      );
+      await refreshPanelsForPaths(currentTab, currentTab.localPath, currentTab.remotePath);
+      const comparisons = await window.go?.app?.App?.CompareDirectories?.(
+        currentTab.id,
+        currentTab.localPath,
+        currentTab.remotePath,
+      );
+      setSyncComparisons(comparisons ?? []);
+    } catch (error) {
+      setSyncError(extractErrorMessage(error, t.connectionFailed));
+      setErrorMessage(extractErrorMessage(error, t.connectionFailed));
+    } finally {
+      setSyncBusy("");
+    }
+  };
 
   const updateActions = useUpdateActions({ enabled: !loading, locale });
 
@@ -870,6 +950,7 @@ export default function App() {
                 void handleMoveSiteToFolder(siteId, folder)
               }
               onEditSite={handleOpenEditSiteDialog}
+              onToggleFavorite={handleToggleFavorite}
             />
             <button
               type="button"
@@ -937,6 +1018,8 @@ export default function App() {
         onRESTServerEnabledChange={handleRESTServerEnabledChange}
         onRESTServerPortChange={handleRESTServerPortChange}
         onRESTServerAllowlistChange={handleRESTServerAllowlistChange}
+        onTransferRetryCountChange={handleTransferRetryCountChange}
+        onTransferConflictStrategyChange={handleTransferConflictStrategyChange}
         onFontScaleChange={handleFontScaleChange}
         onOpenSiteDataDirectory={handleOpenSiteDataDirectory}
         onBackupSiteLibrary={handleBackupSiteLibrary}
@@ -955,6 +1038,21 @@ export default function App() {
         actionError={updateActions.actionError}
         onClose={updateActions.closeDialog}
         onStartUpdate={() => void updateActions.startUpdate()}
+      />
+
+      <SyncDialog
+        open={syncDialogOpen}
+        comparisons={syncComparisons}
+        busy={syncBusy}
+        error={syncError}
+        locale={locale}
+        onClose={() => {
+          if (syncBusy === "") {
+            setSyncDialogOpen(false);
+            setSyncError("");
+          }
+        }}
+        onSync={handleSyncDirectories}
       />
 
       <main className="workspace">
@@ -1161,6 +1259,7 @@ export default function App() {
                     sortState={remoteSort}
                     onSort={(key) => toggleSort("remote", key)}
                     onRefresh={() => void handleRefreshCurrentPanel()}
+                    onCompare={() => void handleOpenSyncDialog()}
                     onDropFiles={handleDropToRemote}
                     onDropFilesToDirectory={(paths, targetDirectory) => {
                       void handleDropToRemoteDirectory(paths, targetDirectory);
@@ -1281,6 +1380,29 @@ export default function App() {
           }}
         />
       ) : null}
+      {quitDialogOpen ? (
+        <div className="modal-overlay" onClick={() => setQuitDialogOpen(false)}>
+          <section className="settings-modal action-modal quit-confirm-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="settings-header modal-header">
+              <div>
+                <p className="eyebrow">{t.settingsLabel}</p>
+                <h2>{t.quitConfirmTitle}</h2>
+              </div>
+              <button className="ghost icon-button action-cancel-button" onClick={() => setQuitDialogOpen(false)} aria-label={t.close}>
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+            <div className="modal-body quit-confirm-body">
+              <p>{t.quitConfirmMessage}</p>
+              <div className="quit-confirm-actions">
+                <button className="ghost quit-confirm-button quit-confirm-cancel-button" onClick={() => setQuitDialogOpen(false)}>{t.quitConfirmCancel}</button>
+              <button className="primary quit-confirm-button quit-confirm-close-button" onClick={() => { void (async () => { await window.go?.app?.App?.StopBackgroundService?.(); await window.go?.app?.App?.ApproveQuit?.(); Quit(); })(); }}>{t.quitConfirmClose}</button>
+                <button className="ghost quit-confirm-button quit-confirm-background-button" onClick={() => { void (async () => { await handleShowTrayIconChange(true); setQuitDialogOpen(false); await window.go?.app?.App?.ApproveQuit?.(); Quit(); })(); }}>{t.quitConfirmHide}</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1289,6 +1411,7 @@ function serializeSiteDraft(site: Site) {
   return JSON.stringify({
     id: site.id,
     name: site.name,
+    folder: site.folder,
     protocol: site.protocol,
     host: site.host,
     port: site.port,
@@ -1298,5 +1421,7 @@ function serializeSiteDraft(site: Site) {
     ppkPassphrase: site.ppkPassphrase,
     localPath: site.localPath,
     remotePath: site.remotePath,
+    tags: site.tags ?? [],
+    favorite: site.favorite ?? false,
   });
 }

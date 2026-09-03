@@ -93,6 +93,17 @@ func (a *App) backgroundServicePIDPath() string {
 	return filepath.Join(a.store.BaseDir(), "background-service.pid")
 }
 
+func (a *App) backgroundServiceLockPath() string {
+	return filepath.Join(a.store.BaseDir(), "background-service.lock")
+}
+
+func (a *App) AcquireBackgroundServiceLock() (*BackgroundServiceLock, error) {
+	if err := a.store.Ensure(); err != nil {
+		return nil, err
+	}
+	return acquireBackgroundServiceLock(a.backgroundServiceLockPath())
+}
+
 func (a *App) backgroundServiceRunning() bool {
 	data, err := os.ReadFile(a.backgroundServicePIDPath())
 	if err != nil {
@@ -117,6 +128,22 @@ func (a *App) RegisterBackgroundService(pid int) error {
 }
 
 func (a *App) UnregisterBackgroundService() error {
+	return os.Remove(a.backgroundServicePIDPath())
+}
+
+// StopBackgroundService stops the companion service when the user chooses a full quit.
+func (a *App) StopBackgroundService() error {
+	data, err := os.ReadFile(a.backgroundServicePIDPath())
+	if err != nil {
+		return nil
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return os.Remove(a.backgroundServicePIDPath())
+	}
+	if process, err := os.FindProcess(pid); err == nil {
+		_ = process.Kill()
+	}
 	return os.Remove(a.backgroundServicePIDPath())
 }
 

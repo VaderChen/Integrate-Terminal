@@ -13,6 +13,8 @@ type trayMessages struct {
 	statusSection             string
 	statusSectionHint         string
 	serviceStatus             string
+	localService              string
+	remoteService             string
 	actionSection             string
 	actionSectionHint         string
 	serviceStartupFailed      string
@@ -38,11 +40,13 @@ var trayLocales = map[string]trayMessages{
 	"zh-TW": {
 		tooltip:                   "IntegTERM 背景服務",
 		statusFailed:              "服務狀態：啟動失敗",
-		statusStopped:             "服務狀態：已停止",
+		statusStopped:             "服務狀態：關閉",
 		statusRunning:             "服務狀態：執行中",
 		statusSection:             "狀態",
 		statusSectionHint:         "服務狀態資訊",
 		serviceStatus:             "服務狀態",
+		localService:              "本機服務",
+		remoteService:             "遠端服務",
 		actionSection:             "功能",
 		actionSectionHint:         "服務功能操作",
 		serviceStartupFailed:      "服務啟動失敗",
@@ -61,7 +65,7 @@ var trayLocales = map[string]trayMessages{
 		quitBackground:            "結束背景服務",
 		quitBackgroundHint:        "結束背景服務",
 		runningValue:              "執行中",
-		stoppedValue:              "已停止",
+		stoppedValue:              "關閉",
 	},
 	"zh-CN": {
 		tooltip:                   "IntegTERM 后台服务",
@@ -71,6 +75,8 @@ var trayLocales = map[string]trayMessages{
 		statusSection:             "状态",
 		statusSectionHint:         "服务状态信息",
 		serviceStatus:             "服务状态",
+		localService:              "本机服务",
+		remoteService:             "远端服务",
 		actionSection:             "功能",
 		actionSectionHint:         "服务功能操作",
 		serviceStartupFailed:      "服务启动失败",
@@ -99,6 +105,8 @@ var trayLocales = map[string]trayMessages{
 		statusSection:             "Status",
 		statusSectionHint:         "Service status information",
 		serviceStatus:             "Service Status",
+		localService:              "Local Service",
+		remoteService:             "Remote Service",
 		actionSection:             "Actions",
 		actionSectionHint:         "Service actions",
 		serviceStartupFailed:      "Service startup failed",
@@ -127,6 +135,8 @@ var trayLocales = map[string]trayMessages{
 		statusSection:             "状態",
 		statusSectionHint:         "サービス状態情報",
 		serviceStatus:             "サービス状態",
+		localService:              "ローカルサービス",
+		remoteService:             "リモートサービス",
 		actionSection:             "機能",
 		actionSectionHint:         "サービス操作",
 		serviceStartupFailed:      "サービスの起動に失敗しました",
@@ -155,6 +165,8 @@ var trayLocales = map[string]trayMessages{
 		statusSection:             "상태",
 		statusSectionHint:         "서비스 상태 정보",
 		serviceStatus:             "서비스 상태",
+		localService:              "로컬 서비스",
+		remoteService:             "원격 서비스",
 		actionSection:             "기능",
 		actionSectionHint:         "서비스 기능",
 		serviceStartupFailed:      "서비스 시작 실패",

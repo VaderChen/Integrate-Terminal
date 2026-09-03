@@ -16,7 +16,7 @@
 - SSH、Telnet 與本機 Shell 終端（本機 Shell 支援 macOS 與 Linux）。
 - SFTP、FTP 檔案瀏覽及傳輸佇列。
 - 站台分組、分頁恢復、ZIP 備份與還原。
-- 本機 MCP Streamable HTTP Server，供 AI 與自動化工具整合。
+- MCP 虛擬層，提供 RAM 工作區與遠端站台掛載整合能力。
 - 背景服務與系統列狀態控制。
 - 支援在設定中手動檢查 GitHub Release，並於每日隨機時段自動檢查一次；有更新時可驗證並開啟適用平台的更新檔。
 - 英文、日文、韓文、繁體中文與簡體中文介面。
@@ -27,17 +27,27 @@
 
 程式會在第一次啟動時嘗試搬移舊沙盒版的站台、設定、known hosts、PPK 副本與 REST API token。公開原始碼不包含任何 Apple 簽章憑證、Provisioning Profile、私鑰或個人站台資料。
 
-## MCP 整合
+## MCP 整合（VFS 預設啟用）
 
-IntegTERM 內建標準 MCP Streamable HTTP Server。支援 MCP 的 AI 或自動化客戶端可以管理已儲存站台、開啟 SSH、Telnet、SFTP、FTP 與 macOS／Linux 本機終端分頁、執行 SSH 指令、讀寫互動式終端、處理檔案傳輸，以及查詢傳輸佇列與執行紀錄。
+IntegTERM 內建標準 MCP Streamable HTTP Server，並以虛擬層統一 RAM 工作區與已儲存遠端站台的資源路徑。外部 Agent 透過 HTTP 端點連線，再使用虛擬 URI 選擇資源與操作後端。
 
-### 啟用 MCP Server
+### MCP Server（HTTP 預設關閉）
 
 1. 啟動 IntegTERM，開啟「設定」→「MCP」。
-2. 確認監聽埠與 IP 白名單。預設埠為 `18080`，白名單為 `127.0.0.1`。
-3. 開啟 MCP Server；預設端點為 `http://127.0.0.1:18080/mcp`。
+2. 本機 VFS MCP 預設啟用，可直接使用 `integterm-vfs://workspace/mcp`，不會監聽網路埠。
+3. 只有需要讓外部 Agent 透過 HTTP 連線時，才開啟 MCP Server；預設埠為 `18080`、白名單為 `127.0.0.1`，端點為 `http://127.0.0.1:18080/mcp`。
 
-### MCP 客戶端設定
+### 虛擬工作區：RAM 與遠端站台
+
+虛擬根 URI 為 `integterm-vfs://workspace/mcp`。根目錄下未使用 `sites` 命名空間的路徑是純 RAM 資料；`sites/{siteID}` 則代表已儲存遠端站台，第一次執行 `vfs_connect` 或檔案操作時會自動建立連線。RAM 資料會在背景服務停止後清除；遠端操作會直接作用於站台設定的遠端根目錄。
+
+遠端站台的路徑格式為 `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`。先列出 `sites` 取得站台 ID，再使用 `vfs_list`、`vfs_stat`、`vfs_read`、`vfs_write`、`vfs_mkdir`、`vfs_rename` 與 `vfs_delete` 進行一般檔案操作。虛擬 URI 不包含密碼或私密金鑰。
+
+### 透過網路：既有操作與虛擬工作區
+
+外部 Agent 使用的 MCP 端點為 `http://127.0.0.1:18080/mcp`，提供站台管理、SSH、Telnet、SFTP、FTP、本機終端、指令、互動式終端、檔案傳輸，以及上述 `integterm-vfs` 虛擬工作區工具。`integterm-vfs://` 是資源 URI，不是另一個 HTTP 端點。
+
+### 網路 MCP 客戶端設定
 
 ```json
 {
@@ -71,6 +81,14 @@ cd Integrate-Terminal
 
 `run.sh` 會在本機暫存目錄建立開發鏡像，避免外接磁碟產生的 AppleDouble 檔案干擾 Wails 建置。
 
+UI 預設採單一實例；再次啟動時會喚醒已開啟的視窗，不會建立第二個 UI。在 macOS 點擊視窗關閉鈕會結束 UI；按下 `Cmd+Q` 時，會詢問要完全關閉程式、轉為背景運作或取消。從 Tray 結束背景服務時，所有 IntegTERM UI 也會一併關閉。開發時若確實需要多開 UI，可使用特殊參數：
+
+```bash
+./run.sh --multi-instance
+```
+
+此參數只允許 UI 多開，背景主服務仍維持單一實例。
+
 ## 建置桌面程式
 
 ### macOS Apple Silicon
@@ -79,7 +97,11 @@ cd Integrate-Terminal
 ./build.sh
 ```
 
-輸出位於 `build/bin/IntegTERM.app`。預設採 ad-hoc 簽章且不啟用 App Sandbox，建置完成後可直接在本機開啟使用。
+輸出位於 `dist/IntegTERM.app`。預設採 ad-hoc 簽章且不啟用 App Sandbox，建置完成後可直接在本機開啟使用。也可以雙擊 `build.command` 建置，或雙擊 `run.command` 啟動已建置的 App；需要開發模式時使用 `run.command --dev`。
+
+### macOS 發布封裝
+
+DMG 的簽署與發布僅限受控的本機流程處理；任何簽章識別資料、公證設定與發布憑證資訊均不記載於本文件，也不得提交至儲存庫。開發與本機驗證請使用上述一般建置流程。
 
 ### Windows x64
 
@@ -87,7 +109,7 @@ cd Integrate-Terminal
 powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
 ```
 
-輸出位於 `build\bin\IntegTERM.exe`。腳本只建立 x64 執行檔，不建立安裝程式或簽章。
+輸出位於 `dist\IntegTERM.exe`。腳本只建立 x64 執行檔，不建立安裝程式或簽章。
 
 ### Linux x64
 
@@ -95,13 +117,13 @@ powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
 ./build-linux.sh
 ```
 
-輸出位於 `build/bin/IntegTERM`。腳本會偵測 WebKitGTK 與 AppIndicator 版本，只建立 x64 執行檔，不建立 AppImage、DEB 或 RPM。
+輸出位於 `dist/IntegTERM`。腳本會偵測 WebKitGTK 與 AppIndicator 版本，只建立 x64 執行檔，不建立 AppImage、DEB 或 RPM。
 
-GitHub 公開版本不包含 Developer ID、Apple notarization、DMG 或其他平台的發布封裝流程；散布者須自行處理簽章、安裝程式與發布要求。
+GitHub 公開版本不包含簽章憑證、私鑰或其他發布機密；散布者須使用自己的平台發布資產完成簽章、公證與發布要求。
 
 ## 資料與安全
 
-應用資料位於各平台 `os.UserConfigDir()` 下的 `IntegTERM` 目錄，例如 macOS 的 `~/Library/Application Support/IntegTERM`、Windows 的 `%AppData%\IntegTERM`，以及 Linux 的 `~/.config/IntegTERM`。站台密碼及 PPK passphrase 目前會保存在本機站台資料與站台備份 ZIP 中，請限制檔案權限並妥善保管備份。REST/MCP 服務預設只綁定 `127.0.0.1`，啟用對外來源前請正確設定 IP 白名單。
+應用資料位於各平台 `os.UserConfigDir()` 下的 `IntegTERM` 目錄，例如 macOS 的 `~/Library/Application Support/IntegTERM`、Windows 的 `%AppData%\IntegTERM`，以及 Linux 的 `~/.config/IntegTERM`。站台密碼及 PPK passphrase 目前會保存在本機站台資料與站台備份 ZIP 中，請限制檔案權限並妥善保管備份。REST/MCP 服務的存取控制完全依賴 IP/CIDR 白名單，預設只接受 `127.0.0.1`；若要允許其他來源，請先將來源 IP 或 CIDR 加入白名單。
 
 請勿提交 `cert/`、`data/`、`.env*`、安裝包、簽章資產或任何包含真實帳密的檔案。安全問題請參閱 [SECURITY.md](SECURITY.md)。
 

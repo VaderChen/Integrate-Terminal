@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/crashlog"
+	"github.com/VaderChen/Integrate-Terminal/internal/crashlog"
 	"github.com/VaderChen/Integrate-Terminal/internal/model"
 )
 
@@ -278,7 +278,8 @@ func (a *App) withRESTSecurity(next http.Handler) http.Handler {
 			return
 		}
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
-		if origin != "" && !a.isAllowedRESTOrigin(origin) {
+		originAllowed := a.isAllowedRESTOrigin(origin)
+		if origin != "" && !originAllowed {
 			writeError(w, http.StatusForbidden, "origin not allowed")
 			return
 		}
@@ -297,16 +298,14 @@ func (a *App) withRESTSecurity(next http.Handler) http.Handler {
 }
 
 func (a *App) isAllowedRESTClient(remoteAddr string) bool {
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		host = remoteAddr
-	}
-	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
-	if err != nil {
+	address, ok := restClientAddress(remoteAddr)
+	if !ok {
 		return false
 	}
-	address = address.Unmap()
-	for _, entry := range sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist) {
+	a.stateMu.RLock()
+	allowlist := append([]string(nil), a.config.RESTServerAllowlist...)
+	a.stateMu.RUnlock()
+	for _, entry := range sanitizeRESTServerAllowlist(allowlist) {
 		if allowedAddress, err := netip.ParseAddr(entry); err == nil && address == allowedAddress.Unmap() {
 			return true
 		}
@@ -318,15 +317,32 @@ func (a *App) isAllowedRESTClient(remoteAddr string) bool {
 }
 
 func (a *App) isAllowedRESTOrigin(origin string) bool {
-	parsed, err := url.Parse(origin)
-	if err != nil {
+	host, ok := restOriginHost(origin)
+	if !ok {
 		return false
 	}
-	host := parsed.Hostname()
-	if host == "localhost" {
-		host = "127.0.0.1"
-	}
 	return a.isAllowedRESTClient(net.JoinHostPort(host, "0"))
+}
+
+func restClientAddress(remoteAddr string) (netip.Addr, bool) {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return address.Unmap(), true
+}
+
+func restOriginHost(origin string) (string, bool) {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", false
+	}
+	host := parsed.Hostname()
+	return host, host != ""
 }
 
 func mustOpenCrashLogWriter() *os.File {

@@ -15,7 +15,7 @@
 - `cert/` 全部憑證、私鑰、P12 與 Provisioning Profile。
 - `data/` 個人站台、密碼、分頁與本機設定。
 - `internal/purchase/` StoreKit 與 App Store 內購程式。
-- App Store、Developer ID、Apple notarization、DMG 簽章與發布腳本。
+- 平台簽章、公證、DMG 與發布腳本等受控發布資產。
 - 本機備份與安裝維護腳本。
 - 內購宣傳圖、測試優惠碼、內部發行檢查表與舊審查文件。
 - `build/bin/`、`dist/`、`frontend/dist/`、`frontend/node_modules/` 與所有安裝包。

@@ -16,7 +16,7 @@
 - SSH, Telnet 및 로컬 Shell 터미널(로컬 Shell은 macOS와 Linux에서 지원).
 - SFTP 및 FTP 파일 탐색과 전송 대기열.
 - 사이트 그룹, 탭 복원, ZIP 백업 및 복원.
-- AI 및 자동화 도구 연동을 위한 로컬 MCP Streamable HTTP Server.
+- RAM 작업 공간과 원격 사이트 마운트를 제공하는 MCP 가상 계층.
 - 백그라운드 서비스 및 시스템 트레이 상태 제어.
 - 설정에서 GitHub Release를 수동으로 확인하고 매일 임의의 시간에 한 번 자동 확인하며, 검증된 플랫폼 업데이트 파일을 여는 기능.
 - 영어, 일본어, 한국어, 번체 중국어 및 간체 중국어 인터페이스.
@@ -27,17 +27,27 @@
 
 처음 실행할 때 이전 샌드박스 버전의 사이트, 설정, known hosts, PPK 복사본 및 REST API 토큰 마이그레이션을 시도합니다. 공개 소스 코드에는 Apple 서명 인증서, Provisioning Profile, 개인 키 또는 개인 사이트 데이터가 포함되지 않습니다.
 
-## MCP 연동
+## MCP 연동 (VFS 기본 활성화)
 
-IntegTERM은 Streamable HTTP를 사용하는 표준 MCP Server를 내장합니다. MCP 호환 AI 및 자동화 클라이언트에서 저장된 사이트 관리, SSH, Telnet, SFTP, FTP 및 macOS/Linux 로컬 터미널 탭 열기, SSH 명령 실행, 대화형 터미널 제어, 파일 전송, 전송 대기열 및 실행 로그 조회를 수행할 수 있습니다.
+IntegTERM은 Streamable HTTP를 사용하는 표준 MCP Server를 내장합니다. 가상 계층을 통해 RAM 작업 공간과 저장된 원격 사이트 마운트를 하나로 연결합니다. 외부 Agent는 HTTP 엔드포인트로 연결한 뒤 가상 URI로 리소스와 작업 백엔드를 선택합니다.
 
-### MCP Server 활성화
+### MCP Server (HTTP 기본 비활성화)
 
 1. IntegTERM을 실행하고 **설정** → **MCP**를 엽니다.
-2. 수신 포트와 IP 허용 목록을 확인합니다. 기본 포트는 `18080`이며 기본 허용 목록은 `127.0.0.1`입니다.
-3. MCP Server를 활성화합니다. 기본 엔드포인트는 `http://127.0.0.1:18080/mcp`입니다.
+2. 로컬 VFS MCP는 기본적으로 활성화되어 `integterm-vfs://workspace/mcp`에서 직접 사용할 수 있으며 네트워크 포트를 열지 않습니다.
+3. 외부 Agent가 연결해야 할 때만 HTTP MCP Server를 활성화합니다. 기본 포트는 `18080`, 기본 허용 목록은 `127.0.0.1`, 엔드포인트는 `http://127.0.0.1:18080/mcp`입니다.
 
-### MCP 클라이언트 설정
+### 가상 작업 공간: RAM 및 원격 사이트
+
+가상 루트 URI는 `integterm-vfs://workspace/mcp`입니다. `sites` 네임스페이스 외부의 경로는 제한된 RAM 데이터이고, `sites/{siteID}`는 저장된 원격 사이트를 나타냅니다. 최초의 `vfs_connect` 또는 파일 작업 시 연결이 지연 생성됩니다. 백그라운드 서비스가 중지되면 RAM 데이터는 삭제되며, 원격 작업은 사이트에 설정된 원격 루트에 직접 적용됩니다.
+
+원격 사이트 경로 형식은 `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`입니다. `sites`를 먼저 나열하여 사이트 ID를 확인한 다음 `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_mkdir`, `vfs_rename`, `vfs_delete`로 일반 파일 작업을 수행합니다. 가상 URI에는 비밀번호나 개인 키가 포함되지 않습니다.
+
+### 네트워크 사용: 기존 작업 및 가상 작업 공간
+
+외부 Agent는 MCP 엔드포인트 `http://127.0.0.1:18080/mcp`를 사용하며 저장된 사이트 관리, SSH, Telnet, SFTP, FTP, 로컬 터미널, 명령, 대화형 터미널, 파일 전송 및 위의 `integterm-vfs` 가상 작업 공간 도구를 사용할 수 있습니다. `integterm-vfs://`는 리소스 URI이며 별도의 HTTP 엔드포인트가 아닙니다.
+
+### 네트워크 MCP 클라이언트 설정
 
 ```json
 {
@@ -71,6 +81,14 @@ cd Integrate-Terminal
 
 `run.sh`는 로컬 임시 디렉터리에 개발용 미러를 생성하여 외장 드라이브에서 만들어지는 AppleDouble 파일이 Wails 빌드를 방해하지 않도록 합니다.
 
+UI는 기본적으로 단일 인스턴스로 실행됩니다. 다시 실행하면 새 UI를 만들지 않고 기존 창을 앞으로 가져옵니다. 개발 중 UI를 의도적으로 여러 개 실행하려면 다음 특수 인자를 사용하십시오.
+
+```bash
+./run.sh --multi-instance
+```
+
+이 인자는 UI만 여러 개 실행하도록 하며 백그라운드 서비스는 항상 단일 인스턴스로 유지됩니다.
+
 ## 데스크톱 실행 파일 빌드
 
 ### macOS Apple Silicon
@@ -79,7 +97,7 @@ cd Integrate-Terminal
 ./build.sh
 ```
 
-출력 파일은 `build/bin/IntegTERM.app`에 생성됩니다. 기본적으로 ad-hoc 서명을 사용하고 App Sandbox를 활성화하지 않으므로 빌드 완료 후 로컬에서 바로 실행할 수 있습니다.
+출력 파일은 `dist/IntegTERM.app`에 생성됩니다. 기본적으로 ad-hoc 서명을 사용하고 App Sandbox를 활성화하지 않으므로 빌드 완료 후 로컬에서 바로 실행할 수 있습니다. `build.command`를 두 번 클릭하여 빌드하고 `run.command`로 빌드된 App을 실행할 수 있으며, 개발 모드는 `run.command --dev`를 사용합니다.
 
 ### Windows x64
 
@@ -87,7 +105,7 @@ cd Integrate-Terminal
 powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
 ```
 
-출력 파일은 `build\bin\IntegTERM.exe`에 생성됩니다. 스크립트는 x64 실행 파일만 만들며 설치 프로그램 생성이나 서명은 수행하지 않습니다.
+출력 파일은 `dist\IntegTERM.exe`에 생성됩니다. 스크립트는 x64 실행 파일만 만들며 설치 프로그램 생성이나 서명은 수행하지 않습니다.
 
 ### Linux x64
 
@@ -95,9 +113,9 @@ powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
 ./build-linux.sh
 ```
 
-출력 파일은 `build/bin/IntegTERM`에 생성됩니다. 스크립트는 설치된 WebKitGTK와 AppIndicator 버전을 감지하며 AppImage, DEB 또는 RPM 없이 x64 실행 파일만 생성합니다.
+출력 파일은 `dist/IntegTERM`에 생성됩니다. 스크립트는 설치된 WebKitGTK와 AppIndicator 버전을 감지하며 AppImage, DEB 또는 RPM 없이 x64 실행 파일만 생성합니다.
 
-GitHub 공개 버전에는 Developer ID, Apple notarization, DMG 또는 다른 플랫폼용 배포 패키징 절차가 포함되지 않습니다. 서명, 설치 프로그램 및 배포 요구 사항은 배포자가 별도로 처리해야 합니다.
+GitHub 공개 버전에는 서명 식별 정보, 공증 설정, 개인 키 또는 기타 릴리스 자격 증명이 포함되지 않습니다. 서명, 설치 프로그램 및 배포 요구 사항은 배포자가 별도로 처리해야 합니다.
 
 ## 데이터 및 보안
 

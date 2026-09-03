@@ -25,6 +25,9 @@ export namespace model {
 	    progress: number;
 	    speedBps: number;
 	    status: string;
+	    attempt: number;
+	    maxAttempts: number;
+	    error: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TransferItem(source);
@@ -38,6 +41,9 @@ export namespace model {
 	        this.progress = source["progress"];
 	        this.speedBps = source["speedBps"];
 	        this.status = source["status"];
+	        this.attempt = source["attempt"];
+	        this.maxAttempts = source["maxAttempts"];
+	        this.error = source["error"];
 	    }
 	}
 	export class FileEntry {
@@ -81,6 +87,8 @@ export namespace model {
 	    language: string;
 	    theme: string;
 	    siteFolders: string[];
+	    transferRetryCount: number;
+	    transferConflictStrategy: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -106,6 +114,8 @@ export namespace model {
 	        this.language = source["language"];
 	        this.theme = source["theme"];
 	        this.siteFolders = source["siteFolders"];
+	        this.transferRetryCount = source["transferRetryCount"];
+	        this.transferConflictStrategy = source["transferConflictStrategy"];
 	    }
 	}
 	export class Tab {
@@ -168,6 +178,8 @@ export namespace model {
 	    localPath: string;
 	    remotePath: string;
 	    lastUsedAt: string;
+	    tags: string[];
+	    favorite: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Site(source);
@@ -192,6 +204,38 @@ export namespace model {
 	        this.localPath = source["localPath"];
 	        this.remotePath = source["remotePath"];
 	        this.lastUsedAt = source["lastUsedAt"];
+	        this.tags = source["tags"];
+	        this.favorite = source["favorite"];
+	    }
+	}
+	export class FileComparison {
+	    relativePath: string;
+	    localExists: boolean;
+	    remoteExists: boolean;
+	    localSize: number;
+	    remoteSize: number;
+	    localModified: string;
+	    remoteModified: string;
+	    localDirectory: boolean;
+	    remoteDirectory: boolean;
+	    status: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FileComparison(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.relativePath = source["relativePath"];
+	        this.localExists = source["localExists"];
+	        this.remoteExists = source["remoteExists"];
+	        this.localSize = source["localSize"];
+	        this.remoteSize = source["remoteSize"];
+	        this.localModified = source["localModified"];
+	        this.remoteModified = source["remoteModified"];
+	        this.localDirectory = source["localDirectory"];
+	        this.remoteDirectory = source["remoteDirectory"];
+	        this.status = source["status"];
 	    }
 	}
 	export class BootstrapPayload {

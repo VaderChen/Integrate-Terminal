@@ -55,6 +55,10 @@ export function Disconnect(arg1:string):Promise<Array<model.Tab>>;
 
 export function DownloadDroppedPaths(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
 
+export function CompareDirectories(arg1:string,arg2:string,arg3:string):Promise<Array<model.FileComparison>>;
+
+export function SyncDirectories(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function ExecuteLocalPath(arg1:string):Promise<void>;
 
 export function ExecuteSSHCommand(arg1:model.Site,arg2:string,arg3:number):Promise<Record<string, any>>;
@@ -75,6 +79,10 @@ export function GetRESTServerStatus():Promise<model.RESTServerStatus>;
 
 
 export function GetRestAPIDocsMarkdown():Promise<string>;
+
+export function GetMCPContractMarkdown(arg1:string):Promise<string>;
+
+export function ExportMCPContractMarkdown(arg1:string):Promise<string>;
 
 export function GetSSHOutputBuffer(arg1:string):Promise<string>;
 

@@ -2,11 +2,12 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-FRONTEND_DIR="$SCRIPT_DIR/frontend"
+cd "$(dirname "$0")"
+
+FRONTEND_DIR="./frontend"
 APP_NAME="IntegTERM"
-BUILD_BIN_DIR="$SCRIPT_DIR/build/bin"
-APP_PATH="$BUILD_BIN_DIR/$APP_NAME.app"
+DIST_DIR="./dist"
+APP_PATH="$DIST_DIR/$APP_NAME.app"
 TMP_ROOT=""
 export MACOSX_DEPLOYMENT_TARGET="12.0"
 export CGO_CFLAGS="-mmacosx-version-min=12.0"
@@ -64,40 +65,6 @@ export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
 export APP_MARKETING_VERSION
 export APP_BUNDLE_VERSION
 
-find_wails() {
-  if command -v wails >/dev/null 2>&1; then
-    command -v wails
-    return 0
-  fi
-
-  local candidates=()
-  local gopath=""
-  gopath="$(go env GOPATH 2>/dev/null || true)"
-  if [[ -n "$gopath" ]]; then
-    candidates+=("$gopath/bin/wails")
-  fi
-  candidates+=(
-    "$HOME/go/bin/wails"
-    "/opt/homebrew/bin/wails"
-    "/usr/local/bin/wails"
-  )
-
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    if [[ -x "$candidate" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-
-  return 1
-}
-
-install_wails() {
-  echo "未找到 Wails，正在自動安裝..."
-  GO111MODULE=on go install github.com/wailsapp/wails/v2/cmd/wails@latest
-}
-
 cleanup_appledouble() {
   local target_path="$1"
   if [[ -e "$target_path" ]]; then
@@ -130,17 +97,12 @@ for cmd in "${required_commands[@]}"; do
   fi
 done
 
-WAILS_BIN="$(find_wails || true)"
-if [[ -z "$WAILS_BIN" ]]; then
-  install_wails
-  WAILS_BIN="$(find_wails || true)"
-fi
-
-if [[ -z "$WAILS_BIN" ]]; then
-  echo "缺少必要指令: wails"
-  echo "可手動執行：go install github.com/wailsapp/wails/v2/cmd/wails@latest"
+WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2 2>/dev/null || true)"
+if [[ -z "$WAILS_VERSION" || "$WAILS_VERSION" == "<no value>" ]]; then
+  echo "無法取得 go.mod 指定的 Wails 版本。"
   exit 1
 fi
+WAILS_COMMAND=(go run "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION")
 
 cd "$FRONTEND_DIR"
 if [[ ! -d node_modules ]]; then
@@ -148,15 +110,15 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
-cd "$SCRIPT_DIR"
+cd ..
 echo "整理 Go 模組..."
 go mod tidy
 
 echo "產生第三方授權清冊..."
-node "$SCRIPT_DIR/scripts/generate-third-party-notices.mjs"
+node "./scripts/generate-third-party-notices.mjs"
 
 echo "同步 App Icon..."
-"$SCRIPT_DIR/sync-app-icon.sh"
+"./sync-app-icon.sh"
 
 echo "同步產品版本..."
 node <<'EOF'
@@ -184,14 +146,14 @@ rm -rf dist
 npm run build
 cleanup_appledouble "$FRONTEND_DIR/dist"
 
-cd "$SCRIPT_DIR"
+cd ..
 if [[ -z "${BUILD_COMMIT:-}" || -z "${BUILD_TAG:-}" || -z "${BUILD_STATE:-}" ]]; then
-  if command -v git >/dev/null 2>&1 && git -C "$SCRIPT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    BUILD_COMMIT="${BUILD_COMMIT:-$(git -C "$SCRIPT_DIR" rev-parse HEAD)}"
-    exact_tag="$(git -C "$SCRIPT_DIR" describe --tags --exact-match HEAD 2>/dev/null || true)"
+  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    BUILD_COMMIT="${BUILD_COMMIT:-$(git rev-parse HEAD)}"
+    exact_tag="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
     BUILD_TAG="${BUILD_TAG:-${exact_tag:-untagged}}"
     if [[ -z "${BUILD_STATE:-}" ]]; then
-      if [[ -n "$(git -C "$SCRIPT_DIR" status --porcelain=v1 --untracked-files=normal)" ]]; then
+      if [[ -n "$(git status --porcelain=v1 --untracked-files=normal)" ]]; then
         BUILD_STATE="dirty"
       else
         BUILD_STATE="clean"
@@ -213,9 +175,9 @@ done
 
 BUILD_LDFLAGS="-X github.com/VaderChen/Integrate-Terminal/internal/version.Product=$APP_MARKETING_VERSION -X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BUILD_COMMIT -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BUILD_TAG -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BUILD_STATE -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BUILD_SOURCE_URL"
 
-mkdir -p "$BUILD_BIN_DIR"
+mkdir -p "$DIST_DIR" "./.codex-tmp"
 rm -rf "$APP_PATH"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/integterm-build.XXXXXX")"
+TMP_ROOT="$(mktemp -d "./.codex-tmp/integterm-build.XXXXXX")"
 STAGING_DIR="$TMP_ROOT/project"
 STAGING_APP_PATH="$STAGING_DIR/build/bin/$APP_NAME.app"
 
@@ -232,7 +194,7 @@ rsync -a \
   --exclude '/dist/' \
   --exclude '/build/bin/' \
   --exclude '/frontend/node_modules/.cache/' \
-  "$SCRIPT_DIR/" "$STAGING_DIR/"
+  ./ "$STAGING_DIR/"
 
 cleanup_appledouble "$STAGING_DIR"
 cleanup_appledouble "$STAGING_DIR/frontend/dist"
@@ -245,7 +207,7 @@ fi
 echo "開始打包 Wails 應用程式..."
 (
   cd "$STAGING_DIR"
-  "$WAILS_BIN" build -clean -s -ldflags "$BUILD_LDFLAGS"
+  "${WAILS_COMMAND[@]}" build -clean -s -skipembedcreate -ldflags "$BUILD_LDFLAGS"
 )
 
 if [[ ! -d "$STAGING_APP_PATH" ]]; then
@@ -293,7 +255,7 @@ if [[ "$BUILT_BUNDLE_ID" != "$APP_BUNDLE_ID" ]]; then
   exit 1
 fi
 
-echo "完成：$APP_PATH"
+echo "完成：./dist/$APP_NAME.app"
 echo "Bundle ID：$BUILT_BUNDLE_ID"
 echo "來源版本：$BUILD_TAG ($BUILD_COMMIT, $BUILD_STATE)"
 if [[ "$CODESIGN_IDENTITY" == "-" ]]; then

@@ -16,7 +16,7 @@
 - SSH, Telnet, and local shell terminals (local shell is supported on macOS and Linux).
 - SFTP and FTP file browsing with a transfer queue.
 - Site groups, tab restoration, and ZIP backup and restore.
-- A local MCP Streamable HTTP server for AI and automation integrations.
+- An MCP virtual layer with a RAM workspace and remote-site mounts.
 - Background service and system tray controls.
 - Manual GitHub Release checks in Settings plus one automatic check at a random time each day, with verified platform update downloads.
 - English, Japanese, Korean, Traditional Chinese, and Simplified Chinese interfaces.
@@ -27,17 +27,27 @@ The open source edition does not use StoreKit, limit the number of connections, 
 
 On first launch, the application attempts to migrate sites, settings, known hosts, PPK copies, and the REST API token from the previous sandboxed edition. The public source code does not include Apple signing certificates, provisioning profiles, private keys, or personal site data.
 
-## MCP Integration
+## MCP Integration (VFS enabled by default)
 
-IntegTERM includes a standard MCP server over Streamable HTTP. MCP-compatible AI and automation clients can manage saved sites, open SSH, Telnet, SFTP, FTP, and macOS/Linux local terminal tabs, execute SSH commands, interact with terminal sessions, transfer files, and inspect transfer queues and operation logs.
+IntegTERM includes a standard MCP server over Streamable HTTP. A virtual layer unifies RAM workspace resources with saved remote-site mounts. External agents connect through the HTTP endpoint and use virtual URIs to select the resource and operation backend.
 
-### Enable the MCP Server
+### MCP Server (HTTP disabled by default)
 
 1. Start IntegTERM and open **Settings** → **MCP**.
-2. Review the listening port and IP allowlist. The default port is `18080`, and the default allowlist is `127.0.0.1`.
-3. Enable the MCP Server. The default endpoint is `http://127.0.0.1:18080/mcp`.
+2. The local VFS MCP is enabled by default and is available at `integterm-vfs://workspace/mcp`; it does not listen on a network port.
+3. Enable the HTTP MCP Server only when an external agent must connect. The default port is `18080`, the default allowlist is `127.0.0.1`, and the endpoint is `http://127.0.0.1:18080/mcp`.
 
-### MCP Client Configuration
+### Virtual Workspace: RAM and Remote Sites
+
+The virtual root URI is `integterm-vfs://workspace/mcp`. Paths outside the `sites` namespace are bounded RAM data; `sites/{siteID}` represents a saved remote site. The first `vfs_connect` or file operation lazily opens the connection. RAM data is cleared when the background service stops, while remote operations act directly on the site's configured remote root.
+
+Remote site paths use `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`. List `sites` to discover site IDs, then use `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_mkdir`, `vfs_rename`, and `vfs_delete` for normal file operations. Virtual URIs never contain passwords or private keys.
+
+### Over Network: Existing Operations and Virtual Workspace
+
+External agents use the MCP endpoint `http://127.0.0.1:18080/mcp`, which provides saved-site management, SSH, Telnet, SFTP, FTP, local terminals, commands, interactive terminal operations, file transfers, and the `integterm-vfs` virtual workspace tools above. `integterm-vfs://` is a resource URI, not another HTTP endpoint.
+
+### Network MCP Client Configuration
 
 ```json
 {
@@ -71,6 +81,14 @@ cd Integrate-Terminal
 
 `run.sh` creates a development mirror in a local temporary directory to prevent AppleDouble files generated on external drives from interfering with the Wails build.
 
+The UI runs as a single instance by default. Launching it again brings the existing window to the front instead of creating another UI. To intentionally run multiple UI instances during development, use the special argument:
+
+```bash
+./run.sh --multi-instance
+```
+
+This argument only allows multiple UI instances; the background service remains single-instance.
+
 ## Build Desktop Executables
 
 ### macOS Apple Silicon
@@ -79,7 +97,7 @@ cd Integrate-Terminal
 ./build.sh
 ```
 
-The output is written to `build/bin/IntegTERM.app`. By default, the app uses an ad-hoc signature and does not enable App Sandbox, so it can be opened locally after the build finishes.
+The output is written to `dist/IntegTERM.app`. By default, the app uses an ad-hoc signature and does not enable App Sandbox, so it can be opened locally after the build finishes. You can also double-click `build.command` to build, or `run.command` to launch the built app; use `run.command --dev` for development mode.
 
 ### Windows x64
 
@@ -87,7 +105,7 @@ The output is written to `build/bin/IntegTERM.app`. By default, the app uses an 
 powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
 ```
 
-The output is written to `build\bin\IntegTERM.exe`. The script creates only an x64 executable and does not create an installer or apply a signature.
+The output is written to `dist\IntegTERM.exe`. The script creates only an x64 executable and does not create an installer or apply a signature.
 
 ### Linux x64
 
@@ -95,9 +113,9 @@ The output is written to `build\bin\IntegTERM.exe`. The script creates only an x
 ./build-linux.sh
 ```
 
-The output is written to `build/bin/IntegTERM`. The script detects the installed WebKitGTK and AppIndicator versions and creates only an x64 executable, without AppImage, DEB, or RPM packaging.
+The output is written to `dist/IntegTERM`. The script detects the installed WebKitGTK and AppIndicator versions and creates only an x64 executable, without AppImage, DEB, or RPM packaging.
 
-The public GitHub repository does not include Developer ID, Apple notarization, DMG, or release packaging for other platforms. Distributors must handle signing, installers, and release requirements separately.
+The public GitHub repository does not include signing identities, notarization settings, private keys, or release credentials. Distributors must handle platform signing, installers, and release requirements separately.
 
 ## Data and Security
 

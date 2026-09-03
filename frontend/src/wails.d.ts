@@ -31,6 +31,8 @@ declare global {
           CreateTelnetTab: (site: import('./types').Site) => Promise<import('./types').Tab[]>;
           CreateLocalTerminalTab: (cwd: string) => Promise<import('./types').Tab[]>;
           CloseTab: (tabID: string) => Promise<import('./types').Tab[]>;
+          ApproveQuit: () => Promise<void>;
+          StopBackgroundService: () => Promise<void>;
           Connect: (tabID: string) => Promise<import('./types').Tab[]>;
           Disconnect: (tabID: string) => Promise<import('./types').Tab[]>;
           ReorderTabs: (tabIDs: string[]) => Promise<import('./types').Tab[]>;
@@ -53,6 +55,8 @@ declare global {
           UploadDroppedPaths: (tabID: string, localPaths: string[], remoteBase: string) => Promise<void>;
           UploadDroppedPathsToSite: (site: import('./types').Site, localPaths: string[], remoteBase: string) => Promise<void>;
           DownloadDroppedPaths: (tabID: string, remotePaths: string[], localBase: string) => Promise<void>;
+          CompareDirectories: (tabID: string, localPath: string, remotePath: string) => Promise<import('./types').FileComparison[]>;
+          SyncDirectories: (tabID: string, localPath: string, remotePath: string, direction: 'upload' | 'download') => Promise<void>;
           MoveEntriesToDirectory: (tabID: string, side: 'local' | 'remote', sourcePaths: string[], targetDirectory: string) => Promise<void>;
           CreateDirectory: (tabID: string, side: 'local' | 'remote', basePath: string, name: string) => Promise<void>;
           RenameEntry: (tabID: string, side: 'local' | 'remote', sourcePath: string, newName: string) => Promise<void>;
@@ -73,7 +77,9 @@ declare global {
           CloseSSHSession: (sessionID: string) => Promise<void>;
           ResetWindowToDefaultScale: () => Promise<void>;
           GetRestAPIDocsMarkdown: () => Promise<string>;
+          GetMCPContractMarkdown: (contract: 'local' | 'network') => Promise<string>;
           ExportRestAPIDocsMarkdown: () => Promise<string>;
+          ExportMCPContractMarkdown: (contract: 'local' | 'network') => Promise<string>;
           GetRESTServerStatus: () => Promise<import('./types').RestServerStatus>;
           CheckForUpdates: () => Promise<import('./types').UpdateCheckResult>;
           StartUpdate: (expectedTag: string) => Promise<import('./types').UpdateActionResult>;

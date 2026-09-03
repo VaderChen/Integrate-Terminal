@@ -134,6 +134,8 @@ export function useTransferActions({
         localPath: currentTab.localPath,
         remotePath,
         lastUsedAt: '',
+        tags: [],
+        favorite: false,
       }, paths, remotePath);
       await syncTransferState();
       setErrorMessage(`SSH drag upload completed: ${paths.length} item(s) to ${remotePath}`);

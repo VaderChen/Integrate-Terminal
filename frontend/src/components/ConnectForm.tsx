@@ -88,6 +88,27 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
               <input value={draft.name} onChange={(e) => update('name', e.target.value)} placeholder={t.placeholderSiteName} />
             </label>
             <label>
+              <span>{t.fieldFolder}</span>
+              <input {...textInputProps} value={draft.folder ?? ''} onChange={(e) => update('folder', e.target.value)} placeholder={t.placeholderFolder} />
+            </label>
+            <label>
+              <span>{t.fieldTags}</span>
+              <input
+                {...textInputProps}
+                value={(draft.tags ?? []).join(', ')}
+                onChange={(e) => update('tags', parseTags(e.target.value))}
+                placeholder={t.placeholderTags}
+              />
+            </label>
+            <label className="form-checkbox-label">
+              <span>{t.fieldFavorite}</span>
+              <input
+                type="checkbox"
+                checked={draft.favorite ?? false}
+                onChange={(e) => update('favorite', e.target.checked)}
+              />
+            </label>
+            <label>
               <span>{t.fieldProtocol}</span>
               <div className="select-shell">
                 <select
@@ -189,4 +210,11 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
       ) : null}
     </section>
   );
+}
+
+function parseTags(value: string) {
+  return value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
 }

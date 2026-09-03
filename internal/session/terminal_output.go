@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"unicode/utf8"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -60,14 +61,15 @@ func appendTerminalOutput(buffer []byte, chunk []byte) []byte {
 	return append([]byte(nil), buffer[start:]...)
 }
 
-func stripTerminalSignals(pending []byte, chunk []byte) ([]byte, []byte, []string) {
+func stripTerminalSignals(pending []byte, chunk []byte) ([]byte, []byte, []string, []string) {
 	data := append(append([]byte(nil), pending...), chunk...)
 	if len(data) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	visible := make([]byte, 0, len(data))
 	cwds := make([]string, 0, 1)
+	clipboards := make([]string, 0, 1)
 	index := 0
 	for index < len(data) {
 		start := bytes.Index(data[index:], []byte(oscStart))
@@ -80,22 +82,48 @@ func stripTerminalSignals(pending []byte, chunk []byte) ([]byte, []byte, []strin
 
 		end, terminatorSize := findOSCTerminator(data, start+len(oscStart))
 		if end < 0 {
-			return visible, append([]byte(nil), data[start:]...), cwds
+			return visible, append([]byte(nil), data[start:]...), cwds, clipboards
 		}
 
 		if bytes.HasPrefix(data[start:], []byte(cwdOSCMarker)) {
 			payloadStart := start + len(cwdOSCMarker)
 			cwds = append(cwds, string(data[payloadStart:end]))
+		} else if clipboard, ok := parseOSCClipboard(data[start+len(oscStart) : end]); ok {
+			clipboards = append(clipboards, clipboard)
 		}
 		index = end + terminatorSize
 	}
 
 	if suffixLength := longestOSCPrefixSuffix(data); suffixLength > 0 && suffixLength <= len(visible) {
 		visible = visible[:len(visible)-suffixLength]
-		return visible, append([]byte(nil), data[len(data)-suffixLength:]...), cwds
+		return visible, append([]byte(nil), data[len(data)-suffixLength:]...), cwds, clipboards
 	}
 
-	return visible, nil, cwds
+	return visible, nil, cwds, clipboards
+}
+
+func parseOSCClipboard(payload []byte) (string, bool) {
+	if !bytes.HasPrefix(payload, []byte("52;")) {
+		return "", false
+	}
+
+	separator := bytes.IndexByte(payload[3:], ';')
+	if separator < 0 {
+		return "", false
+	}
+	encoded := payload[separator+4:]
+	if bytes.Equal(encoded, []byte("?")) {
+		return "", false
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(string(encoded))
+	if err != nil {
+		decoded, err = base64.RawStdEncoding.DecodeString(string(encoded))
+	}
+	if err != nil || !utf8.Valid(decoded) {
+		return "", false
+	}
+	return string(decoded), true
 }
 
 func findOSCTerminator(data []byte, start int) (end int, terminatorSize int) {

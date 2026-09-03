@@ -106,6 +106,14 @@ export function DownloadDroppedPaths(arg1, arg2, arg3) {
   return window['go']['app']['App']['DownloadDroppedPaths'](arg1, arg2, arg3);
 }
 
+export function CompareDirectories(arg1, arg2, arg3) {
+  return window['go']['app']['App']['CompareDirectories'](arg1, arg2, arg3);
+}
+
+export function SyncDirectories(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['App']['SyncDirectories'](arg1, arg2, arg3, arg4);
+}
+
 export function ExecuteLocalPath(arg1) {
   return window['go']['app']['App']['ExecuteLocalPath'](arg1);
 }
@@ -144,6 +152,14 @@ export function GetRESTServerStatus() {
 
 export function GetRestAPIDocsMarkdown() {
   return window['go']['app']['App']['GetRestAPIDocsMarkdown']();
+}
+
+export function GetMCPContractMarkdown(arg1) {
+  return window['go']['app']['App']['GetMCPContractMarkdown'](arg1);
+}
+
+export function ExportMCPContractMarkdown(arg1) {
+  return window['go']['app']['App']['ExportMCPContractMarkdown'](arg1);
 }
 
 export function GetSSHOutputBuffer(arg1) {

@@ -12,6 +12,8 @@ export type Site = {
   localPath: string;
   remotePath: string;
   lastUsedAt: string;
+  tags: string[];
+  favorite: boolean;
 };
 
 export type Tab = {
@@ -56,6 +58,9 @@ export type TransferItem = {
   progress: number;
   speedBps: number;
   status: 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
+  attempt?: number;
+  maxAttempts?: number;
+  error?: string;
 };
 
 export type LogItem = {
@@ -84,6 +89,21 @@ export type Config = {
   language: '' | 'zh-TW' | 'zh-CN' | 'en' | 'ja' | 'ko';
   theme: 'neutral' | 'light' | 'dark' | 'contrast';
   siteFolders: string[];
+  transferRetryCount: number;
+  transferConflictStrategy: 'overwrite' | 'skip' | 'fail';
+};
+
+export type FileComparison = {
+  relativePath: string;
+  localExists: boolean;
+  remoteExists: boolean;
+  localSize: number;
+  remoteSize: number;
+  localModified: string;
+  remoteModified: string;
+  localDirectory: boolean;
+  remoteDirectory: boolean;
+  status: 'same' | 'local-only' | 'remote-only' | 'different' | 'type-conflict';
 };
 
 export type RestServerStatus = {
