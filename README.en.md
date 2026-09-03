@@ -48,6 +48,17 @@ Local agents should start IntegTERM with the `mcp` argument and connect over std
 
 When running from source, use `go run . mcp`. After connecting, call `tools/list`, then use `vfs_list` with an empty path or `integterm-vfs://workspace/mcp`; do not put the URI in an HTTP URL field or execute it as a shell command.
 
+### Agent Call Sequence
+
+After connecting, agents should:
+
+1. Call `tools/list` to obtain the current tool schemas.
+2. Call `vfs_workspace_info` to confirm the root URI and workspace limits.
+3. Call `vfs_list` without `path` (or with `integterm-vfs://workspace/mcp`) to list the workspace root.
+4. Use `vfs_stat`, `vfs_read`, `vfs_write`, and the other VFS tools for files. Use `resources/read` for a Resource URI only when the client supports MCP Resources.
+
+The `integterm-vfs://workspace/mcp` value does not open a connection and must not be executed as a shell command.
+
 ### MCP Server (HTTP disabled by default)
 
 1. Start IntegTERM and open **Settings** → **MCP**.

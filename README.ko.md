@@ -48,6 +48,17 @@ IntegTERM은 stdio 기반 로컬 VFS MCP와 선택적 Streamable HTTP MCP를 제
 
 소스에서 실행할 때는 `go run . mcp`를 사용합니다. 연결 후 `tools/list`를 호출하고 빈 path 또는 `integterm-vfs://workspace/mcp`로 `vfs_list`를 사용하십시오. URI를 HTTP URL 필드에 넣거나 셸 명령으로 실행하지 마십시오.
 
+### Agent 호출 순서
+
+연결 후 다음 순서로 호출하십시오.
+
+1. `tools/list`를 호출하여 현재 도구 스키마를 확인합니다.
+2. `vfs_workspace_info`를 호출하여 루트 URI와 작업 공간 제한을 확인합니다.
+3. `path`를 생략한 `vfs_list`(또는 `integterm-vfs://workspace/mcp`)로 루트를 나열합니다.
+4. 파일에는 `vfs_stat`, `vfs_read`, `vfs_write` 등의 VFS 도구를 사용합니다. MCP Resources를 지원하는 클라이언트만 Resource URI에 `resources/read`를 사용합니다.
+
+`integterm-vfs://workspace/mcp` 값은 연결을 시작하지 않으며 셸 명령으로 실행해서도 안 됩니다.
+
 ### MCP Server (HTTP 기본 비활성화)
 
 1. IntegTERM을 실행하고 **설정** → **MCP**를 엽니다.
