@@ -48,6 +48,17 @@ IntegTERM 內建本機 VFS MCP（stdio）與可選的 Streamable HTTP MCP。虛�
 
 從原始碼執行時可使用 `go run . mcp`。連線後先呼叫 `tools/list`，再使用 `vfs_list`（空白 path 或 `integterm-vfs://workspace/mcp`）瀏覽工作區；不要把 `integterm-vfs://workspace/mcp` 填入 HTTP URL 或當作 shell 指令。
 
+### Agent 呼叫流程
+
+Agent 連線後請依序：
+
+1. 呼叫 `tools/list` 取得目前工具結構。
+2. 呼叫 `vfs_workspace_info` 確認根 URI 與工作區限制。
+3. 呼叫 `vfs_list`，可省略 `path`（或傳入 `integterm-vfs://workspace/mcp`）列出根目錄。
+4. 對檔案使用 `vfs_stat`、`vfs_read`、`vfs_write` 等工具；只有在客戶端支援 MCP Resources 時，才使用 `resources/read` 讀取 Resource URI。
+
+`integterm-vfs://workspace/mcp` 本身不會啟動連線，也不是要交給 shell 執行的指令。
+
 ### MCP Server（HTTP 預設關閉）
 
 1. 啟動 IntegTERM，開啟「設定」→「MCP」。
