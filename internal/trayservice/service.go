@@ -89,7 +89,7 @@ func (s *Service) onReady() {
 	versionItem.Disable()
 
 	localEndpointURI := "integterm-vfs://workspace/mcp"
-	localEndpointItem := systray.AddMenuItem("本機服務："+localEndpointURI, "點擊複製本機 VFS MCP URI")
+	localEndpointItem := systray.AddMenuItem("本機服務："+localEndpointURI, "點擊複製本機 VFS Resource URI；本機 Agent 請使用 mcp stdio 指令")
 	remoteEndpointItem := systray.AddMenuItem("遠端服務："+status.MCPURL, "點擊複製遠端 HTTP MCP URL")
 	if !status.Running || status.MCPURL == "" {
 		remoteEndpointItem.Hide()

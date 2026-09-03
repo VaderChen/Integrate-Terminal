@@ -29,12 +29,29 @@
 
 ## MCP 整合（VFS 預設啟用）
 
-IntegTERM 內建標準 MCP Streamable HTTP Server，並以虛擬層統一 RAM 工作區與已儲存遠端站台的資源路徑。外部 Agent 透過 HTTP 端點連線，再使用虛擬 URI 選擇資源與操作後端。
+IntegTERM 內建本機 VFS MCP（stdio）與可選的 Streamable HTTP MCP。虛擬層統一 RAM 工作區與已儲存遠端站台的資源路徑。`integterm-vfs://` 是 MCP 連線內的 Resource URI／工具路徑，不是可直接連線的 URL。
+
+### 本機 VFS MCP（stdio，預設）
+
+本機 Agent 應以 `mcp` 參數啟動 IntegTERM，透過 stdio 連線：
+
+```json
+{
+  "mcpServers": {
+    "integterm-vfs": {
+      "command": "/Applications/IntegTERM.app/Contents/MacOS/IntegTERM",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+從原始碼執行時可使用 `go run . mcp`。連線後先呼叫 `tools/list`，再使用 `vfs_list`（空白 path 或 `integterm-vfs://workspace/mcp`）瀏覽工作區；不要把 `integterm-vfs://workspace/mcp` 填入 HTTP URL 或當作 shell 指令。
 
 ### MCP Server（HTTP 預設關閉）
 
 1. 啟動 IntegTERM，開啟「設定」→「MCP」。
-2. 本機 VFS MCP 預設啟用，可直接使用 `integterm-vfs://workspace/mcp`，不會監聽網路埠。
+2. 本機 VFS MCP 預設透過 stdio 提供，不會監聽網路埠。
 3. 只有需要讓外部 Agent 透過 HTTP 連線時，才開啟 MCP Server；預設埠為 `18080`、白名單為 `127.0.0.1`，端點為 `http://127.0.0.1:18080/mcp`。
 
 ### 虛擬工作區：RAM 與遠端站台
@@ -45,7 +62,7 @@ IntegTERM 內建標準 MCP Streamable HTTP Server，並以虛擬層統一 RAM �
 
 ### 透過網路：既有操作與虛擬工作區
 
-外部 Agent 使用的 MCP 端點為 `http://127.0.0.1:18080/mcp`，提供站台管理、SSH、Telnet、SFTP、FTP、本機終端、指令、互動式終端、檔案傳輸，以及上述 `integterm-vfs` 虛擬工作區工具。`integterm-vfs://` 是資源 URI，不是另一個 HTTP 端點。
+外部 Agent 使用的 MCP 端點為 `http://127.0.0.1:18080/mcp`，提供站台管理、SSH、Telnet、SFTP、FTP、本機終端、指令、互動式終端、檔案傳輸，以及上述 `integterm-vfs` 虛擬工作區工具。`integterm-vfs://` 是資源 URI，不是另一個 HTTP 端點；HTTP Agent 也應透過 `vfs_list` 等工具操作它。
 
 ### 網路 MCP 客戶端設定
 

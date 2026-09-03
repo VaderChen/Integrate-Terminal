@@ -29,12 +29,29 @@ On first launch, the application attempts to migrate sites, settings, known host
 
 ## MCP Integration (VFS enabled by default)
 
-IntegTERM includes a standard MCP server over Streamable HTTP. A virtual layer unifies RAM workspace resources with saved remote-site mounts. External agents connect through the HTTP endpoint and use virtual URIs to select the resource and operation backend.
+IntegTERM includes a local VFS MCP server over stdio and an optional Streamable HTTP MCP server. A virtual layer unifies RAM workspace resources with saved remote-site mounts. The `integterm-vfs://` value is a resource URI and tool path inside an MCP connection, not a URL that an agent can connect to directly.
+
+### Local VFS MCP (stdio, default)
+
+Local agents should start IntegTERM with the `mcp` argument and connect over stdio:
+
+```json
+{
+  "mcpServers": {
+    "integterm-vfs": {
+      "command": "/Applications/IntegTERM.app/Contents/MacOS/IntegTERM",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+When running from source, use `go run . mcp`. After connecting, call `tools/list`, then use `vfs_list` with an empty path or `integterm-vfs://workspace/mcp`; do not put the URI in an HTTP URL field or execute it as a shell command.
 
 ### MCP Server (HTTP disabled by default)
 
 1. Start IntegTERM and open **Settings** → **MCP**.
-2. The local VFS MCP is enabled by default and is available at `integterm-vfs://workspace/mcp`; it does not listen on a network port.
+2. The local VFS MCP is provided over stdio by default and does not listen on a network port.
 3. Enable the HTTP MCP Server only when an external agent must connect. The default port is `18080`, the default allowlist is `127.0.0.1`, and the endpoint is `http://127.0.0.1:18080/mcp`.
 
 ### Virtual Workspace: RAM and Remote Sites
@@ -45,7 +62,7 @@ Remote site paths use `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRem
 
 ### Over Network: Existing Operations and Virtual Workspace
 
-External agents use the MCP endpoint `http://127.0.0.1:18080/mcp`, which provides saved-site management, SSH, Telnet, SFTP, FTP, local terminals, commands, interactive terminal operations, file transfers, and the `integterm-vfs` virtual workspace tools above. `integterm-vfs://` is a resource URI, not another HTTP endpoint.
+External agents use the MCP endpoint `http://127.0.0.1:18080/mcp`, which provides saved-site management, SSH, Telnet, SFTP, FTP, local terminals, commands, interactive terminal operations, file transfers, and the `integterm-vfs` virtual workspace tools above. `integterm-vfs://` is a resource URI, not another HTTP endpoint; HTTP clients should operate on it through tools such as `vfs_list`.
 
 ### Network MCP Client Configuration
 

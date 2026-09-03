@@ -701,6 +701,15 @@ export function SettingsModal({
                     </div>
                     <div className="settings-mcp-local-meta">
                       <div>
+                        <span>{t.settingsMcpLocalCommand}</span>
+                        <div className="settings-mcp-endpoint-row">
+                          <code>IntegTERM mcp</code>
+                          <button type="button" className="settings-skill-action-button" onClick={() => void navigator.clipboard.writeText('IntegTERM mcp')} aria-label={t.settingsSkillCopy} title={t.settingsSkillCopy}>
+                            <FontAwesomeIcon icon={faCopy} />
+                          </button>
+                        </div>
+                      </div>
+                      <div>
                         <span>{t.settingsMcpLocalVirtualRoot}</span>
                         <div className="settings-mcp-endpoint-row">
                           <code>integterm-vfs://workspace/mcp</code>
