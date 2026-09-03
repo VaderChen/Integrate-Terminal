@@ -158,6 +158,10 @@ export function GetMCPContractMarkdown(arg1) {
   return window['go']['app']['App']['GetMCPContractMarkdown'](arg1);
 }
 
+export function GetMCPStdioExecutable() {
+  return window['go']['app']['App']['GetMCPStdioExecutable']();
+}
+
 export function ExportMCPContractMarkdown(arg1) {
   return window['go']['app']['App']['ExportMCPContractMarkdown'](arg1);
 }

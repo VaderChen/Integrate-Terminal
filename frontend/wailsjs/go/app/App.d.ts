@@ -82,6 +82,8 @@ export function GetRestAPIDocsMarkdown():Promise<string>;
 
 export function GetMCPContractMarkdown(arg1:string):Promise<string>;
 
+export function GetMCPStdioExecutable():Promise<string>;
+
 export function ExportMCPContractMarkdown(arg1:string):Promise<string>;
 
 export function GetSSHOutputBuffer(arg1:string):Promise<string>;

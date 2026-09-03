@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -88,6 +89,18 @@ func (a *App) newMCPHTTPHandler() http.Handler {
 // not a network endpoint.
 func (a *App) RunMCPStdio(ctx context.Context) error {
 	return newMCPVirtualLayer(a).newServer(mcpContractLocal).Run(ctx, &mcp.StdioTransport{})
+}
+
+// GetMCPStdioExecutable returns the executable that should be configured as
+// the local MCP command. Returning the resolved process path is important for
+// packaged desktop apps: a GUI-launched app is usually not on the Agent's
+// PATH, so the display name "IntegTERM" is not a reliable command.
+func (a *App) GetMCPStdioExecutable() string {
+	executablePath, err := os.Executable()
+	if err != nil || strings.TrimSpace(executablePath) == "" {
+		return "IntegTERM"
+	}
+	return executablePath
 }
 
 func newMCPStreamableHTTPHandler(server *mcp.Server) http.Handler {

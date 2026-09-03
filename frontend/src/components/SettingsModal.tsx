@@ -75,6 +75,7 @@ export function SettingsModal({
   const [skillLoading, setSkillLoading] = useState(false);
   const [skillError, setSkillError] = useState('');
   const [skillCopyMessage, setSkillCopyMessage] = useState('');
+  const [mcpStdioExecutable, setMcpStdioExecutable] = useState('IntegTERM');
   const [restAllowlistDraft, setRestAllowlistDraft] = useState(config.restServerAllowlist.join(', '));
   const [trayReminder, setTrayReminder] = useState('');
   const [restStatus, setRestStatus] = useState<RestServerStatus | null>(null);
@@ -127,15 +128,19 @@ export function SettingsModal({
       try {
         setSkillLoading(true);
         setSkillError('');
-        const [markdown, status] = await Promise.all([
+        const [markdown, status, stdioExecutable] = await Promise.all([
           window.go?.app?.App?.GetMCPContractMarkdown?.(activeMCPContract),
           window.go?.app?.App?.GetRESTServerStatus?.(),
+          window.go?.app?.App?.GetMCPStdioExecutable?.(),
         ]);
         if (cancelled) {
           return;
         }
         setSkillMarkdown(markdown ?? '');
         setRestStatus(status ?? null);
+        if (stdioExecutable) {
+          setMcpStdioExecutable(stdioExecutable);
+        }
       } catch (error) {
         if (cancelled) {
           return;
@@ -170,6 +175,8 @@ export function SettingsModal({
   }, [trayReminder]);
 
   if (!open) return null;
+
+  const localMCPCommand = `${mcpStdioExecutable} mcp`;
 
   const handleExportSkillMarkdown = async () => {
     if (!skillMarkdown) {
@@ -703,8 +710,8 @@ export function SettingsModal({
                       <div>
                         <span>{t.settingsMcpLocalCommand}</span>
                         <div className="settings-mcp-endpoint-row">
-                          <code>IntegTERM mcp</code>
-                          <button type="button" className="settings-skill-action-button" onClick={() => void navigator.clipboard.writeText('IntegTERM mcp')} aria-label={t.settingsSkillCopy} title={t.settingsSkillCopy}>
+                          <code>{localMCPCommand}</code>
+                          <button type="button" className="settings-skill-action-button" onClick={() => void navigator.clipboard.writeText(localMCPCommand)} aria-label={t.settingsSkillCopy} title={t.settingsSkillCopy}>
                             <FontAwesomeIcon icon={faCopy} />
                           </button>
                         </div>

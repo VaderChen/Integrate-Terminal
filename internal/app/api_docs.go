@@ -118,15 +118,32 @@ func (a *App) buildMCPNetworkContractMarkdown() (string, error) {
 
 func (a *App) buildMCPLocalContractMarkdown() (string, error) {
 	status := a.GetRESTServerStatus()
+	stdioExecutable := a.GetMCPStdioExecutable()
+	stdioConfig := map[string]any{
+		"mcpServers": map[string]any{
+			"integterm-vfs": map[string]any{
+				"command": stdioExecutable,
+				"args":    []string{"mcp"},
+			},
+		},
+	}
+	stdioConfigJSON, err := json.MarshalIndent(stdioConfig, "", "  ")
+	if err != nil {
+		return "", err
+	}
 
 	var builder strings.Builder
 	builder.WriteString("# IntegTERM Virtual Workspace Contract\n\n")
 	builder.WriteString("This contract defines a virtual filesystem spanning bounded RAM paths and saved remote-site mounts. Local MCP clients should start the application with the `mcp` argument and communicate over stdio. The `integterm-vfs` URI identifies resources inside that MCP connection; it is not a command or network endpoint.\n\n")
 	builder.WriteString("## Local MCP Connection\n\n")
 	builder.WriteString("- Transport: `stdio`\n")
-	builder.WriteString("- Command: the IntegTERM executable with the `mcp` argument\n")
-	builder.WriteString("- macOS App bundle executable: `IntegTERM.app/Contents/MacOS/IntegTERM`\n")
+	builder.WriteString("- Executable: `" + stdioExecutable + "`\n")
+	builder.WriteString("- Argument: `mcp`\n")
 	builder.WriteString("- Development command: `go run . mcp`\n\n")
+	builder.WriteString("Use this MCP client configuration (the command path is resolved from the running app):\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString(string(stdioConfigJSON))
+	builder.WriteString("\n```\n\n")
 	builder.WriteString("## Virtual Workspace\n\n")
 	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
 	builder.WriteString("- Local VFS MCP: `available through the stdio command above`\n")

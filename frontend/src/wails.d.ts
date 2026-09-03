@@ -78,6 +78,7 @@ declare global {
           ResetWindowToDefaultScale: () => Promise<void>;
           GetRestAPIDocsMarkdown: () => Promise<string>;
           GetMCPContractMarkdown: (contract: 'local' | 'network') => Promise<string>;
+          GetMCPStdioExecutable: () => Promise<string>;
           ExportRestAPIDocsMarkdown: () => Promise<string>;
           ExportMCPContractMarkdown: (contract: 'local' | 'network') => Promise<string>;
           GetRESTServerStatus: () => Promise<import('./types').RestServerStatus>;

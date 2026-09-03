@@ -64,6 +64,14 @@ type mcpVFSPathInput struct {
 	Path string `json:"path" jsonschema:"relative virtual path or integterm-vfs URI"`
 }
 
+// mcpVFSListInput intentionally makes path optional. An omitted path is the
+// canonical way for an MCP client to list the virtual workspace root; keeping
+// it optional in the generated schema prevents clients from inventing a host
+// filesystem path just to satisfy a required argument.
+type mcpVFSListInput struct {
+	Path string `json:"path,omitempty" jsonschema:"relative virtual path or integterm-vfs URI; defaults to the workspace root"`
+}
+
 type mcpVFSReadInput struct {
 	Path   string `json:"path" jsonschema:"relative virtual path or integterm-vfs URI"`
 	Offset int64  `json:"offset,omitempty" jsonschema:"zero-based byte offset"`
@@ -426,9 +434,9 @@ func addMCPVFSFeatures(server *mcp.Server, layer *mcpVirtualLayer) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "vfs_list",
 		Title:       "List virtual entries",
-		Description: "List immediate children of a RAM directory, the saved remote sites namespace, or a mounted remote directory. Use this tool instead of treating integterm-vfs://workspace/mcp as a network URL. Use a relative path or an integterm-vfs URI; an empty path lists the workspace root.",
+		Description: "List immediate children of a RAM directory, the saved remote sites namespace, or a mounted remote directory. Use this tool instead of treating integterm-vfs://workspace/mcp as a network URL. The path is optional: omit it or use an empty path to list the workspace root; otherwise use a relative path or an integterm-vfs URI.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
-	}, func(_ context.Context, _ *mcp.CallToolRequest, input mcpVFSPathInput) (*mcp.CallToolResult, map[string]any, error) {
+	}, func(_ context.Context, _ *mcp.CallToolRequest, input mcpVFSListInput) (*mcp.CallToolResult, map[string]any, error) {
 		entries, err := layer.listVirtual(input.Path)
 		if err != nil {
 			return nil, nil, err
@@ -523,7 +531,7 @@ func addMCPVFSFeatures(server *mcp.Server, layer *mcpVirtualLayer) {
 		Name:        "IntegTERM virtual workspace",
 		Title:       "IntegTERM virtual workspace",
 		Description: "The root URI of IntegTERM's RAM and saved remote-site virtual filesystem.",
-		MIMEType:    "text/plain",
+		MIMEType:    "application/json",
 	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		entries, err := layer.listVirtual(mcpVFSRootURI)
 		if err != nil {
