@@ -18,6 +18,8 @@ type Site struct {
 	LocalPath               string   `json:"localPath"`
 	RemotePath              string   `json:"remotePath"`
 	LastUsedAt              string   `json:"lastUsedAt"`
+	Tags                    []string `json:"tags,omitempty"`
+	Favorite                bool     `json:"favorite,omitempty"`
 }
 
 type Tab struct {
@@ -49,12 +51,15 @@ type FileEntry struct {
 }
 
 type TransferItem struct {
-	ID        string `json:"id"`
-	Direction string `json:"direction"`
-	Name      string `json:"name"`
-	Progress  int    `json:"progress"`
-	SpeedBps  int64  `json:"speedBps"`
-	Status    string `json:"status"`
+	ID          string `json:"id"`
+	Direction   string `json:"direction"`
+	Name        string `json:"name"`
+	Progress    int    `json:"progress"`
+	SpeedBps    int64  `json:"speedBps"`
+	Status      string `json:"status"`
+	Attempt     int    `json:"attempt,omitempty"`
+	MaxAttempts int    `json:"maxAttempts,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type LogItem struct {
@@ -83,6 +88,8 @@ type Config struct {
 	Language                     string   `json:"language"`
 	Theme                        string   `json:"theme"`
 	SiteFolders                  []string `json:"siteFolders"`
+	TransferRetryCount           int      `json:"transferRetryCount"`
+	TransferConflictStrategy     string   `json:"transferConflictStrategy"`
 }
 
 type SiteLibraryMutationResult struct {
@@ -122,6 +129,19 @@ type UpdateCheckResult struct {
 
 type UpdateActionResult struct {
 	Downloaded bool `json:"downloaded"`
+}
+
+type FileComparison struct {
+	RelativePath    string `json:"relativePath"`
+	LocalExists     bool   `json:"localExists"`
+	RemoteExists    bool   `json:"remoteExists"`
+	LocalSize       int64  `json:"localSize"`
+	RemoteSize      int64  `json:"remoteSize"`
+	LocalModified   string `json:"localModified"`
+	RemoteModified  string `json:"remoteModified"`
+	LocalDirectory  bool   `json:"localDirectory"`
+	RemoteDirectory bool   `json:"remoteDirectory"`
+	Status          string `json:"status"`
 }
 
 type HostTrustPrompt struct {

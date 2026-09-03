@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/model"
 	"github.com/VaderChen/Integrate-Terminal/internal/sshutil"
 )
 
@@ -107,6 +107,24 @@ func (c *SFTPClient) List(remotePath string) ([]model.FileEntry, error) {
 	})
 
 	return items, nil
+}
+
+func (c *SFTPClient) Stat(remotePath string) (model.FileEntry, error) {
+	if c.sftpClient == nil {
+		return model.FileEntry{}, fmt.Errorf("sftp client not connected")
+	}
+	info, err := c.sftpClient.Stat(remotePath)
+	if err != nil {
+		return model.FileEntry{}, err
+	}
+	return model.FileEntry{
+		Name:     path.Base(remotePath),
+		Path:     remotePath,
+		Size:     info.Size(),
+		Modified: info.ModTime().Format("2006-01-02 15:04"),
+		IsDir:    info.IsDir(),
+		Side:     "remote",
+	}, nil
 }
 
 func (c *SFTPClient) CurrentDir() (string, error) {

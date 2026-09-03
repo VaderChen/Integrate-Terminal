@@ -3,7 +3,8 @@ package session
 import (
 	"fmt"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/transport"
 )
 
 func (m *Manager) Connect(tab model.Tab) (string, error) {
@@ -73,6 +74,21 @@ func (m *Manager) ListRemote(tabID string, remotePath string) ([]model.FileEntry
 	return client.List(remotePath)
 }
 
+func (m *Manager) StatRemote(tabID string, remotePath string) (model.FileEntry, error) {
+	client, err := m.remoteClient(tabID)
+	if err != nil {
+		return model.FileEntry{}, err
+	}
+	return client.Stat(remotePath)
+}
+
+func (m *Manager) IsConnected(tabID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.clients[tabID]
+	return ok
+}
+
 func (m *Manager) CreateRemoteDirectory(tabID string, remotePath string) error {
 	m.mu.RLock()
 	client, ok := m.clients[tabID]
@@ -89,18 +105,48 @@ func (m *Manager) CreateRemoteDirectory(tabID string, remotePath string) error {
 }
 
 func (m *Manager) DeleteRemotePath(tabID string, remotePath string) error {
-	m.mu.RLock()
-	client, ok := m.clients[tabID]
-	m.mu.RUnlock()
-	if !ok {
-		return fmt.Errorf("tab not connected")
+	return m.DeleteRemotePathWithRecursive(tabID, remotePath, true)
+}
+
+func (m *Manager) DeleteRemotePathWithRecursive(tabID string, remotePath string, recursive bool) error {
+	client, err := m.remoteClient(tabID)
+	if err != nil {
+		return err
 	}
-	if err := m.deleteRemotePathRecursive(client, remotePath); err != nil {
+	if recursive {
+		err = m.deleteRemotePathRecursive(client, remotePath)
+	} else {
+		err = m.deleteRemotePathSingle(client, remotePath)
+	}
+	if err != nil {
 		m.addLog(fmt.Sprintf("刪除遠端項目失敗: %s", remotePath), "failed")
 		return err
 	}
 	m.addLog(fmt.Sprintf("已刪除遠端項目: %s", remotePath), "done")
 	return nil
+}
+
+func (m *Manager) deleteRemotePathSingle(client transport.Client, remotePath string) error {
+	entry, err := client.Stat(remotePath)
+	if err != nil {
+		return err
+	}
+	if entry.IsDir {
+		entries, err := client.List(remotePath)
+		if err != nil {
+			return err
+		}
+		if len(entries) > 0 {
+			return fmt.Errorf("remote directory is not empty: %s", remotePath)
+		}
+	}
+	if err := client.Remove(remotePath); err == nil {
+		return nil
+	}
+	if remover, ok := client.(interface{ RemoveDir(string) error }); ok {
+		return remover.RemoveDir(remotePath)
+	}
+	return fmt.Errorf("delete remote path failed: %s", remotePath)
 }
 
 func (m *Manager) RenameRemotePath(tabID string, oldPath string, newPath string) error {

@@ -93,6 +93,9 @@ export function TransferPanel({
               <span className="transfer-index">{index + 1}.</span>
               <strong className="transfer-name">{item.name}</strong>
               <span className="transfer-speed">{formatSpeed(item.speedBps, item.status, t.statusPaused)}</span>
+              <span className="transfer-attempt">
+                {item.attempt && item.maxAttempts ? t.transferAttempt(item.attempt, item.maxAttempts) : ''}
+              </span>
               <div className="transfer-progress-group">
                 <div
                   className={`transfer-progress-line ${item.status === 'running' && item.progress === 0 ? 'indeterminate' : ''}`}
@@ -103,6 +106,7 @@ export function TransferPanel({
                 </div>
                 <span className="transfer-progress-value">{item.progress}%</span>
               </div>
+              {item.error ? <span className="transfer-error" title={item.error}>{item.error}</span> : null}
               <button
                 className="ghost compact-icon-button transfer-pause-button"
                 onClick={() => onTogglePauseTransfer(item.id)}

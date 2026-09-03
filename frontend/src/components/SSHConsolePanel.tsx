@@ -119,6 +119,7 @@ export function SSHConsolePanel({
       allowTransparency: true,
       cursorBlink: true,
       cursorStyle: 'block',
+      macOptionClickForcesSelection: true,
       fontFamily: toTerminalFontFamily(fontFamilyId),
       fontSize: FONT_SIZES[fontScale],
       fontWeight: '500',
@@ -145,7 +146,7 @@ export function SSHConsolePanel({
         && (event.metaKey || (!IS_MAC && event.ctrlKey));
       if (isClipboardPaste) {
         event.preventDefault();
-        void pasteClipboard(sessionId);
+        void pasteClipboard(term);
         return false;
       }
 
@@ -165,6 +166,7 @@ export function SSHConsolePanel({
     let disposeOutput = () => {};
     let disposeClosed = () => {};
     let disposeError = () => {};
+    let disposeClipboard = () => {};
     let disposed = false;
 
     const dataDisposable = term.onData((data) => {
@@ -172,6 +174,9 @@ export function SSHConsolePanel({
         writeLocalEcho(term, data);
       }
       void window.go?.app?.App?.WriteSSHInput?.(sessionId, data);
+    });
+    disposeClipboard = EventsOn(`ssh:clipboard:${sessionId}`, (text: string) => {
+      void ClipboardSetText(text);
     });
 
     void (async () => {
@@ -229,7 +234,7 @@ export function SSHConsolePanel({
         return;
       }
       event.preventDefault();
-      void window.go?.app?.App?.WriteSSHInput?.(sessionId, text);
+      term.paste(text);
     };
     terminalElement.addEventListener('copy', handleCopy);
     terminalElement.addEventListener('paste', handlePaste);
@@ -243,6 +248,7 @@ export function SSHConsolePanel({
       disposeOutput();
       disposeClosed();
       disposeError();
+      disposeClipboard();
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
@@ -420,7 +426,9 @@ export function SSHConsolePanel({
               <button className="context-menu-item" onMouseDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                void pasteClipboard(sessionId);
+                if (termRef.current) {
+                  void pasteClipboard(termRef.current);
+                }
                 setContextMenu(null);
               }}>
                 {t.terminalPaste}

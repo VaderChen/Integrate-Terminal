@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 
 const [outputPath, version, commit, tag, buildState, sourceUrl] = process.argv.slice(2);
 
@@ -18,7 +18,5 @@ const metadata = {
   buildState,
   sourceUrl,
 };
-const resolvedOutputPath = resolve(outputPath);
-
-mkdirSync(dirname(resolvedOutputPath), { recursive: true });
-writeFileSync(resolvedOutputPath, `${JSON.stringify(metadata, null, 2)}\n`);
+mkdirSync(dirname(outputPath), { recursive: true });
+writeFileSync(outputPath, `${JSON.stringify(metadata, null, 2)}\n`);

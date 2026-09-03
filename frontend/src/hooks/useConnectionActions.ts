@@ -169,6 +169,8 @@ export function useConnectionActions(params: Params) {
         localPath: currentTab.localPath,
         remotePath: currentTab.remotePath,
         lastUsedAt: '',
+        tags: [],
+        favorite: false,
       });
 
       if (nextTabs) {
@@ -208,6 +210,8 @@ export function useConnectionActions(params: Params) {
       localPath: tab.localPath,
       remotePath: tab.remotePath,
       lastUsedAt: '',
+      tags: [],
+      favorite: false,
     });
 
     if (!nextTabs) return;

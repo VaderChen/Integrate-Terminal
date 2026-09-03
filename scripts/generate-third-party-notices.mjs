@@ -9,13 +9,12 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, join } from "node:path";
 
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const frontendRoot = join(projectRoot, "frontend");
-const noticePath = join(projectRoot, "THIRD-PARTY-NOTICES.md");
-const licensePath = join(projectRoot, "THIRD-PARTY-LICENSES.txt");
+const projectRoot = ".";
+const frontendRoot = "./frontend";
+const noticePath = "./THIRD-PARTY-NOTICES.md";
+const licensePath = "./THIRD-PARTY-LICENSES.txt";
 const targetPlatforms = ["darwin/arm64", "windows/amd64", "linux/amd64"];
 const licenseNamePattern = /^(?:licen[cs]e|copying|notice)(?:$|[._-])/i;
 
@@ -119,7 +118,7 @@ function collectNpmPackages() {
 
   for (const directory of output.split("\n").filter(Boolean)) {
     const packageJsonPath = join(directory, "package.json");
-    if (resolve(directory) === resolve(frontendRoot) || !existsSync(packageJsonPath)) {
+    if (basename(directory) === "frontend" || !existsSync(packageJsonPath)) {
       continue;
     }
 

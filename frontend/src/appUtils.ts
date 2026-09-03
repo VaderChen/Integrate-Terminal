@@ -22,6 +22,8 @@ export const fallbackBootstrap: BootstrapPayload = {
     language: '',
     theme: 'neutral',
     siteFolders: [],
+    transferRetryCount: 2,
+    transferConflictStrategy: 'overwrite',
   },
   defaultLocalPath: '/',
   localFiles: [],
@@ -45,6 +47,8 @@ export function buildBlankSite(defaultLocalPath: string): Site {
     localPath: defaultLocalPath,
     remotePath: '/',
     lastUsedAt: '',
+    tags: [],
+    favorite: false,
   };
 }
 

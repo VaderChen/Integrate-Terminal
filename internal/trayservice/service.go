@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/app"
+	"github.com/VaderChen/Integrate-Terminal/internal/app"
 	"github.com/VaderChen/Integrate-Terminal/internal/crashlog"
 	"github.com/VaderChen/Integrate-Terminal/internal/model"
 	"github.com/VaderChen/Integrate-Terminal/internal/trayicon"
@@ -25,25 +25,34 @@ import (
 type Service struct {
 	executablePath string
 	app            *app.App
+	serviceLock    *app.BackgroundServiceLock
 	startErr       error
 	mu             sync.Mutex
 }
 
-func New() *Service {
+func New() (*Service, error) {
 	crashlog.Init()
 	executablePath, err := os.Executable()
 	if err != nil {
 		executablePath = ""
 	}
 	serviceApp := app.New()
+	serviceLock, err := serviceApp.AcquireBackgroundServiceLock()
+	if err != nil {
+		return nil, err
+	}
 	serviceApp.ServiceStartup()
-	_ = serviceApp.RegisterBackgroundService(os.Getpid())
+	if err := serviceApp.RegisterBackgroundService(os.Getpid()); err != nil {
+		_ = serviceLock.Release()
+		return nil, err
+	}
 
 	return &Service{
 		executablePath: executablePath,
 		app:            serviceApp,
+		serviceLock:    serviceLock,
 		startErr:       nil,
-	}
+	}, nil
 }
 
 func (s *Service) Run() {
@@ -63,41 +72,30 @@ func (s *Service) onReady() {
 	systray.SetTitle(s.backgroundConnectionTitle())
 	systray.SetTooltip(messages.tooltip)
 
-	statusText := messages.statusFailed
-	statusTooltip := messages.serviceStartupFailed
-	if status := s.restStatus(); status.Running {
-		statusText = labelValue(messages.serviceStatus, messages.runningValue)
-		statusTooltip = status.BaseURL
-	} else if s.startErr == nil {
-		statusText = labelValue(messages.serviceStatus, messages.stoppedValue)
-		statusTooltip = messages.serviceStoppedHint
-	}
-
 	statusHeader := systray.AddMenuItem(messages.statusSection, messages.statusSectionHint)
 	statusHeader.Disable()
 
-	statusItem := systray.AddMenuItem(statusText, statusTooltip)
-	statusItem.Disable()
+	status := s.restStatus()
+	localStatusItem := systray.AddMenuItem(labelValue(messages.localService, messages.runningValue), "本機 VFS 服務狀態")
+	localStatusItem.Disable()
+	remoteStatusItem := systray.AddMenuItem(labelValue(messages.remoteService, serviceStatusValue(messages, status)), "遠端 HTTP MCP 服務狀態")
+	remoteStatusItem.Disable()
 
 	connectionLabel := labelValue(messages.backgroundConnections, itoa(s.currentBackgroundCount()))
 	connectionItem := systray.AddMenuItem(connectionLabel, messages.backgroundConnectionsHint)
 	connectionItem.Disable()
 
-	status := s.restStatus()
-	addressLabel := labelValue(messages.backendService, messages.backendUnavailable)
-	if status.BaseURL != "" {
-		addressLabel = labelValue(messages.backendService, status.BaseURL)
-	} else if status.Port > 0 {
-		addressLabel = labelValue(messages.backendService, "127.0.0.1:"+itoa(status.Port))
-	}
-	addressItem := systray.AddMenuItem(addressLabel, messages.backendServiceHint)
-	addressItem.Disable()
-
 	versionItem := systray.AddMenuItem(labelValue(messages.versionNumber, version.Current()), messages.versionHint)
 	versionItem.Disable()
 
-	systray.AddSeparator()
+	localEndpointURI := "integterm-vfs://workspace/mcp"
+	localEndpointItem := systray.AddMenuItem("本機服務："+localEndpointURI, "點擊複製本機 VFS MCP URI")
+	remoteEndpointItem := systray.AddMenuItem("遠端服務："+status.MCPURL, "點擊複製遠端 HTTP MCP URL")
+	if !status.Running || status.MCPURL == "" {
+		remoteEndpointItem.Hide()
+	}
 
+	systray.AddSeparator()
 	actionHeader := systray.AddMenuItem(messages.actionSection, messages.actionSectionHint)
 	actionHeader.Disable()
 
@@ -105,7 +103,7 @@ func (s *Service) onReady() {
 	clearBackgroundItem := systray.AddMenuItem(messages.clearBackground, messages.clearBackgroundHint)
 	quitItem := systray.AddMenuItem(messages.quitBackground, messages.quitBackgroundHint)
 
-	go s.refreshLoop(statusItem, connectionItem, versionItem, addressItem)
+	go s.refreshLoop(localStatusItem, remoteStatusItem, connectionItem, versionItem, remoteEndpointItem)
 
 	go func() {
 		defer crashlog.Recover("trayservice.actionLoop")
@@ -121,11 +119,83 @@ func (s *Service) onReady() {
 				s.clearBackgroundConnections()
 			case <-quitItem.ClickedCh:
 				log.Printf("tray action clicked: quit background service")
+				// Tray 的結束動作直接停止背景服務，不經過 UI 的 Cmd+Q 確認流程。
+				s.app.ServiceShutdown()
+				s.stopRunningUI()
 				systray.Quit()
 				return
+			case <-localEndpointItem.ClickedCh:
+				_ = copyTrayText(localEndpointURI)
+			case <-remoteEndpointItem.ClickedCh:
+				if status := s.restStatus(); status.Running {
+					_ = copyTrayText(status.MCPURL)
+				}
 			}
 		}
 	}()
+}
+
+func (s *Service) stopRunningUI() {
+	pids := make(map[int]struct{})
+	if s.app != nil {
+		for _, pid := range s.app.ForegroundUIProcessIDs() {
+			pids[pid] = struct{}{}
+		}
+	}
+
+	// Keep a command-line fallback for UI instances started by an older build
+	// before the foreground PID registry was introduced.
+	patterns := make([]string, 0, 2)
+	if s.executablePath != "" {
+		patterns = append(patterns, s.executablePath)
+	}
+	if stdruntime.GOOS == "darwin" {
+		patterns = append(patterns, "/Contents/MacOS/IntegTERM")
+	}
+	for _, pattern := range patterns {
+		output, err := exec.Command("pgrep", "-f", pattern).Output()
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(output), "\n") {
+			pid, err := strconv.Atoi(strings.TrimSpace(line))
+			if err == nil && pid > 0 {
+				pids[pid] = struct{}{}
+			}
+		}
+	}
+
+	for pid := range pids {
+		if pid <= 0 || pid == os.Getpid() {
+			continue
+		}
+		s.terminateUIProcess(pid)
+	}
+}
+
+func (s *Service) terminateUIProcess(pid int) {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+
+	// Ask the UI to exit first so Wails can persist its state. If the process
+	// does not leave promptly, force it down so the Dock icon cannot remain.
+	if stdruntime.GOOS == "windows" {
+		_ = process.Kill()
+		return
+	}
+	if err := exec.Command("kill", "-TERM", strconv.Itoa(pid)).Run(); err != nil {
+		_ = process.Kill()
+		return
+	}
+	for range 20 {
+		if exec.Command("kill", "-0", strconv.Itoa(pid)).Run() != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	_ = process.Kill()
 }
 
 func (s *Service) openUI() error {
@@ -214,6 +284,9 @@ func (s *Service) onExit() {
 		_ = s.app.UnregisterBackgroundService()
 		s.app.ServiceShutdown()
 	}
+	if s.serviceLock != nil {
+		_ = s.serviceLock.Release()
+	}
 	log.Println("tray service exited")
 }
 
@@ -245,17 +318,20 @@ func (s *Service) connectionCounts() (background int, foreground int) {
 	return s.app.ConnectionCounts()
 }
 
-func (s *Service) refreshLoop(statusItem *systray.MenuItem, connectionItem *systray.MenuItem, versionItem *systray.MenuItem, addressItem *systray.MenuItem) {
+func (s *Service) refreshLoop(localStatusItem *systray.MenuItem, remoteStatusItem *systray.MenuItem, connectionItem *systray.MenuItem, versionItem *systray.MenuItem, remoteEndpointItem *systray.MenuItem) {
 	defer crashlog.Recover("trayservice.refreshLoop")
 	ticker := time.NewTicker(400 * time.Millisecond)
 	defer ticker.Stop()
 	lastIdleSweep := time.Time{}
 	lastTrayTitle := ""
 	lastTrayTooltip := ""
-	lastStatusTitle := ""
+	lastLocalStatusTitle := ""
+	lastRemoteStatusTitle := ""
 	lastConnectionTitle := ""
 	lastVersionTitle := ""
 	lastAddressTitle := ""
+	status := s.restStatus()
+	remoteEndpointVisible := status.Running && status.MCPURL != ""
 
 	for range ticker.C {
 		messages := s.messages()
@@ -282,15 +358,15 @@ func (s *Service) refreshLoop(statusItem *systray.MenuItem, connectionItem *syst
 			lastTrayTooltip = messages.tooltip
 		}
 
-		statusText := messages.statusFailed
-		if status.Running {
-			statusText = labelValue(messages.serviceStatus, messages.runningValue)
-		} else if s.startErr == nil {
-			statusText = labelValue(messages.serviceStatus, messages.stoppedValue)
+		localStatusText := labelValue(messages.localService, messages.runningValue)
+		if localStatusText != lastLocalStatusTitle {
+			localStatusItem.SetTitle(localStatusText)
+			lastLocalStatusTitle = localStatusText
 		}
-		if statusText != lastStatusTitle {
-			statusItem.SetTitle(statusText)
-			lastStatusTitle = statusText
+		remoteStatusText := labelValue(messages.remoteService, serviceStatusValue(messages, status))
+		if remoteStatusText != lastRemoteStatusTitle {
+			remoteStatusItem.SetTitle(remoteStatusText)
+			lastRemoteStatusTitle = remoteStatusText
 		}
 
 		nextConnectionTitle := labelValue(messages.backgroundConnections, itoa(background))
@@ -305,17 +381,34 @@ func (s *Service) refreshLoop(statusItem *systray.MenuItem, connectionItem *syst
 			lastVersionTitle = nextVersionTitle
 		}
 
-		addressLabel := labelValue(messages.backendService, messages.backendUnavailable)
-		if status.BaseURL != "" {
-			addressLabel = labelValue(messages.backendService, status.BaseURL)
-		} else if status.Port > 0 {
-			addressLabel = labelValue(messages.backendService, "127.0.0.1:"+itoa(status.Port))
-		}
+		addressLabel := "遠端服務：" + status.MCPURL
 		if addressLabel != lastAddressTitle {
-			addressItem.SetTitle(addressLabel)
+			remoteEndpointItem.SetTitle(addressLabel)
 			lastAddressTitle = addressLabel
 		}
+		nextRemoteEndpointVisible := status.Running && status.MCPURL != ""
+		if nextRemoteEndpointVisible != remoteEndpointVisible {
+			if nextRemoteEndpointVisible {
+				remoteEndpointItem.Show()
+			} else {
+				remoteEndpointItem.Hide()
+			}
+			remoteEndpointVisible = nextRemoteEndpointVisible
+		}
 	}
+}
+
+func copyTrayText(value string) error {
+	command := exec.Command("pbcopy")
+	command.Stdin = strings.NewReader(value)
+	return command.Run()
+}
+
+func serviceStatusValue(messages trayMessages, status model.RESTServerStatus) string {
+	if status.Running {
+		return messages.runningValue
+	}
+	return messages.stoppedValue
 }
 
 func (s *Service) closeIdleBackgroundConnections(idleLimit time.Duration) {

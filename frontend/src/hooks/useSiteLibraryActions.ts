@@ -93,6 +93,24 @@ export function useSiteLibraryActions({
     }
   };
 
+  const handleToggleFavorite = async (siteId: string) => {
+    const site = sites.find((item) => item.id === siteId);
+    if (!site) return;
+    try {
+      const nextSites = await window.go?.app?.App?.SaveSite?.({
+        ...site,
+        tags: site.tags ?? [],
+        favorite: !(site.favorite ?? false),
+      });
+      if (nextSites) {
+        setSites(nextSites);
+        setConfig((current) => ({ ...current, siteFolders: mergeSiteFolders(current.siteFolders, nextSites) }));
+      }
+    } catch (error) {
+      setErrorMessage(extractErrorMessage(error, t.connectionFailed));
+    }
+  };
+
   const handleSortSitesByName = async () => {
     const nextSites = await window.go?.app?.App?.SortSitesByName?.();
     if (nextSites) setSites(nextSites);
@@ -228,6 +246,7 @@ export function useSiteLibraryActions({
     handleSaveSite,
     handleDeleteSite,
     handleCopySite,
+    handleToggleFavorite,
     handleSortSitesByName,
     handleOpenCreateSiteFolder,
     handlePromptRenameSiteFolder,

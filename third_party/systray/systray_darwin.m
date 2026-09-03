@@ -81,6 +81,7 @@ withParentMenuId: (int)theParentMenuId
   NSMutableDictionary<NSNumber*, MenuItem*> *panelItems;
   NSMutableArray<NSNumber*> *panelOrder;
   NSMutableSet<NSNumber*> *separatorIds;
+  NSMutableSet<NSNumber*> *hiddenIds;
 }
 
 @synthesize window = _window;
@@ -92,6 +93,7 @@ withParentMenuId: (int)theParentMenuId
   self->panelItems = [[NSMutableDictionary alloc] init];
   self->panelOrder = [[NSMutableArray alloc] init];
   self->separatorIds = [[NSMutableSet alloc] init];
+  self->hiddenIds = [[NSMutableSet alloc] init];
   self->popover = [[NSPopover alloc] init];
   self->popover.behavior = NSPopoverBehaviorApplicationDefined;
   self->popoverController = [[NSViewController alloc] init];
@@ -312,7 +314,10 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (void) hide_menu_item:(NSNumber*) menuId
 {
-  (void)menuId;
+  if (![self->hiddenIds containsObject:menuId]) {
+    [self->hiddenIds addObject:menuId];
+    [self rebuildPopoverContent];
+  }
 }
 
 - (void) setMenuItemIcon:(NSArray*)imageAndMenuId {
@@ -325,7 +330,10 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (void) show_menu_item:(NSNumber*) menuId
 {
-  (void)menuId;
+  if ([self->hiddenIds containsObject:menuId]) {
+    [self->hiddenIds removeObject:menuId];
+    [self rebuildPopoverContent];
+  }
 }
 
 - (IBAction)togglePopover:(id)sender
@@ -355,6 +363,9 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
   BOOL inActionSection = NO;
 
   for (NSNumber *menuId in self->panelOrder) {
+    if ([self->hiddenIds containsObject:menuId]) {
+      continue;
+    }
     if ([self->separatorIds containsObject:menuId]) {
       inActionSection = YES;
       continue;
@@ -368,6 +379,14 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
     if (!inActionSection && statusTitle.length == 0) {
       statusTitle = item->title;
       continue;
+    }
+
+    // The separator is the primary section boundary.  Keep the heading as a
+    // fallback as well: on macOS menu callbacks can arrive out of order while
+    // the status item is being rebuilt, and losing the separator would merge
+    // the action buttons into the status card.
+    if (!inActionSection && [self isActionSectionTitle:item->title]) {
+      inActionSection = YES;
     }
 
     if (inActionSection && actionTitle.length == 0) {
@@ -402,8 +421,7 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
     statusCard = [self sectionCard:resolvedStatusTitle items:statusItems actionMode:NO];
   }
   if (backendItems.count > 0) {
-    MenuItem *backendItem = backendItems[0];
-    backendCard = [self detailCard:backendItem];
+    backendCard = [self detailCard:backendItems];
   }
   if (statusCard != nil) {
     [row addArrangedSubview:statusCard];
@@ -427,47 +445,22 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (NSView *)sectionCard:(NSString *)title items:(NSArray<MenuItem *> *)items actionMode:(BOOL)actionMode
 {
+  (void)title;
   CGFloat cardWidth = actionMode ? 108.0 : 200.0;
-  NSView *card = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, cardWidth, actionMode ? 122 : 122)];
+  CGFloat cardHeight = 148.0;
+  NSView *card = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, cardWidth, cardHeight)];
   card.translatesAutoresizingMaskIntoConstraints = NO;
   card.wantsLayer = YES;
   card.layer.backgroundColor = [[NSColor colorWithRed:0.16 green:0.27 blue:0.58 alpha:0.92] CGColor];
   card.layer.cornerRadius = 14.0;
 
-  NSStackView *headerRow = [[NSStackView alloc] init];
-  headerRow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  headerRow.alignment = NSLayoutAttributeCenterY;
-  headerRow.spacing = 6.0;
-  headerRow.translatesAutoresizingMaskIntoConstraints = NO;
-
-  NSImageView *iconView = [[NSImageView alloc] init];
-  iconView.translatesAutoresizingMaskIntoConstraints = NO;
-  NSImage *symbol = nil;
-  if (@available(macOS 11.0, *)) {
-    NSString *symbolName = actionMode ? @"bolt.circle" : @"list.bullet.rectangle";
-    symbol = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:title];
-    if (symbol != nil) {
-      NSImageSymbolConfiguration *config = [NSImageSymbolConfiguration configurationWithPointSize:12.0 weight:NSFontWeightSemibold];
-      symbol = [symbol imageWithSymbolConfiguration:config];
-      symbol.template = YES;
-    }
-  }
-  iconView.image = symbol;
-  iconView.contentTintColor = [NSColor colorWithWhite:1.0 alpha:0.82];
-
-  NSTextField *label = [NSTextField labelWithString:title];
-  label.font = [NSFont systemFontOfSize:11.0 weight:NSFontWeightSemibold];
-  label.textColor = [NSColor colorWithWhite:1.0 alpha:0.74];
-  label.translatesAutoresizingMaskIntoConstraints = NO;
-
-  [headerRow addArrangedSubview:iconView];
-  [headerRow addArrangedSubview:label];
-  [card addSubview:headerRow];
-
   NSStackView *stack = [[NSStackView alloc] init];
   stack.orientation = NSUserInterfaceLayoutOrientationVertical;
   stack.alignment = NSLayoutAttributeLeading;
-  stack.spacing = actionMode ? 8.0 : 6.0;
+  // Both upper cards use a fixed height. Distribute the four status rows and
+  // three action buttons over that same height so neither card leaves a
+  // variable blank area when the endpoint card is rebuilt.
+  stack.spacing = actionMode ? 8.0 : 12.0;
   stack.translatesAutoresizingMaskIntoConstraints = NO;
   [card addSubview:stack];
 
@@ -479,16 +472,10 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
     }
   }
 
-  CGFloat estimatedHeight = 18.0 + 10.0 + (items.count * (actionMode ? 36.0 : 22.0)) + ((items.count > 0 ? items.count - 1 : 0) * (actionMode ? 8.0 : 4.0)) + 12.0;
   [NSLayoutConstraint activateConstraints:@[
     [card.widthAnchor constraintEqualToConstant:cardWidth],
-    [card.heightAnchor constraintGreaterThanOrEqualToConstant:estimatedHeight],
-    [headerRow.topAnchor constraintEqualToAnchor:card.topAnchor constant:10.0],
-    [headerRow.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
-    [headerRow.trailingAnchor constraintLessThanOrEqualToAnchor:card.trailingAnchor constant:-12.0],
-    [iconView.widthAnchor constraintEqualToConstant:14.0],
-    [iconView.heightAnchor constraintEqualToConstant:14.0],
-    [stack.topAnchor constraintEqualToAnchor:headerRow.bottomAnchor constant:8.0],
+    [card.heightAnchor constraintEqualToConstant:cardHeight],
+    [stack.topAnchor constraintEqualToAnchor:card.topAnchor constant:12.0],
     [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
     [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
     [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0]
@@ -522,6 +509,8 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
   label.font = [NSFont systemFontOfSize:10.5 weight:NSFontWeightSemibold];
   label.textColor = [self colorForStatusLine:line];
   label.lineBreakMode = NSLineBreakByTruncatingTail;
+  label.usesSingleLineMode = YES;
+  label.maximumNumberOfLines = 1;
   label.translatesAutoresizingMaskIntoConstraints = NO;
 
   [row addSubview:label];
@@ -540,7 +529,7 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 - (NSColor *)colorForStatusLine:(NSString *)line
 {
   NSArray<NSString *> *alertKeywords = @[
-    @"已停止", @"停止中", @"启动失败", @"啟動失敗", @"无法取得", @"無法取得", @"取得不可",
+    @"已停止", @"關閉", @"关闭", @"停止中", @"启动失败", @"啟動失敗", @"无法取得", @"無法取得", @"取得不可",
     @"Stopped", @"Failed", @"Unavailable", @"停止", @"起動失敗", @"取得不可",
     @"중지됨", @"시작 실패", @"사용 불가"
   ];
@@ -554,37 +543,85 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (BOOL)isBackendServiceItem:(NSString *)title
 {
-  NSString *key = [[self splitTitleAndValue:title][0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-  return [@[@"後端服務", @"后端服务", @"Backend Service", @"バックエンドサービス", @"백엔드 서비스"] containsObject:key];
+  NSArray<NSString *> *parts = [self splitTitleAndValue:title];
+  NSString *key = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+  NSString *value = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+  if ([key isEqualToString:@"本機服務"] || [key isEqualToString:@"本机服务"] ||
+      [key isEqualToString:@"遠端服務"] || [key isEqualToString:@"远端服务"]) {
+    // Status rows use the same localized labels as endpoint rows. Only a URI
+    // identifies an endpoint and should be moved to the lower detail card.
+    return [value hasPrefix:@"integterm-vfs://"] ||
+           [value hasPrefix:@"http://"] ||
+           [value hasPrefix:@"https://"];
+  }
+  return [@[@"後端服務", @"后端服务", @"Backend Service", @"バックエンドサービス", @"백엔드 서비스"] containsObject:key] || [key hasPrefix:@"後端服務"];
 }
 
-- (NSView *)detailCard:(MenuItem *)item
+- (BOOL)isActionSectionTitle:(NSString *)title
 {
-  NSArray<NSString *> *parts = [self splitTitleAndValue:item->title];
-  NSString *title = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-  NSString *value = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+  NSString *trimmed = [title stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+  return [@[@"功能", @"Actions", @"機能", @"기능"] containsObject:trimmed];
+}
 
-  NSView *card = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 316, 42)];
+- (NSView *)detailCard:(NSArray<MenuItem *> *)items
+{
+  CGFloat entryHeight = 30.0;
+  CGFloat entrySpacing = 4.0;
+  CGFloat cardHeight = items.count * entryHeight + (items.count - 1) * entrySpacing;
+  NSView *card = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 316, cardHeight)];
   card.translatesAutoresizingMaskIntoConstraints = NO;
   card.wantsLayer = YES;
   card.layer.backgroundColor = [[NSColor colorWithRed:0.16 green:0.27 blue:0.58 alpha:0.92] CGColor];
   card.layer.cornerRadius = 14.0;
 
-  NSString *line = value.length > 0 ? [NSString stringWithFormat:@"%@：%@", title, value] : title;
-  NSTextField *label = [NSTextField labelWithString:line];
-  label.font = [NSFont monospacedSystemFontOfSize:10.0 weight:NSFontWeightSemibold];
-  label.textColor = [self colorForBackendLineValue:value];
-  label.lineBreakMode = NSLineBreakByTruncatingMiddle;
-  label.translatesAutoresizingMaskIntoConstraints = NO;
-
-  [card addSubview:label];
-
+  NSStackView *stack = [[NSStackView alloc] init];
+  stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+  stack.spacing = entrySpacing;
+  stack.translatesAutoresizingMaskIntoConstraints = NO;
+  [card addSubview:stack];
+  for (MenuItem *entry in items) {
+    NSArray<NSString *> *entryParts = [self splitTitleAndValue:entry->title];
+    NSString *entryTitle = [entryParts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    NSString *entryValue = [entryParts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    NSString *entryLine = entryValue.length > 0 ? [NSString stringWithFormat:@"%@：%@", entryTitle, entryValue] : entryTitle;
+    NSView *entryRow = [[NSView alloc] init];
+    entryRow.translatesAutoresizingMaskIntoConstraints = NO;
+    NSTextField *entryLabel = [NSTextField labelWithString:entryLine];
+    entryLabel.font = [NSFont monospacedSystemFontOfSize:10.0 weight:NSFontWeightSemibold];
+    entryLabel.textColor = [self colorForBackendLineValue:entryValue];
+    entryLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
+    entryLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    PanelActionButton *copyButton = [PanelActionButton buttonWithTitle:@"" target:self action:@selector(panelButtonPressed:)];
+    copyButton.translatesAutoresizingMaskIntoConstraints = NO;
+    copyButton.menuId = entry->menuId;
+    copyButton.bordered = NO;
+    copyButton.toolTip = entry->tooltip;
+    copyButton.contentTintColor = [NSColor colorWithWhite:1.0 alpha:0.78];
+    if (@available(macOS 11.0, *)) {
+      copyButton.image = [NSImage imageWithSystemSymbolName:@"doc.on.doc" accessibilityDescription:entry->tooltip];
+    }
+    [entryRow addSubview:entryLabel];
+    [entryRow addSubview:copyButton];
+    [stack addArrangedSubview:entryRow];
+    [NSLayoutConstraint activateConstraints:@[
+      [entryRow.widthAnchor constraintEqualToConstant:292.0],
+      [entryRow.heightAnchor constraintEqualToConstant:entryHeight],
+      [entryLabel.leadingAnchor constraintEqualToAnchor:entryRow.leadingAnchor],
+      [entryLabel.centerYAnchor constraintEqualToAnchor:entryRow.centerYAnchor],
+      [entryLabel.trailingAnchor constraintLessThanOrEqualToAnchor:copyButton.leadingAnchor constant:-8.0],
+      [copyButton.trailingAnchor constraintEqualToAnchor:entryRow.trailingAnchor],
+      [copyButton.centerYAnchor constraintEqualToAnchor:entryRow.centerYAnchor],
+      [copyButton.widthAnchor constraintEqualToConstant:26.0],
+      [copyButton.heightAnchor constraintEqualToConstant:26.0]
+    ]];
+  }
   [NSLayoutConstraint activateConstraints:@[
     [card.widthAnchor constraintEqualToConstant:316.0],
-    [card.heightAnchor constraintEqualToConstant:42.0],
-    [label.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-    [label.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
-    [label.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0]
+    [card.heightAnchor constraintEqualToConstant:cardHeight],
+    [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+    [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+    [stack.topAnchor constraintEqualToAnchor:card.topAnchor],
+    [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor]
   ]];
 
   return card;

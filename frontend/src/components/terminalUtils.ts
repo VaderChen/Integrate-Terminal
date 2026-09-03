@@ -217,10 +217,10 @@ export async function copySelection(term: Terminal) {
   await ClipboardSetText(selection);
 }
 
-export async function pasteClipboard(sessionId: string) {
+export async function pasteClipboard(term: Terminal) {
   const text = await ClipboardGetText();
   if (!text) return;
-  await window.go?.app?.App?.WriteSSHInput?.(sessionId, text);
+  term.paste(text);
 }
 
 export function toTerminalFontFamily(fontFamily: string) {

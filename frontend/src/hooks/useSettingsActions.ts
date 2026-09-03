@@ -81,6 +81,16 @@ export function useSettingsActions({
     await saveConfig((current) => ({ ...current, restServerAllowlist }));
   };
 
+  const handleTransferRetryCountChange = async (transferRetryCount: number) => {
+    await saveConfig((current) => ({ ...current, transferRetryCount }));
+  };
+
+  const handleTransferConflictStrategyChange = async (
+    transferConflictStrategy: Config['transferConflictStrategy'],
+  ) => {
+    await saveConfig((current) => ({ ...current, transferConflictStrategy }));
+  };
+
   const handleRestoreTabsChange = async (restoreTabsOnStart: boolean) => {
     await saveConfig((current) => ({ ...current, restoreTabsOnStart }));
   };
@@ -105,6 +115,8 @@ export function useSettingsActions({
     handleRESTServerEnabledChange,
     handleRESTServerPortChange,
     handleRESTServerAllowlistChange,
+    handleTransferRetryCountChange,
+    handleTransferConflictStrategyChange,
     handleRestoreTabsChange,
     handleCloseTerminalTabOnDisconnectChange,
   };

@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/model"
 )
 
 type Store struct {
@@ -73,6 +73,8 @@ func (s *Store) LoadConfig() (model.Config, error) {
 			Language:                     "",
 			Theme:                        "neutral",
 			SiteFolders:                  []string{},
+			TransferRetryCount:           2,
+			TransferConflictStrategy:     "overwrite",
 		}, nil
 	}
 	return record, err

@@ -13,31 +13,77 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func (a *App) newMCPHTTPHandler() http.Handler {
+type mcpContract string
+
+const (
+	mcpContractLocal   mcpContract = "local"
+	mcpContractNetwork mcpContract = "network"
+)
+
+type mcpVirtualLayer struct {
+	app *App
+	vfs *mcpVFS
+}
+
+func newMCPVirtualLayer(a *App) *mcpVirtualLayer {
+	vfs := a.mcpVFS
+	if vfs == nil {
+		vfs = newMCPVFS()
+		a.mcpVFS = vfs
+	} else {
+		if vfs.nodes == nil {
+			vfs.nodes = newMCPVFS().nodes
+		}
+		if vfs.remoteMounts == nil {
+			vfs.remoteMounts = make(map[string]mcpVFSRemoteMount)
+		}
+	}
+	return &mcpVirtualLayer{app: a, vfs: vfs}
+}
+
+func (layer *mcpVirtualLayer) newServer(contract mcpContract) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "integterm",
 		Version: "1.0.0",
 	}, nil)
 
-	endpoints := buildRESTEndpointDocs(fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(a.config.RESTServerPort)))
+	switch contract {
+	case mcpContractLocal:
+		addMCPVFSFeatures(server, layer)
+	case mcpContractNetwork:
+		layer.addNetworkFeatures(server)
+		addMCPVFSFeatures(server, layer)
+	}
+	return server
+}
+
+func (layer *mcpVirtualLayer) addNetworkFeatures(server *mcp.Server) {
+	endpoints := buildRESTEndpointDocs(fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(layer.app.config.RESTServerPort)))
 	operations := buildRESTOperationDocs()
 	for _, operation := range operations {
 		endpoint, ok := findMCPEndpoint(endpoints, operation)
 		if !ok {
 			continue
 		}
+		endpointDoc := endpoint
 		tool := &mcp.Tool{
 			Name:        operation.LogicalOperation,
-			Title:       endpoint.Operation,
-			Description: endpoint.Description + " " + operation.Notes,
-			InputSchema: mcpInputSchema(endpoint),
+			Title:       endpointDoc.Operation,
+			Description: endpointDoc.Description + " " + operation.Notes,
+			InputSchema: mcpInputSchema(endpointDoc),
 		}
 		mcp.AddTool(server, tool, func(ctx context.Context, _ *mcp.CallToolRequest, arguments map[string]any) (*mcp.CallToolResult, any, error) {
-			output, err := a.callMCPRESTTool(ctx, endpoint, arguments)
+			output, err := layer.app.callMCPRESTTool(ctx, endpointDoc, arguments)
 			return nil, output, err
 		})
 	}
+}
 
+func (a *App) newMCPHTTPHandler() http.Handler {
+	return newMCPStreamableHTTPHandler(newMCPVirtualLayer(a).newServer(mcpContractNetwork))
+}
+
+func newMCPStreamableHTTPHandler(server *mcp.Server) http.Handler {
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
 	}, &mcp.StreamableHTTPOptions{

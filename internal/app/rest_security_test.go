@@ -35,6 +35,19 @@ func TestRESTSecurityUsesAllowlist(t *testing.T) {
 	}
 }
 
+func TestRESTMuxDoesNotExposeLocalMCP(t *testing.T) {
+	instance := &App{config: model.Config{RESTServerAllowlist: []string{"127.0.0.1"}}}
+	request := httptest.NewRequest(http.MethodPost, "/mcp/local", nil)
+	request.RemoteAddr = "127.0.0.1:54321"
+	response := httptest.NewRecorder()
+
+	instance.restMux().ServeHTTP(response, request)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected old local MCP endpoint to be unavailable, got %d", response.Code)
+	}
+}
+
 func TestServiceShutdownDoesNotOverwriteSitesSavedByUI(t *testing.T) {
 	sharedStore := store.New(t.TempDir())
 	staleSites := []model.Site{{ID: "old", Name: "Old", Host: "old.example.com"}}

@@ -75,8 +75,11 @@ func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalS
 			chunk, rest := splitUTF8SafeChunk(pending, buffer[:n])
 			pending = rest
 			if len(chunk) > 0 {
-				visibleChunk, nextPendingControl, _ := stripTerminalSignals(pendingControl, chunk)
+				visibleChunk, nextPendingControl, _, clipboardTexts := stripTerminalSignals(pendingControl, chunk)
 				pendingControl = nextPendingControl
+				for _, clipboardText := range clipboardTexts {
+					emitSessionEvent(ctx, fmt.Sprintf("ssh:clipboard:%s", session.id), clipboardText)
+				}
 				session.lock.Lock()
 				if !session.started {
 					session.startupBytes = append(session.startupBytes, visibleChunk...)

@@ -8,6 +8,7 @@ import type { Config, RestServerStatus } from '../types';
 import { type Locale, useI18n } from '../i18n';
 
 type SettingsSection = 'general' | 'display' | 'system' | 'skill' | 'about';
+type MCPContract = 'local' | 'network';
 
 const BUILD_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.00.00';
 
@@ -27,6 +28,8 @@ type Props = {
   onRESTServerEnabledChange: (restServerEnabled: boolean, restServerPort?: number, restServerAllowlist?: string[]) => void;
   onRESTServerPortChange: (restServerPort: number) => void;
   onRESTServerAllowlistChange: (restServerAllowlist: string[]) => void;
+  onTransferRetryCountChange: (transferRetryCount: number) => void;
+  onTransferConflictStrategyChange: (transferConflictStrategy: Config['transferConflictStrategy']) => void;
   onFontScaleChange: (scale: Config['fontScale']) => void;
   onOpenSiteDataDirectory: () => Promise<void>;
   onBackupSiteLibrary: () => Promise<string>;
@@ -53,6 +56,8 @@ export function SettingsModal({
   onRESTServerEnabledChange,
   onRESTServerPortChange,
   onRESTServerAllowlistChange,
+  onTransferRetryCountChange,
+  onTransferConflictStrategyChange,
   onFontScaleChange,
   onOpenSiteDataDirectory,
   onBackupSiteLibrary,
@@ -64,6 +69,8 @@ export function SettingsModal({
 }: Props) {
   const t = useI18n(locale);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+  // 預設顯示本機虛擬檔案系統（VFS）MCP；網路 HTTP MCP 需由使用者主動啟用。
+  const [activeMCPContract, setActiveMCPContract] = useState<MCPContract>('local');
   const [skillMarkdown, setSkillMarkdown] = useState('');
   const [skillLoading, setSkillLoading] = useState(false);
   const [skillError, setSkillError] = useState('');
@@ -121,7 +128,7 @@ export function SettingsModal({
         setSkillLoading(true);
         setSkillError('');
         const [markdown, status] = await Promise.all([
-          window.go?.app?.App?.GetRestAPIDocsMarkdown?.(),
+          window.go?.app?.App?.GetMCPContractMarkdown?.(activeMCPContract),
           window.go?.app?.App?.GetRESTServerStatus?.(),
         ]);
         if (cancelled) {
@@ -144,7 +151,7 @@ export function SettingsModal({
     return () => {
       cancelled = true;
     };
-  }, [activeSection, open, config.restServerEnabled, t.connectionFailed]);
+  }, [activeMCPContract, activeSection, open, config.restServerEnabled, t.connectionFailed]);
 
   useEffect(() => {
     if (!skillCopyMessage) {
@@ -170,7 +177,11 @@ export function SettingsModal({
     }
 
     try {
-      await window.go?.app?.App?.ExportRestAPIDocsMarkdown?.();
+      if (window.go?.app?.App?.ExportMCPContractMarkdown) {
+        await window.go.app.App.ExportMCPContractMarkdown(activeMCPContract);
+      } else if (activeMCPContract === 'network') {
+        await window.go?.app?.App?.ExportRestAPIDocsMarkdown?.();
+      }
     } catch (error) {
       setSkillError(error instanceof Error ? error.message : t.connectionFailed);
     }
@@ -376,11 +387,10 @@ export function SettingsModal({
                     </div>
                     <span>{t.settingsSiteStorageHint}</span>
                   </div>
-                  <div className="settings-site-storage-path-row">
-                    <div className="settings-site-storage-path-copy">
-                      <span>{t.settingsSiteStoragePathLabel}</span>
-                      <code title={siteDataDirectory}>{siteDataDirectory || t.settingsSiteStorageUnavailable}</code>
-                    </div>
+                    <div className="settings-site-storage-path-row">
+                      <div className="settings-site-storage-path-copy">
+                        <code title={siteDataDirectory}>{siteDataDirectory || t.settingsSiteStorageUnavailable}</code>
+                      </div>
                     <button
                       type="button"
                       className="settings-site-storage-icon-button"
@@ -524,16 +534,73 @@ export function SettingsModal({
                     <span className="ios-switch-thumb" />
                   </button>
                 </div>
+                <div className="settings-section-card settings-transfer-policy-card">
+                  <div className="settings-section-copy">
+                    <strong>{t.settingsTransferRetryCount}</strong>
+                    <span>{t.settingsTransferRetryCountHint}</span>
+                  </div>
+                  <div className="settings-transfer-policy-control">
+                    <select
+                      value={config.transferRetryCount}
+                      aria-label={t.settingsTransferRetryCount}
+                      onChange={(event) => void onTransferRetryCountChange(Number(event.target.value))}
+                    >
+                      {Array.from({ length: 11 }, (_, value) => (
+                        <option key={value} value={value}>{value}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="settings-section-card settings-transfer-policy-card">
+                  <div className="settings-section-copy">
+                    <strong>{t.settingsTransferConflictStrategy}</strong>
+                    <span>{t.settingsTransferConflictStrategyHint}</span>
+                  </div>
+                  <div className="settings-transfer-policy-control">
+                    <select
+                      value={config.transferConflictStrategy}
+                      aria-label={t.settingsTransferConflictStrategy}
+                      onChange={(event) => void onTransferConflictStrategyChange(event.target.value as Config['transferConflictStrategy'])}
+                    >
+                      <option value="overwrite">{t.settingsConflictOverwrite}</option>
+                      <option value="skip">{t.settingsConflictSkip}</option>
+                      <option value="fail">{t.settingsConflictFail}</option>
+                    </select>
+                  </div>
+                </div>
               </>
             ) : null}
 
             {activeSection === 'skill' ? (
               <div className="settings-section-card settings-section-stack settings-skill-card">
-                <div className="settings-section-copy">
-                  <strong>{t.settingsSkillTitle}</strong>
-                  <span>{t.settingsSkillHint}</span>
+              <div className="settings-section-copy">
+                <strong>{t.settingsSkillTitle}</strong>
+                <span>{t.settingsSkillHint}</span>
+              </div>
+                <div className="settings-mcp-tabs" role="tablist" aria-label={t.settingsSkillTitle}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeMCPContract === 'local'}
+                    className={`settings-mcp-tab ${activeMCPContract === 'local' ? 'active' : ''}`}
+                    onClick={() => setActiveMCPContract('local')}
+                  >
+                    {t.settingsMcpLocalTab}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeMCPContract === 'network'}
+                    className={`settings-mcp-tab ${activeMCPContract === 'network' ? 'active' : ''}`}
+                    onClick={() => setActiveMCPContract('network')}
+                  >
+                    {t.settingsMcpNetworkTab}
+                  </button>
                 </div>
-                <div className="settings-section-card settings-rest-server-row">
+                <span className="settings-mcp-separation-hint">{t.settingsMcpContractSeparationHint}</span>
+                {activeMCPContract === 'network' ? (
+                  <>
+                    <div className="settings-section-card settings-rest-server-row">
                   <div className="settings-section-copy">
                     <strong>{t.settingsRestServer}</strong>
                     <span>
@@ -590,8 +657,8 @@ export function SettingsModal({
                         value={restAllowlistDraft}
                         autoComplete="off"
                         spellCheck={false}
-                        disabled={config.restServerEnabled}
                         aria-label={t.settingsRestServerAllowlist}
+                        title={t.settingsRestServerAllowlistHint}
                         placeholder="127.0.0.1"
                         onChange={(event) => setRestAllowlistDraft(event.target.value)}
                         onBlur={() => void commitRESTServerAllowlist()}
@@ -622,63 +689,100 @@ export function SettingsModal({
                   >
                     <span className="ios-switch-track" />
                     <span className="ios-switch-thumb" />
-                  </button>
-                </div>
-                <div className={`settings-skill-viewer ${skillError ? 'error' : ''}`} aria-live="polite">
-                  {skillLoading ? (
-                    <p className="settings-skill-placeholder">{t.loading}</p>
-                  ) : skillError ? (
-                    <p className="settings-skill-placeholder">{`${t.errorPrefix} ${skillError}`}</p>
-                  ) : skillMarkdown ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: ({ href, children }) => (
-                          <a
-                            href={href}
-                            onClick={(event) => {
-                              if (href && /^(https?:|mailto:)/i.test(href)) {
-                                event.preventDefault();
-                                BrowserOpenURL(href);
-                              }
-                            }}
-                          >
-                            {children}
-                          </a>
-                        ),
-                      }}
-                    >
-                      {skillMarkdown}
-                    </ReactMarkdown>
-                  ) : (
-                    <p className="settings-skill-placeholder">{t.settingsSkillEmpty}</p>
-                  )}
-                </div>
-                <div className="settings-skill-actions">
-                  <span className={`settings-skill-feedback ${skillCopyMessage === t.settingsSkillCopyFailed ? 'error' : 'success'}`}>
-                    {skillCopyMessage}
-                  </span>
-                  <button
-                    type="button"
-                    className="settings-skill-action-button"
-                    onClick={() => void handleCopySkillMarkdown()}
-                    disabled={!skillMarkdown || skillLoading}
-                    aria-label={t.settingsSkillCopy}
-                    title={t.settingsSkillCopy}
-                  >
-                    <FontAwesomeIcon icon={faCopy} />
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-skill-action-button accent"
-                    onClick={handleExportSkillMarkdown}
-                    disabled={!skillMarkdown || skillLoading}
-                    aria-label={t.settingsSkillExport}
-                    title={t.settingsSkillExport}
-                  >
-                    <FontAwesomeIcon icon={faDownload} />
-                  </button>
-                </div>
+                    </button>
+                  </div>
+                  </>
+                ) : (
+                  <div className="settings-section-card settings-mcp-local-card">
+                    <div className="settings-section-copy">
+                      <strong>{t.settingsMcpLocalTitle}</strong>
+                      <span>{t.settingsMcpLocalHint}</span>
+                      <span>{restStatus?.running ? t.settingsMcpLocalStatusRunning : t.settingsMcpLocalStatusStopped}</span>
+                    </div>
+                    <div className="settings-mcp-local-meta">
+                      <div>
+                        <span>{t.settingsMcpLocalVirtualRoot}</span>
+                        <div className="settings-mcp-endpoint-row">
+                          <code>integterm-vfs://workspace/mcp</code>
+                          <button type="button" className="settings-skill-action-button" onClick={() => void navigator.clipboard.writeText('integterm-vfs://workspace/mcp')} aria-label={t.settingsSkillCopy} title={t.settingsSkillCopy}>
+                            <FontAwesomeIcon icon={faCopy} />
+                          </button>
+                        </div>
+                      </div>
+                      {restStatus?.running ? (
+                        <div>
+                          <span>{t.settingsRestServer}</span>
+                          <div className="settings-mcp-endpoint-row">
+                            <code>{restStatus.mcpURL || `http://127.0.0.1:${config.restServerPort}/mcp`}</code>
+                            <button type="button" className="settings-skill-action-button accent" onClick={() => void navigator.clipboard.writeText(restStatus.mcpURL || `http://127.0.0.1:${config.restServerPort}/mcp`)} aria-label={t.settingsSkillCopy} title={t.settingsSkillCopy}>
+                              <FontAwesomeIcon icon={faCopy} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+                <details className="settings-skill-details" key={activeMCPContract}>
+                  <summary className="settings-skill-summary">
+                    <span>{t.settingsSkillTitle}</span>
+                    <span className="settings-skill-actions" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="settings-skill-action-button"
+                        onClick={() => void handleCopySkillMarkdown()}
+                        disabled={!skillMarkdown || skillLoading}
+                        aria-label={t.settingsSkillCopy}
+                        title={t.settingsSkillCopy}
+                      >
+                        <FontAwesomeIcon icon={faCopy} />
+                      </button>
+                      <button
+                        type="button"
+                        className="settings-skill-action-button accent"
+                        onClick={handleExportSkillMarkdown}
+                        disabled={!skillMarkdown || skillLoading}
+                        aria-label={t.settingsSkillExport}
+                        title={t.settingsSkillExport}
+                      >
+                        <FontAwesomeIcon icon={faDownload} />
+                      </button>
+                    </span>
+                  </summary>
+                  <div className={`settings-skill-viewer ${skillError ? 'error' : ''}`} aria-live="polite">
+                    {skillLoading ? (
+                      <p className="settings-skill-placeholder">{t.loading}</p>
+                    ) : skillError ? (
+                      <p className="settings-skill-placeholder">{`${t.errorPrefix} ${skillError}`}</p>
+                    ) : skillMarkdown ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ href, children }) => (
+                            <a
+                              href={href}
+                              onClick={(event) => {
+                                if (href && /^(https?:|mailto:)/i.test(href)) {
+                                  event.preventDefault();
+                                  BrowserOpenURL(href);
+                                }
+                              }}
+                            >
+                              {children}
+                            </a>
+                          ),
+                        }}
+                      >
+                        {skillMarkdown}
+                      </ReactMarkdown>
+                    ) : (
+                      <p className="settings-skill-placeholder">{t.settingsSkillEmpty}</p>
+                    )}
+                  </div>
+                </details>
+                <span className={`settings-skill-feedback ${skillCopyMessage === t.settingsSkillCopyFailed ? 'error' : 'success'}`}>
+                  {skillCopyMessage}
+                </span>
               </div>
             ) : null}
 

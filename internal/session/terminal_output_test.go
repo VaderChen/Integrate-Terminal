@@ -7,7 +7,7 @@ import (
 )
 
 func TestStripTerminalSignals_RemovesOSCAndCapturesCwd(t *testing.T) {
-	visible, pending, cwds := stripTerminalSignals(nil, []byte("hello\x1b]9;cwd=/srv/app\a\x1b]10;rgb:eeee/eeee/ecec\a world"))
+	visible, pending, cwds, clipboards := stripTerminalSignals(nil, []byte("hello\x1b]9;cwd=/srv/app\a\x1b]10;rgb:eeee/eeee/ecec\a world"))
 	if got := string(visible); got != "hello world" {
 		t.Fatalf("visible = %q, want %q", got, "hello world")
 	}
@@ -17,10 +17,13 @@ func TestStripTerminalSignals_RemovesOSCAndCapturesCwd(t *testing.T) {
 	if len(cwds) != 1 || cwds[0] != "/srv/app" {
 		t.Fatalf("cwds = %#v, want [/srv/app]", cwds)
 	}
+	if len(clipboards) != 0 {
+		t.Fatalf("clipboards = %#v, want empty", clipboards)
+	}
 }
 
 func TestStripTerminalSignals_HandlesSplitOSCSequence(t *testing.T) {
-	visible, pending, cwds := stripTerminalSignals(nil, []byte("a\x1b]10;rgb:eeee"))
+	visible, pending, cwds, clipboards := stripTerminalSignals(nil, []byte("a\x1b]10;rgb:eeee"))
 	if got := string(visible); got != "a" {
 		t.Fatalf("visible = %q, want %q", got, "a")
 	}
@@ -30,8 +33,11 @@ func TestStripTerminalSignals_HandlesSplitOSCSequence(t *testing.T) {
 	if len(cwds) != 0 {
 		t.Fatalf("cwds = %#v, want empty", cwds)
 	}
+	if len(clipboards) != 0 {
+		t.Fatalf("clipboards = %#v, want empty", clipboards)
+	}
 
-	visible, pending, cwds = stripTerminalSignals(pending, []byte("/eeee/ecec\a!"))
+	visible, pending, cwds, clipboards = stripTerminalSignals(pending, []byte("/eeee/ecec\a!"))
 	if got := string(visible); got != "!" {
 		t.Fatalf("visible = %q, want %q", got, "!")
 	}
@@ -41,10 +47,13 @@ func TestStripTerminalSignals_HandlesSplitOSCSequence(t *testing.T) {
 	if len(cwds) != 0 {
 		t.Fatalf("cwds = %#v, want empty", cwds)
 	}
+	if len(clipboards) != 0 {
+		t.Fatalf("clipboards = %#v, want empty", clipboards)
+	}
 }
 
 func TestStripTerminalSignals_HandlesSTTerminator(t *testing.T) {
-	visible, pending, cwds := stripTerminalSignals(nil, []byte("x\x1b]10;rgb:eeee/eeee/ecec\x1b\\y"))
+	visible, pending, cwds, clipboards := stripTerminalSignals(nil, []byte("x\x1b]10;rgb:eeee/eeee/ecec\x1b\\y"))
 	if got := string(visible); got != "xy" {
 		t.Fatalf("visible = %q, want %q", got, "xy")
 	}
@@ -53,6 +62,25 @@ func TestStripTerminalSignals_HandlesSTTerminator(t *testing.T) {
 	}
 	if len(cwds) != 0 {
 		t.Fatalf("cwds = %#v, want empty", cwds)
+	}
+	if len(clipboards) != 0 {
+		t.Fatalf("clipboards = %#v, want empty", clipboards)
+	}
+}
+
+func TestStripTerminalSignalsCapturesOSC52Clipboard(t *testing.T) {
+	visible, pending, cwds, clipboards := stripTerminalSignals(nil, []byte("before\x1b]52;c;Q29weSBtZQ==\aafter"))
+	if got := string(visible); got != "beforeafter" {
+		t.Fatalf("visible = %q, want %q", got, "beforeafter")
+	}
+	if pending != nil {
+		t.Fatalf("pending = %q, want nil", string(pending))
+	}
+	if len(cwds) != 0 {
+		t.Fatalf("cwds = %#v, want empty", cwds)
+	}
+	if len(clipboards) != 1 || clipboards[0] != "Copy me" {
+		t.Fatalf("clipboards = %#v, want [Copy me]", clipboards)
 	}
 }
 

@@ -29,8 +29,30 @@ type App struct {
 	restServer      *http.Server
 	restServerURL   string
 	restAttached    bool
+	mcpVFS          *mcpVFS
 	allowRESTAttach bool
+	quitApproved    bool
 	operations      map[string]RESTOperation
+}
+
+// ApproveQuit allows the native window close event to complete once.
+func (a *App) ApproveQuit() {
+	a.stateMu.Lock()
+	a.quitApproved = true
+	a.stateMu.Unlock()
+}
+
+func (a *App) consumeQuitApproval() bool {
+	a.stateMu.Lock()
+	defer a.stateMu.Unlock()
+	approved := a.quitApproved
+	a.quitApproved = false
+	return approved
+}
+
+// ConsumeQuitApprovalForUI is used by the Wails window lifecycle callback.
+func (a *App) ConsumeQuitApprovalForUI() bool {
+	return a.consumeQuitApproval()
 }
 
 func New() *App {
@@ -41,6 +63,7 @@ func New() *App {
 	return &App{
 		store:          store.New(dataDir),
 		sessionManager: session.NewManager(),
+		mcpVFS:         newMCPVFS(),
 		lastActivity:   make(map[string]time.Time),
 		operations:     make(map[string]RESTOperation),
 	}
@@ -77,6 +100,9 @@ func (a *App) initialize(allowRESTAttach bool) {
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
 	a.config.RESTServerAllowlist = sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
+	a.config.TransferRetryCount = sanitizeTransferRetryCount(a.config.TransferRetryCount)
+	a.config.TransferConflictStrategy = sanitizeTransferConflictStrategy(a.config.TransferConflictStrategy)
+	a.sessionManager.ConfigureTransferPolicy(a.config.TransferRetryCount, a.config.TransferConflictStrategy)
 	if a.allowRESTAttach && shouldRunBackgroundService(a.config) {
 		_ = a.ensureBackgroundService()
 	}

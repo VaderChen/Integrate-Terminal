@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/model"
 )
 
 func (a *App) reloadSitesFromStoreLocked() error {
@@ -22,6 +22,12 @@ func (a *App) reloadSitesFromStoreLocked() error {
 	}
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
+	a.config.RESTServerAllowlist = sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
+	a.config.TransferRetryCount = sanitizeTransferRetryCount(a.config.TransferRetryCount)
+	a.config.TransferConflictStrategy = sanitizeTransferConflictStrategy(a.config.TransferConflictStrategy)
+	if a.sessionManager != nil {
+		a.sessionManager.ConfigureTransferPolicy(a.config.TransferRetryCount, a.config.TransferConflictStrategy)
+	}
 	return nil
 }
 
@@ -45,6 +51,7 @@ func (a *App) SaveSite(site model.Site) ([]model.Site, error) {
 	previousSites := cloneSites(a.sites)
 	previousConfig := cloneConfig(a.config)
 	site.Folder = normalizeSiteFolder(site.Folder)
+	site.Tags = normalizeSiteTags(site.Tags)
 	if strings.TrimSpace(site.Host) == "" {
 		return cloneSites(a.sites), fmt.Errorf("host is required")
 	}
@@ -339,6 +346,7 @@ func normalizeLoadedSites(sites []model.Site) []model.Site {
 	normalized := make([]model.Site, len(sites))
 	for index, site := range sites {
 		site.Folder = normalizeSiteFolder(site.Folder)
+		site.Tags = normalizeSiteTags(site.Tags)
 		normalized[index] = site
 	}
 	return normalized
@@ -346,6 +354,24 @@ func normalizeLoadedSites(sites []model.Site) []model.Site {
 
 func sitesEqualByStoredFields(left []model.Site, right []model.Site) bool {
 	return reflect.DeepEqual(left, right)
+}
+
+func normalizeSiteTags(tags []string) []string {
+	seen := make(map[string]struct{}, len(tags))
+	normalized := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	return normalized
 }
 
 func upsertSiteFolder(folders []string, folder string) []string {

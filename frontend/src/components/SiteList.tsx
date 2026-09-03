@@ -9,9 +9,11 @@ import {
   faFolderPlus,
   faGrip,
   faList,
+  faMagnifyingGlass,
   faPenToSquare,
   faPlug,
   faSortAlphaDown,
+  faStar,
   faTrashCan,
 } from '@fortawesome/free-solid-svg-icons';
 import type { Site } from '../types';
@@ -37,6 +39,7 @@ type Props = {
   onReorderFolders: (folderNames: string[]) => void;
   onMoveSiteToFolder: (siteId: string, folder: string) => void;
   onEditSite: (site: Site) => void;
+  onToggleFavorite?: (siteId: string) => void;
   onCreateFolder: () => void;
   onSortFolders: () => void;
   onRenameFolder: (folder: string) => void;
@@ -56,6 +59,7 @@ export function SiteList({
   onReorderFolders,
   onMoveSiteToFolder,
   onEditSite,
+  onToggleFavorite,
   onCreateFolder,
   onSortFolders,
   onRenameFolder,
@@ -71,7 +75,18 @@ export function SiteList({
   const [draggedFolderKey, setDraggedFolderKey] = useState('');
   const [dragOverFolderKey, setDragOverFolderKey] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
-  const groupedSites = useMemo(() => groupSitesByFolder(sites, siteFolders, t.defaultSiteFolder), [siteFolders, sites, t.defaultSiteFolder]);
+  const [searchDraft, setSearchDraft] = useState('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const filteredSites = useMemo(() => {
+    const query = searchDraft.trim().toLowerCase();
+    return sites.filter((site) => {
+      if (favoritesOnly && !site.favorite) return false;
+      if (!query) return true;
+      const searchable = [site.name, site.host, site.username, site.protocol, ...(site.tags ?? [])].join(' ').toLowerCase();
+      return searchable.includes(query);
+    });
+  }, [favoritesOnly, searchDraft, sites]);
+  const groupedSites = useMemo(() => groupSitesByFolder(filteredSites, siteFolders, t.defaultSiteFolder), [filteredSites, siteFolders, t.defaultSiteFolder]);
   const appShellFontSize = typeof window !== 'undefined'
     ? window.getComputedStyle(document.querySelector('.app-shell') ?? document.body).fontSize
     : undefined;
@@ -148,7 +163,7 @@ export function SiteList({
       <div className="section-title site-list-title-row">
         <div className="site-list-title-group">
           <h3>{t.siteListTitle}</h3>
-          <span>{t.siteListCount(sites.length)}</span>
+          <span>{t.siteListCount(filteredSites.length)}</span>
         </div>
         <div className="site-view-switcher" role="group" aria-label={t.siteViewSwitcher}>
           <button
@@ -188,6 +203,28 @@ export function SiteList({
             <FontAwesomeIcon icon={faList} />
           </button>
         </div>
+      </div>
+
+      <div className="site-list-filters">
+        <div className="site-search-field">
+          <FontAwesomeIcon icon={faMagnifyingGlass} aria-hidden="true" />
+          <input
+            type="search"
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
+            placeholder={t.siteSearch}
+            aria-label={t.siteSearch}
+          />
+        </div>
+        <button
+          type="button"
+          className={`site-view-button site-favorites-filter ${favoritesOnly ? 'active' : ''}`}
+          onClick={() => setFavoritesOnly((current) => !current)}
+          aria-label={t.siteFavoritesOnly}
+          title={t.siteFavoritesOnly}
+        >
+          <FontAwesomeIcon icon={faStar} />
+        </button>
       </div>
 
       <div
@@ -339,8 +376,25 @@ export function SiteList({
                         {viewMode !== 'list' ? <ProtocolLabel protocol={site.protocol} locale={locale} /> : null}
                         <strong>{site.name || site.host}</strong>
                         {viewMode !== 'list' ? <small>{site.username}@{site.host}:{site.port}</small> : null}
+                        {(site.tags ?? []).length > 0 ? (
+                          <span className="site-tags">
+                            {(site.tags ?? []).map((tag) => <span className="site-tag" key={tag}>{tag}</span>)}
+                          </span>
+                        ) : null}
                       </div>
                       <div className={`site-actions ${viewMode !== 'card' ? 'site-actions-icon' : ''}`}>
+                        <button
+                          type="button"
+                          className={`site-favorite-button ${site.favorite ? 'active' : ''}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleFavorite?.(site.id);
+                          }}
+                          aria-label={site.favorite ? t.siteUnfavorite : t.siteFavorite}
+                          title={site.favorite ? t.siteUnfavorite : t.siteFavorite}
+                        >
+                          <FontAwesomeIcon icon={faStar} />
+                        </button>
                         <button
                           className={`primary ${viewMode !== 'card' ? 'site-icon-button' : ''}`}
                           onClick={() => onOpenSite(site)}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/jlaffaye/ftp"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"github.com/VaderChen/Integrate-Terminal/internal/model"
 )
 
 type FTPClient struct {
@@ -66,6 +66,30 @@ func (c *FTPClient) List(remotePath string) ([]model.FileEntry, error) {
 	})
 
 	return items, nil
+}
+
+func (c *FTPClient) Stat(remotePath string) (model.FileEntry, error) {
+	if c.conn == nil {
+		return model.FileEntry{}, fmt.Errorf("ftp client not connected")
+	}
+	size, err := c.conn.FileSize(remotePath)
+	if err == nil {
+		modified := ""
+		if c.conn.IsGetTimeSupported() {
+			if value, timeErr := c.conn.GetTime(remotePath); timeErr == nil {
+				modified = value.Local().Format("2006-01-02 15:04")
+			}
+		}
+		return model.FileEntry{Name: path.Base(remotePath), Path: remotePath, Size: size, Modified: modified, Side: "remote"}, nil
+	}
+	entries, listErr := c.conn.List(remotePath)
+	if listErr != nil {
+		return model.FileEntry{}, err
+	}
+	if len(entries) == 0 {
+		return model.FileEntry{Name: path.Base(remotePath), Path: remotePath, IsDir: true, Side: "remote"}, nil
+	}
+	return model.FileEntry{Name: path.Base(remotePath), Path: remotePath, IsDir: true, Side: "remote"}, nil
 }
 
 func (c *FTPClient) CurrentDir() (string, error) {

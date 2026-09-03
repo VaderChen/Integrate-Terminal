@@ -24,7 +24,27 @@ type endpointDoc struct {
 	Example     string
 }
 
+type mcpToolDoc struct {
+	Name        string
+	Description string
+}
+
 func (a *App) GetRestAPIDocsMarkdown() (string, error) {
+	return a.GetMCPContractMarkdown(string(mcpContractNetwork))
+}
+
+func (a *App) GetMCPContractMarkdown(contract string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(contract)) {
+	case string(mcpContractLocal):
+		return a.buildMCPLocalContractMarkdown()
+	case string(mcpContractNetwork):
+		return a.buildMCPNetworkContractMarkdown()
+	default:
+		return "", fmt.Errorf("unknown MCP contract %q; use local or network", contract)
+	}
+}
+
+func (a *App) buildMCPNetworkContractMarkdown() (string, error) {
 	status := a.GetRESTServerStatus()
 	port := status.Port
 	if port <= 0 {
@@ -34,17 +54,18 @@ func (a *App) GetRestAPIDocsMarkdown() (string, error) {
 	if mcpURL == "" || mcpURL == "/mcp" {
 		mcpURL = fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
 	}
-	allowlist := sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
+	allowlist := status.Allowlist
 	operations := buildRESTOperationDocs()
 	endpoints := buildRESTEndpointDocs(strings.TrimSuffix(mcpURL, "/mcp"))
 
 	var builder strings.Builder
 	builder.WriteString("# IntegTERM MCP Server\n\n")
-	builder.WriteString("IntegTERM provides a standard Model Context Protocol server over Streamable HTTP. MCP clients discover and call tools through the single endpoint below; no API token or custom authentication header is required.\n\n")
+	builder.WriteString("IntegTERM provides a local VFS MCP contract by default and an optional standard Model Context Protocol server over Streamable HTTP. Network MCP clients discover and call tools through the endpoint below; no API token or custom authentication header is required.\n\n")
 	builder.WriteString("## Connection\n\n")
 	builder.WriteString("- Transport: `streamable-http`\n")
 	builder.WriteString("- MCP URL: `" + mcpURL + "`\n")
 	builder.WriteString(fmt.Sprintf("- Enabled: `%t`\n", status.Enabled))
+	builder.WriteString("- HTTP default: `disabled` (enable it only when an external client must connect)\n")
 	builder.WriteString("- Access control: source IP allowlist\n")
 	builder.WriteString("- Allowlist: `" + strings.Join(allowlist, ", ") + "`\n")
 	builder.WriteString("- Default allowlist: `127.0.0.1`\n\n")
@@ -65,6 +86,12 @@ func (a *App) GetRestAPIDocsMarkdown() (string, error) {
 	builder.WriteString("3. Add a LAN address or CIDR only when a remote MCP client must connect.\n")
 	builder.WriteString("4. Browser origins are checked against the same allowlist.\n")
 	builder.WriteString("5. Do not configure a broad CIDR unless every host in that network is trusted.\n\n")
+	builder.WriteString("## Virtual Workspace\n\n")
+	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
+	builder.WriteString("- Saved sites namespace: `" + mcpVFSRootURI + "/sites/{siteID}`\n")
+	builder.WriteString("- External clients connect through the MCP URL above; the `integterm-vfs` URI identifies resources inside that MCP connection and is not a transport endpoint.\n")
+	builder.WriteString("- Call `vfs_connect` with a saved-site URI before remote operations, or let the first remote `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_mkdir`, `vfs_rename`, or `vfs_delete` call connect lazily.\n")
+	builder.WriteString("- Paths outside the `sites` namespace remain bounded RAM files and are cleared when the background service stops.\n\n")
 	builder.WriteString("## Available Tools\n\n")
 	builder.WriteString("| Tool | Description |\n")
 	builder.WriteString("| --- | --- |\n")
@@ -75,15 +102,71 @@ func (a *App) GetRestAPIDocsMarkdown() (string, error) {
 		}
 		builder.WriteString(fmt.Sprintf("| `%s` | %s |\n", operation.LogicalOperation, strings.ReplaceAll(description, "|", "\\|")))
 	}
+	for _, tool := range buildMCPVFSToolDocs() {
+		builder.WriteString(fmt.Sprintf("| `%s` | %s |\n", tool.Name, strings.ReplaceAll(tool.Description, "|", "\\|")))
+	}
 	builder.WriteString("\n## Usage Rules\n\n")
 	builder.WriteString("- Use `tools/list` to discover the current schemas instead of constructing REST requests.\n")
 	builder.WriteString("- Use `tools/call` with the exact tool name and arguments returned by the MCP server.\n")
 	builder.WriteString("- Reuse returned `site`, `tabId`, `sessionId`, and operation IDs exactly as returned.\n")
-	builder.WriteString("- Use absolute paths for local and remote file operations.\n")
+	builder.WriteString("- Use absolute host paths for local and remote file operations exposed by the REST-backed tools; use `integterm-vfs` URIs for virtual workspace operations.\n")
 	builder.WriteString("- Upload and download tools return an operation ID; poll `get_operation` until it is `done` or `failed`.\n")
 	builder.WriteString("- Saved site protocol `sftp` provides SSH and SFTP capabilities; `ftp` provides Telnet and FTP capabilities.\n")
 
 	return builder.String(), nil
+}
+
+func (a *App) buildMCPLocalContractMarkdown() (string, error) {
+	status := a.GetRESTServerStatus()
+
+	var builder strings.Builder
+	builder.WriteString("# IntegTERM Virtual Workspace Contract\n\n")
+	builder.WriteString("This contract defines a virtual filesystem spanning bounded RAM paths and saved remote-site mounts. The local VFS MCP contract is available by default; external MCP clients connect through the optional network MCP endpoint. The virtual URI identifies resources and selects the correct backend inside that connection.\n\n")
+	builder.WriteString("## Virtual Workspace\n\n")
+	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
+	builder.WriteString("- Local VFS MCP: `enabled by default`\n")
+	builder.WriteString(fmt.Sprintf("- HTTP MCP server: `%t`\n", status.Enabled))
+	builder.WriteString("- RAM paths: any path outside `sites`; data is cleared when the background service stops\n")
+	builder.WriteString("- Saved sites namespace: `" + mcpVFSRootURI + "/sites/{siteID}`\n")
+	builder.WriteString("- Remote paths: descendants of a saved-site URI, resolved relative to that site's configured remote root\n\n")
+
+	builder.WriteString("## Available Tools\n\n")
+	builder.WriteString("| Tool | Description |\n")
+	builder.WriteString("| --- | --- |\n")
+	for _, tool := range buildMCPVFSToolDocs() {
+		builder.WriteString(fmt.Sprintf("| `%s` | %s |\n", tool.Name, tool.Description))
+	}
+
+	builder.WriteString("\n## Resources\n\n")
+	builder.WriteString("- Root resource: `" + mcpVFSRootURI + "`\n")
+	builder.WriteString("- File resource template: `integterm-vfs://workspace/mcp/{path}`\n")
+	builder.WriteString("- Saved site root: `integterm-vfs://workspace/mcp/sites/{siteID}`\n")
+	builder.WriteString("- Remote file: `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`\n")
+	builder.WriteString("- Use the virtual URI returned by `vfs_list`, `vfs_stat`, and `vfs_read`; remote URIs never expose credentials.\n\n")
+
+	builder.WriteString("## Usage Rules\n\n")
+	builder.WriteString("- Connect the MCP client to the network endpoint before using any virtual URI; the URI is not itself a transport.\n")
+	builder.WriteString("- Call `tools/list`, then `vfs_list` on `sites` to discover saved site IDs without exposing passwords.\n")
+	builder.WriteString("- Call `vfs_connect` with a saved-site URI, or let the first remote VFS operation connect lazily.\n")
+	builder.WriteString("- Use relative virtual paths or `integterm-vfs://workspace/mcp/...` URIs; cross-site rename is rejected.\n")
+	builder.WriteString("- VFS content reads and writes are bounded to 4 MiB per file; use the network transfer tools for larger files.\n")
+	builder.WriteString("- SSH and Telnet terminal sessions remain explicit network tools because they are streams rather than filesystem resources.\n")
+
+	return builder.String(), nil
+}
+
+func buildMCPVFSToolDocs() []mcpToolDoc {
+	return []mcpToolDoc{
+		{Name: "vfs_workspace_info", Description: "Read the workspace URI, RAM limits, saved-site count, and active mount count."},
+		{Name: "vfs_list", Description: "List RAM entries, saved sites, or files in a mounted remote directory."},
+		{Name: "vfs_connect", Description: "Connect a saved site by its `integterm-vfs` site URI."},
+		{Name: "vfs_stat", Description: "Read metadata for a RAM or mounted remote file or directory."},
+		{Name: "vfs_read", Description: "Read bounded UTF-8 or base64 content from a RAM or remote file."},
+		{Name: "vfs_write", Description: "Write UTF-8 or base64 content to a RAM or remote file."},
+		{Name: "vfs_mkdir", Description: "Create a RAM or remote directory."},
+		{Name: "vfs_rename", Description: "Rename an entry within one RAM namespace or saved-site mount."},
+		{Name: "vfs_delete", Description: "Delete a RAM or remote file or directory."},
+	}
 }
 
 func buildRESTOperationDocs() []operationDoc {
