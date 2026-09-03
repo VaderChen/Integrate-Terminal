@@ -81,6 +81,7 @@ export type Messages = {
   settingsMcpLocalTitle: string;
   settingsMcpLocalHint: string;
   settingsMcpLocalVirtualRoot: string;
+  settingsMcpLocalCommand: string;
   settingsMcpLocalStatusRunning: string;
   settingsMcpLocalStatusStopped: string;
   settingsMcpContractSeparationHint: string;

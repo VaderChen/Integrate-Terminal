@@ -414,7 +414,7 @@ func addMCPVFSFeatures(server *mcp.Server, layer *mcpVirtualLayer) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "vfs_workspace_info",
 		Title:       "Get virtual workspace",
-		Description: "Return the virtual workspace URI, RAM usage, remote site count, and limits. RAM paths are not backed by the host filesystem and are cleared when the service stops.",
+		Description: "Return the virtual workspace URI, RAM usage, remote site count, and limits. This is the first VFS tool to call when working with IntegTERM. Then call vfs_list with an empty path or the root URI. RAM paths are not backed by the host filesystem and are cleared when the service stops.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
 	}, func(_ context.Context, _ *mcp.CallToolRequest, _ mcpVFSWorkspaceInput) (*mcp.CallToolResult, mcpVFSWorkspaceOutput, error) {
 		info := vfs.workspaceInfo()
@@ -426,7 +426,7 @@ func addMCPVFSFeatures(server *mcp.Server, layer *mcpVirtualLayer) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "vfs_list",
 		Title:       "List virtual entries",
-		Description: "List immediate children of a RAM directory, the saved remote sites namespace, or a mounted remote directory. Use a relative path or an integterm-vfs URI; an empty path lists the workspace root.",
+		Description: "List immediate children of a RAM directory, the saved remote sites namespace, or a mounted remote directory. Use this tool instead of treating integterm-vfs://workspace/mcp as a network URL. Use a relative path or an integterm-vfs URI; an empty path lists the workspace root.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
 	}, func(_ context.Context, _ *mcp.CallToolRequest, input mcpVFSPathInput) (*mcp.CallToolResult, map[string]any, error) {
 		entries, err := layer.listVirtual(input.Path)
@@ -524,8 +524,17 @@ func addMCPVFSFeatures(server *mcp.Server, layer *mcpVirtualLayer) {
 		Title:       "IntegTERM virtual workspace",
 		Description: "The root URI of IntegTERM's RAM and saved remote-site virtual filesystem.",
 		MIMEType:    "text/plain",
-	}, func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: mcpVFSRootURI, MIMEType: "text/plain", Text: "IntegTERM virtual workspace. Use vfs_list to inspect RAM files and saved remote sites."}}}, nil
+	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		entries, err := layer.listVirtual(mcpVFSRootURI)
+		if err != nil {
+			return nil, err
+		}
+		payload := map[string]any{
+			"uri":     mcpVFSRootURI,
+			"entries": entries,
+			"usage":   "Use vfs_list for directory traversal and vfs_read/vfs_write for file contents.",
+		}
+		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: mcpVFSRootURI, MIMEType: "application/json", Text: mustJSONIndent(payload)}}}, nil
 	})
 
 	server.AddResourceTemplate(&mcp.ResourceTemplate{

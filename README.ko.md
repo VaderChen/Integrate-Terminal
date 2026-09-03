@@ -29,12 +29,29 @@
 
 ## MCP 연동 (VFS 기본 활성화)
 
-IntegTERM은 Streamable HTTP를 사용하는 표준 MCP Server를 내장합니다. 가상 계층을 통해 RAM 작업 공간과 저장된 원격 사이트 마운트를 하나로 연결합니다. 외부 Agent는 HTTP 엔드포인트로 연결한 뒤 가상 URI로 리소스와 작업 백엔드를 선택합니다.
+IntegTERM은 stdio 기반 로컬 VFS MCP와 선택적 Streamable HTTP MCP를 제공합니다. 가상 계층을 통해 RAM 작업 공간과 저장된 원격 사이트 마운트를 하나로 연결합니다. `integterm-vfs://`는 MCP 연결 내부의 리소스 URI／도구 경로이며 Agent가 직접 연결하는 URL이 아닙니다.
+
+### 로컬 VFS MCP (stdio, 기본값)
+
+로컬 Agent는 `mcp` 인자로 IntegTERM을 시작하고 stdio로 연결해야 합니다.
+
+```json
+{
+  "mcpServers": {
+    "integterm-vfs": {
+      "command": "/Applications/IntegTERM.app/Contents/MacOS/IntegTERM",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+소스에서 실행할 때는 `go run . mcp`를 사용합니다. 연결 후 `tools/list`를 호출하고 빈 path 또는 `integterm-vfs://workspace/mcp`로 `vfs_list`를 사용하십시오. URI를 HTTP URL 필드에 넣거나 셸 명령으로 실행하지 마십시오.
 
 ### MCP Server (HTTP 기본 비활성화)
 
 1. IntegTERM을 실행하고 **설정** → **MCP**를 엽니다.
-2. 로컬 VFS MCP는 기본적으로 활성화되어 `integterm-vfs://workspace/mcp`에서 직접 사용할 수 있으며 네트워크 포트를 열지 않습니다.
+2. 로컬 VFS MCP는 기본적으로 stdio로 제공되며 네트워크 포트를 열지 않습니다.
 3. 외부 Agent가 연결해야 할 때만 HTTP MCP Server를 활성화합니다. 기본 포트는 `18080`, 기본 허용 목록은 `127.0.0.1`, 엔드포인트는 `http://127.0.0.1:18080/mcp`입니다.
 
 ### 가상 작업 공간: RAM 및 원격 사이트

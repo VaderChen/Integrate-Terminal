@@ -22,6 +22,10 @@ import (
 var assets embed.FS
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		runMCPStdio()
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
 		crashlog.Init()
 		defer crashlog.Recover("main.serve")
@@ -38,6 +42,17 @@ func main() {
 	}
 
 	runUI(hasArgument("--multi-instance"))
+}
+
+func runMCPStdio() {
+	crashlog.Init()
+	defer crashlog.Recover("main.mcp")
+	application := app.New()
+	application.MCPStartup()
+	defer application.ServiceShutdown()
+	if err := application.RunMCPStdio(context.Background()); err != nil {
+		log.Printf("local MCP stdio server stopped: %v", err)
+	}
 }
 
 func runUI(allowMultipleInstances bool) {

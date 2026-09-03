@@ -83,6 +83,13 @@ func (a *App) newMCPHTTPHandler() http.Handler {
 	return newMCPStreamableHTTPHandler(newMCPVirtualLayer(a).newServer(mcpContractNetwork))
 }
 
+// RunMCPStdio serves the local VFS contract over MCP's stdio transport. The
+// integterm-vfs URI is a resource identifier carried inside this transport,
+// not a network endpoint.
+func (a *App) RunMCPStdio(ctx context.Context) error {
+	return newMCPVirtualLayer(a).newServer(mcpContractLocal).Run(ctx, &mcp.StdioTransport{})
+}
+
 func newMCPStreamableHTTPHandler(server *mcp.Server) http.Handler {
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server

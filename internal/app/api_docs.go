@@ -60,7 +60,7 @@ func (a *App) buildMCPNetworkContractMarkdown() (string, error) {
 
 	var builder strings.Builder
 	builder.WriteString("# IntegTERM MCP Server\n\n")
-	builder.WriteString("IntegTERM provides a local VFS MCP contract by default and an optional standard Model Context Protocol server over Streamable HTTP. Network MCP clients discover and call tools through the endpoint below; no API token or custom authentication header is required.\n\n")
+	builder.WriteString("IntegTERM provides a local VFS MCP contract over stdio and an optional standard Model Context Protocol server over Streamable HTTP. Network MCP clients discover and call tools through the endpoint below; no API token or custom authentication header is required.\n\n")
 	builder.WriteString("## Connection\n\n")
 	builder.WriteString("- Transport: `streamable-http`\n")
 	builder.WriteString("- MCP URL: `" + mcpURL + "`\n")
@@ -121,10 +121,15 @@ func (a *App) buildMCPLocalContractMarkdown() (string, error) {
 
 	var builder strings.Builder
 	builder.WriteString("# IntegTERM Virtual Workspace Contract\n\n")
-	builder.WriteString("This contract defines a virtual filesystem spanning bounded RAM paths and saved remote-site mounts. The local VFS MCP contract is available by default; external MCP clients connect through the optional network MCP endpoint. The virtual URI identifies resources and selects the correct backend inside that connection.\n\n")
+	builder.WriteString("This contract defines a virtual filesystem spanning bounded RAM paths and saved remote-site mounts. Local MCP clients should start the application with the `mcp` argument and communicate over stdio. The `integterm-vfs` URI identifies resources inside that MCP connection; it is not a command or network endpoint.\n\n")
+	builder.WriteString("## Local MCP Connection\n\n")
+	builder.WriteString("- Transport: `stdio`\n")
+	builder.WriteString("- Command: the IntegTERM executable with the `mcp` argument\n")
+	builder.WriteString("- macOS App bundle executable: `IntegTERM.app/Contents/MacOS/IntegTERM`\n")
+	builder.WriteString("- Development command: `go run . mcp`\n\n")
 	builder.WriteString("## Virtual Workspace\n\n")
 	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
-	builder.WriteString("- Local VFS MCP: `enabled by default`\n")
+	builder.WriteString("- Local VFS MCP: `available through the stdio command above`\n")
 	builder.WriteString(fmt.Sprintf("- HTTP MCP server: `%t`\n", status.Enabled))
 	builder.WriteString("- RAM paths: any path outside `sites`; data is cleared when the background service stops\n")
 	builder.WriteString("- Saved sites namespace: `" + mcpVFSRootURI + "/sites/{siteID}`\n")
@@ -145,8 +150,9 @@ func (a *App) buildMCPLocalContractMarkdown() (string, error) {
 	builder.WriteString("- Use the virtual URI returned by `vfs_list`, `vfs_stat`, and `vfs_read`; remote URIs never expose credentials.\n\n")
 
 	builder.WriteString("## Usage Rules\n\n")
-	builder.WriteString("- Connect the MCP client to the network endpoint before using any virtual URI; the URI is not itself a transport.\n")
-	builder.WriteString("- Call `tools/list`, then `vfs_list` on `sites` to discover saved site IDs without exposing passwords.\n")
+	builder.WriteString("- Connect the MCP client through stdio using the `mcp` command before using any virtual URI; the URI is not itself a transport.\n")
+	builder.WriteString("- Call `tools/list`, then call `vfs_list` with an empty path or the root URI to inspect the workspace.\n")
+	builder.WriteString("- Call `vfs_list` on `sites` to discover saved site IDs without exposing passwords.\n")
 	builder.WriteString("- Call `vfs_connect` with a saved-site URI, or let the first remote VFS operation connect lazily.\n")
 	builder.WriteString("- Use relative virtual paths or `integterm-vfs://workspace/mcp/...` URIs; cross-site rename is rejected.\n")
 	builder.WriteString("- VFS content reads and writes are bounded to 4 MiB per file; use the network transfer tools for larger files.\n")

@@ -29,12 +29,29 @@
 
 ## MCP 連携（VFS はデフォルトで有効）
 
-IntegTERM は Streamable HTTP を使用する標準 MCP Server を内蔵しています。仮想層によって RAM ワークスペースと保存済みリモートサイトのマウントを統一します。外部 Agent は HTTP エンドポイントに接続し、仮想 URI でリソースと操作のバックエンドを選択します。
+IntegTERM は stdio のローカル VFS MCP と、オプションの Streamable HTTP MCP を内蔵しています。仮想層によって RAM ワークスペースと保存済みリモートサイトのマウントを統一します。`integterm-vfs://` は MCP 接続内の Resource URI／ツールパスであり、Agent が直接接続する URL ではありません。
+
+### ローカル VFS MCP（stdio、既定）
+
+ローカル Agent は `mcp` 引数で IntegTERM を起動し、stdio で接続します。
+
+```json
+{
+  "mcpServers": {
+    "integterm-vfs": {
+      "command": "/Applications/IntegTERM.app/Contents/MacOS/IntegTERM",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+ソースから実行する場合は `go run . mcp` を使用します。接続後に `tools/list` を呼び出し、空の path または `integterm-vfs://workspace/mcp` を指定して `vfs_list` を使用してください。この URI を HTTP URL 欄に入れたり、shell コマンドとして実行したりしないでください。
 
 ### MCP Server（HTTP はデフォルトで無効）
 
 1. IntegTERM を起動し、**設定** → **MCP** を開きます。
-2. ローカル VFS MCP はデフォルトで有効で、`integterm-vfs://workspace/mcp` から直接利用できます。ネットワークポートは待ち受けません。
+2. ローカル VFS MCP は stdio で既定提供され、ネットワークポートは待ち受けません。
 3. 外部 Agent が接続する場合のみ HTTP MCP Server を有効にします。デフォルトのポートは `18080`、許可リストは `127.0.0.1`、エンドポイントは `http://127.0.0.1:18080/mcp` です。
 
 ### 仮想ワークスペース: RAM とリモートサイト

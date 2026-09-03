@@ -80,6 +80,14 @@ func (a *App) ServiceStartup() {
 	a.initialize(false)
 }
 
+// MCPStartup loads the application state for the standalone local MCP
+// stdio process without binding the optional HTTP server itself. When HTTP
+// MCP is enabled, the process may attach to the existing background service.
+func (a *App) MCPStartup() {
+	a.ctx = nil
+	a.initialize(true)
+}
+
 func (a *App) initialize(allowRESTAttach bool) {
 	a.allowRESTAttach = allowRESTAttach
 	migrateLegacyDataDir(a.store.BaseDir())
