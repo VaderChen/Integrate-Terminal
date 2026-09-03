@@ -239,7 +239,7 @@ signing_arguments=(--force --deep --sign "$CODESIGN_IDENTITY" --options runtime)
 if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
   echo "以 ad-hoc 簽章簽署非沙盒 App Bundle..."
 else
-  echo "以 Developer ID Application 簽署非沙盒 App Bundle：$CODESIGN_IDENTITY"
+  echo "以 Developer ID Application 簽署非沙盒 App Bundle（簽章身分已驗證）"
   signing_arguments+=(--timestamp)
 fi
 codesign "${signing_arguments[@]}" "$STAGING_APP_PATH"
