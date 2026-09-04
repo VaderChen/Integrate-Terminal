@@ -184,7 +184,7 @@ func (layer *mcpVirtualLayer) readVirtual(value string, offset int64, limit int6
 	if err != nil {
 		return nil, mcpVFSItem{}, false, err
 	}
-	data, entry, err := layer.app.sessionManager.ReadRemoteFile(mount.TabID, remotePathForMCPMount(mount, location.remotePath), offset, limit, mcpVFSMaxFileSize)
+	data, entry, err := layer.app.sessionManager.ReadRemoteFile(mount.TabID, remotePathForMCPMount(mount, location.remotePath), offset, limit, mcpVFSMaxChunkedFile)
 	if err != nil {
 		return nil, mcpVFSItem{}, false, err
 	}
@@ -194,25 +194,29 @@ func (layer *mcpVirtualLayer) readVirtual(value string, offset int64, limit int6
 }
 
 func (layer *mcpVirtualLayer) writeVirtual(value string, content string, encoding string, overwrite bool) (mcpVFSItem, error) {
+	data, err := decodeMCPVFSContent(content, encoding)
+	if err != nil {
+		return mcpVFSItem{}, err
+	}
+	return layer.writeVirtualBytes(value, data, overwrite, mcpVFSMaxFileSize)
+}
+
+func (layer *mcpVirtualLayer) writeVirtualBytes(value string, data []byte, overwrite bool, maxFileBytes int64) (mcpVFSItem, error) {
 	location, err := parseMCPVFSLocation(value)
 	if err != nil {
 		return mcpVFSItem{}, err
 	}
 	if location.kind == mcpVFSLocationRAM {
-		return layer.vfs.write(location.path, content, encoding, overwrite)
+		return layer.vfs.writeBytes(location.path, data, overwrite, maxFileBytes)
 	}
 	if location.kind != mcpVFSLocationRemote {
 		return mcpVFSItem{}, fmt.Errorf("virtual path is not a file: %s", value)
-	}
-	data, err := decodeMCPVFSContent(content, encoding)
-	if err != nil {
-		return mcpVFSItem{}, err
 	}
 	mount, err := layer.ensureRemoteMount(location.siteID)
 	if err != nil {
 		return mcpVFSItem{}, err
 	}
-	entry, err := layer.app.sessionManager.WriteRemoteFile(mount.TabID, remotePathForMCPMount(mount, location.remotePath), data, overwrite, mcpVFSMaxFileSize)
+	entry, err := layer.app.sessionManager.WriteRemoteFile(mount.TabID, remotePathForMCPMount(mount, location.remotePath), data, overwrite, maxFileBytes)
 	if err != nil {
 		return mcpVFSItem{}, err
 	}

@@ -46,6 +46,8 @@ IntegTERM 內建本機 VFS MCP（stdio）與可選的 Streamable HTTP MCP。虛�
 }
 ```
 
+此設定呼叫的是已編譯的 IntegTERM 執行檔，並直接進入無 GUI 的 MCP 模式；不需要取得原始碼，也不會開啟桌面 UI。每個 stdio 客戶端會啟動並擁有自己的 MCP 程序與 RAM 工作區，因此該空間不是磁碟上的共享檔案，也不會自動與其他 Agent 共用。
+
 從原始碼執行時可使用 `go run . mcp`。連線後先呼叫 `tools/list`，再使用 `vfs_list`（空白 path 或 `integterm-vfs://workspace/mcp`）瀏覽工作區；不要把 `integterm-vfs://workspace/mcp` 填入 HTTP URL 或當作 shell 指令。
 
 ### Agent 呼叫流程
@@ -55,7 +57,9 @@ Agent 連線後請依序：
 1. 呼叫 `tools/list` 取得目前工具結構。
 2. 呼叫 `vfs_workspace_info` 確認根 URI 與工作區限制。
 3. 呼叫 `vfs_list`，可省略 `path`（或傳入 `integterm-vfs://workspace/mcp`）列出根目錄。
-4. 對檔案使用 `vfs_stat`、`vfs_read`、`vfs_write` 等工具；只有在客戶端支援 MCP Resources 時，才使用 `resources/read` 讀取 Resource URI。
+4. 對檔案使用 `vfs_stat`、`vfs_read`、`vfs_write` 或 `vfs_write_chunk` 等工具；只有在客戶端支援 MCP Resources 時，才使用 `resources/read` 讀取 Resource URI。
+
+MCP 的 `initialize` 回應會直接提供完整 VFS 工作流程，`tools/list` 則提供各工具目前的輸入與輸出 schema；兩者是 Agent 的正式操作依據，不需要查閱 IntegTERM 原始碼。
 
 `integterm-vfs://workspace/mcp` 本身不會啟動連線，也不是要交給 shell 執行的指令。
 
@@ -63,13 +67,15 @@ Agent 連線後請依序：
 
 1. 啟動 IntegTERM，開啟「設定」→「MCP」。
 2. 本機 VFS MCP 預設透過 stdio 提供，不會監聽網路埠。
-3. 只有需要讓外部 Agent 透過 HTTP 連線時，才開啟 MCP Server；預設埠為 `18080`、白名單為 `127.0.0.1`，端點為 `http://127.0.0.1:18080/mcp`。
+3. 只有需要讓外部 Agent 透過 HTTP 連線，或讓多個 Agent 共用同一個服務端 RAM 工作區時，才開啟 MCP Server；所有 Agent 必須連到同一個端點。預設埠為 `18080`、白名單為 `127.0.0.1`，端點為 `http://127.0.0.1:18080/mcp`。
 
 ### 虛擬工作區：RAM 與遠端站台
 
-虛擬根 URI 為 `integterm-vfs://workspace/mcp`。根目錄下未使用 `sites` 命名空間的路徑是純 RAM 資料；`sites/{siteID}` 則代表已儲存遠端站台，第一次執行 `vfs_connect` 或檔案操作時會自動建立連線。RAM 資料會在背景服務停止後清除；遠端操作會直接作用於站台設定的遠端根目錄。
+虛擬根 URI 為 `integterm-vfs://workspace/mcp`。根目錄下未使用 `sites` 命名空間的路徑是純 RAM 資料；`sites/{siteID}` 則代表已儲存遠端站台，第一次執行 `vfs_connect` 或檔案操作時會自動建立連線。RAM 資料會在所屬的 stdio MCP 程序或 Streamable HTTP 背景服務停止後清除；連到同一個 HTTP MCP 服務的 Agent 會共用該服務的 RAM 工作區。遠端操作則直接作用於站台設定的遠端根目錄。
 
-遠端站台的路徑格式為 `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`。先列出 `sites` 取得站台 ID，再使用 `vfs_list`、`vfs_stat`、`vfs_read`、`vfs_write`、`vfs_mkdir`、`vfs_rename` 與 `vfs_delete` 進行一般檔案操作。虛擬 URI 不包含密碼或私密金鑰。
+遠端站台的路徑格式為 `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`。先列出 `sites` 取得站台 ID，再使用 `vfs_list`、`vfs_stat`、`vfs_read`、`vfs_write`、`vfs_write_chunk`、`vfs_mkdir`、`vfs_rename` 與 `vfs_delete` 進行一般檔案操作。虛擬 URI 不包含密碼或私密金鑰。
+
+`vfs_write` 適用於 4 MiB 以內的單次內容；較大的檔案可用 `vfs_write_chunk` 依 `nextOffset` 順序寫入，每個 chunk 上限 1 MiB、完整檔案上限 32 MiB，最後一次設定 `final: true` 並提供完整檔案的 SHA-256。支援 Resources 的客戶端可直接讀取工具回傳的巢狀 `integterm-vfs` URI。
 
 ### 透過網路：既有操作與虛擬工作區
 
@@ -126,6 +132,8 @@ UI 預設採單一實例；再次啟動時會喚醒已開啟的視窗，不會�
 ```
 
 輸出位於 `dist/IntegTERM.app`。預設採 ad-hoc 簽章且不啟用 App Sandbox，建置完成後可直接在本機開啟使用。也可以雙擊 `build.command` 建置，或雙擊 `run.command` 啟動已建置的 App；需要開發模式時使用 `run.command --dev`。
+
+未注入版本資訊時，每次建置都會依目前系統時間產生 `1.YY.MMDD build HHmm`，不會沿用舊標籤或 `wails.json`。需要可重現建置時，可注入 ISO 8601 格式的 `BUILD_TIMESTAMP` 或標準 `SOURCE_DATE_EPOCH`；也可用 `APP_MARKETING_VERSION`、`APP_BUILD_LABEL` 與 `APP_BUNDLE_VERSION` 明確覆寫各欄位。
 
 ### macOS 發布封裝
 

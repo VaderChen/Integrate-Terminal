@@ -46,6 +46,8 @@ Local agents should start IntegTERM with the `mcp` argument and connect over std
 }
 ```
 
+This configuration invokes the compiled IntegTERM executable directly in headless MCP mode; the source tree is not required and the desktop UI is not opened. Each stdio client launches and owns an independent MCP process and RAM workspace, so the workspace is not a shared file on disk and is not automatically shared with other agents.
+
 When running from source, use `go run . mcp`. After connecting, call `tools/list`, then use `vfs_list` with an empty path or `integterm-vfs://workspace/mcp`; do not put the URI in an HTTP URL field or execute it as a shell command.
 
 ### Agent Call Sequence
@@ -55,7 +57,9 @@ After connecting, agents should:
 1. Call `tools/list` to obtain the current tool schemas.
 2. Call `vfs_workspace_info` to confirm the root URI and workspace limits.
 3. Call `vfs_list` without `path` (or with `integterm-vfs://workspace/mcp`) to list the workspace root.
-4. Use `vfs_stat`, `vfs_read`, `vfs_write`, and the other VFS tools for files. Use `resources/read` for a Resource URI only when the client supports MCP Resources.
+4. Use `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_write_chunk`, and the other VFS tools for files. Use `resources/read` for a Resource URI only when the client supports MCP Resources.
+
+The MCP `initialize` response provides the complete VFS workflow, while `tools/list` provides the current input and output schemas. These are the authoritative Agent instructions; inspecting IntegTERM source code is not required.
 
 The `integterm-vfs://workspace/mcp` value does not open a connection and must not be executed as a shell command.
 
@@ -63,13 +67,15 @@ The `integterm-vfs://workspace/mcp` value does not open a connection and must no
 
 1. Start IntegTERM and open **Settings** → **MCP**.
 2. The local VFS MCP is provided over stdio by default and does not listen on a network port.
-3. Enable the HTTP MCP Server only when an external agent must connect. The default port is `18080`, the default allowlist is `127.0.0.1`, and the endpoint is `http://127.0.0.1:18080/mcp`.
+3. Enable the HTTP MCP Server only when an external agent must connect or multiple agents must share one server-side RAM workspace; every agent must connect to the same endpoint. The default port is `18080`, the default allowlist is `127.0.0.1`, and the endpoint is `http://127.0.0.1:18080/mcp`.
 
 ### Virtual Workspace: RAM and Remote Sites
 
-The virtual root URI is `integterm-vfs://workspace/mcp`. Paths outside the `sites` namespace are bounded RAM data; `sites/{siteID}` represents a saved remote site. The first `vfs_connect` or file operation lazily opens the connection. RAM data is cleared when the background service stops, while remote operations act directly on the site's configured remote root.
+The virtual root URI is `integterm-vfs://workspace/mcp`. Paths outside the `sites` namespace are bounded RAM data; `sites/{siteID}` represents a saved remote site. The first `vfs_connect` or file operation lazily opens the connection. RAM data is cleared when its owning stdio MCP process or Streamable HTTP background service stops. Agents connected to the same HTTP MCP service share that service's RAM workspace, while remote operations act directly on the site's configured remote root.
 
-Remote site paths use `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`. List `sites` to discover site IDs, then use `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_mkdir`, `vfs_rename`, and `vfs_delete` for normal file operations. Virtual URIs never contain passwords or private keys.
+Remote site paths use `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`. List `sites` to discover site IDs, then use `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_write_chunk`, `vfs_mkdir`, `vfs_rename`, and `vfs_delete` for normal file operations. Virtual URIs never contain passwords or private keys.
+
+Use `vfs_write` for a single payload up to 4 MiB. For larger files, call `vfs_write_chunk` sequentially with each returned `nextOffset`; each chunk is limited to 1 MiB and the completed file to 32 MiB. Set `final: true` on the last call and provide the complete file SHA-256. Resource-capable clients can read nested `integterm-vfs` URIs returned by the tools directly.
 
 ### Over Network: Existing Operations and Virtual Workspace
 
@@ -126,6 +132,8 @@ This argument only allows multiple UI instances; the background service remains 
 ```
 
 The output is written to `dist/IntegTERM.app`. By default, the app uses an ad-hoc signature and does not enable App Sandbox, so it can be opened locally after the build finishes. You can also double-click `build.command` to build, or `run.command` to launch the built app; use `run.command --dev` for development mode.
+
+Without injected version data, every build derives `1.YY.MMDD build HHmm` from the current system time instead of reusing an old tag or `wails.json`. Reproducible builds may inject an ISO 8601 `BUILD_TIMESTAMP` or the standard `SOURCE_DATE_EPOCH`; `APP_MARKETING_VERSION`, `APP_BUILD_LABEL`, and `APP_BUNDLE_VERSION` can override the individual fields explicitly.
 
 ### Windows x64
 

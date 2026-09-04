@@ -60,7 +60,7 @@ func (a *App) buildMCPNetworkContractMarkdown() (string, error) {
 
 	var builder strings.Builder
 	builder.WriteString("# IntegTERM MCP Server\n\n")
-	builder.WriteString("IntegTERM provides a local VFS MCP contract over stdio and an optional standard Model Context Protocol server over Streamable HTTP. Network MCP clients discover and call tools through the endpoint below; no API token or custom authentication header is required.\n\n")
+	builder.WriteString("IntegTERM provides a local VFS MCP contract over stdio and an optional standard Model Context Protocol server over Streamable HTTP. Network MCP clients discover and call tools through the endpoint below; clients connected to the same running endpoint share that service's RAM workspace. No API token or custom authentication header is required.\n\n")
 	builder.WriteString("## Connection\n\n")
 	builder.WriteString("- Transport: `streamable-http`\n")
 	builder.WriteString("- MCP URL: `" + mcpURL + "`\n")
@@ -90,8 +90,10 @@ func (a *App) buildMCPNetworkContractMarkdown() (string, error) {
 	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
 	builder.WriteString("- Saved sites namespace: `" + mcpVFSRootURI + "/sites/{siteID}`\n")
 	builder.WriteString("- External clients connect through the MCP URL above; the `integterm-vfs` URI identifies resources inside that MCP connection and is not a transport endpoint.\n")
-	builder.WriteString("- Call `vfs_connect` with a saved-site URI before remote operations, or let the first remote `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_mkdir`, `vfs_rename`, or `vfs_delete` call connect lazily.\n")
+	builder.WriteString("- Use this optional HTTP service when multiple agents must share one server-side RAM workspace; every participating agent must connect to this same running endpoint.\n")
+	builder.WriteString("- Call `vfs_connect` with a saved-site URI before remote operations, or let the first remote `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_write_chunk`, `vfs_mkdir`, `vfs_rename`, or `vfs_delete` call connect lazily.\n")
 	builder.WriteString("- Paths outside the `sites` namespace remain bounded RAM files and are cleared when the background service stops.\n\n")
+	writeMCPVFSAgentGuide(&builder)
 	builder.WriteString("## Available Tools\n\n")
 	builder.WriteString("| Tool | Description |\n")
 	builder.WriteString("| --- | --- |\n")
@@ -134,7 +136,7 @@ func (a *App) buildMCPLocalContractMarkdown() (string, error) {
 
 	var builder strings.Builder
 	builder.WriteString("# IntegTERM Virtual Workspace Contract\n\n")
-	builder.WriteString("This contract defines a virtual filesystem spanning bounded RAM paths and saved remote-site mounts. Local MCP clients should start the application with the `mcp` argument and communicate over stdio. The `integterm-vfs` URI identifies resources inside that MCP connection; it is not a command or network endpoint.\n\n")
+	builder.WriteString("This contract defines a virtual filesystem spanning bounded RAM paths and saved remote-site mounts. Local MCP clients should start the compiled application with the `mcp` argument and communicate over stdio. This runs a headless MCP server; it does not require the source tree or open the desktop UI. Each stdio client owns an independent MCP process and RAM workspace, not a shared file on disk. The `integterm-vfs` URI identifies resources inside that MCP connection; it is not a command or network endpoint.\n\n")
 	builder.WriteString("## Local MCP Connection\n\n")
 	builder.WriteString("- Transport: `stdio`\n")
 	builder.WriteString("- Executable: `" + stdioExecutable + "`\n")
@@ -148,9 +150,11 @@ func (a *App) buildMCPLocalContractMarkdown() (string, error) {
 	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
 	builder.WriteString("- Local VFS MCP: `available through the stdio command above`\n")
 	builder.WriteString(fmt.Sprintf("- HTTP MCP server: `%t`\n", status.Enabled))
-	builder.WriteString("- RAM paths: any path outside `sites`; data is cleared when the background service stops\n")
+	builder.WriteString("- RAM paths: any path outside `sites`; data belongs to this stdio MCP process and is cleared when the process stops\n")
 	builder.WriteString("- Saved sites namespace: `" + mcpVFSRootURI + "/sites/{siteID}`\n")
-	builder.WriteString("- Remote paths: descendants of a saved-site URI, resolved relative to that site's configured remote root\n\n")
+	builder.WriteString("- Remote paths: descendants of a saved-site URI, resolved relative to that site's configured remote root\n")
+	builder.WriteString("- Shared RAM option: enable Streamable HTTP only when multiple agents must connect to the same server-side workspace\n\n")
+	writeMCPVFSAgentGuide(&builder)
 
 	builder.WriteString("## Available Tools\n\n")
 	builder.WriteString("| Tool | Description |\n")
@@ -161,34 +165,94 @@ func (a *App) buildMCPLocalContractMarkdown() (string, error) {
 
 	builder.WriteString("\n## Resources\n\n")
 	builder.WriteString("- Root resource: `" + mcpVFSRootURI + "`\n")
-	builder.WriteString("- File resource template: `integterm-vfs://workspace/mcp/{path}`\n")
+	builder.WriteString("- File resource template: `integterm-vfs://workspace/mcp/{+path}` (`+` allows nested paths)\n")
 	builder.WriteString("- Saved site root: `integterm-vfs://workspace/mcp/sites/{siteID}`\n")
 	builder.WriteString("- Remote file: `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`\n")
 	builder.WriteString("- Use the virtual URI returned by `vfs_list`, `vfs_stat`, and `vfs_read`; remote URIs never expose credentials.\n\n")
 
 	builder.WriteString("## Usage Rules\n\n")
 	builder.WriteString("- Connect the MCP client through stdio using the `mcp` command before using any virtual URI; the URI is not itself a transport.\n")
+	builder.WriteString("- Do not expect RAM paths from one stdio MCP process to appear in another process; use one shared Streamable HTTP endpoint when cross-agent RAM sharing is required.\n")
 	builder.WriteString("- Call `tools/list`, then call `vfs_list` with an empty path or the root URI to inspect the workspace.\n")
 	builder.WriteString("- Call `vfs_list` on `sites` to discover saved site IDs without exposing passwords.\n")
 	builder.WriteString("- Call `vfs_connect` with a saved-site URI, or let the first remote VFS operation connect lazily.\n")
 	builder.WriteString("- Use relative virtual paths or `integterm-vfs://workspace/mcp/...` URIs; cross-site rename is rejected.\n")
-	builder.WriteString("- VFS content reads and writes are bounded to 4 MiB per file; use the network transfer tools for larger files.\n")
+	builder.WriteString("- Inline `vfs_write` calls are bounded to 4 MiB; use verified `vfs_write_chunk` calls for files up to 32 MiB and network transfer tools beyond that limit.\n")
 	builder.WriteString("- SSH and Telnet terminal sessions remain explicit network tools because they are streams rather than filesystem resources.\n")
 
 	return builder.String(), nil
 }
 
+func writeMCPVFSAgentGuide(builder *strings.Builder) {
+	builder.WriteString("## VFS Agent Quick Start\n\n")
+	builder.WriteString("The MCP `initialize` response contains the canonical VFS instructions, while `tools/list` contains the current input and output schemas. These two protocol responses are sufficient for operation; an Agent does not need to inspect IntegTERM source code.\n\n")
+	builder.WriteString("1. Call `vfs_workspace_info` with an empty argument object.\n")
+	builder.WriteString("2. Call `vfs_list` with `{}` to list the workspace root.\n")
+	builder.WriteString("3. For RAM work, use a normal relative path such as `notes/todo.txt`.\n")
+	builder.WriteString("4. For remote work, list `sites`, reuse a returned `siteID` path or URI, and optionally call `vfs_connect`. Remote file tools also connect lazily.\n")
+	builder.WriteString("5. Reuse the `path` or `uri` returned by VFS tools instead of constructing host paths or guessing identifiers.\n\n")
+
+	builder.WriteString("### Path Model\n\n")
+	builder.WriteString("| Path passed to a VFS tool | Meaning |\n")
+	builder.WriteString("| --- | --- |\n")
+	builder.WriteString("| omitted, empty, or `" + mcpVFSRootURI + "` | RAM workspace root |\n")
+	builder.WriteString("| `notes/file.txt` | RAM file or directory |\n")
+	builder.WriteString("| `sites` | Saved remote-site list |\n")
+	builder.WriteString("| `sites/{siteID}` | Saved site's configured remote root |\n")
+	builder.WriteString("| `sites/{siteID}/{relativePath}` | Remote file or directory below that root |\n\n")
+	builder.WriteString("The `integterm-vfs://` URI is carried inside an established MCP connection. It is not an HTTP URL, shell command, absolute local path, or absolute remote path.\n\n")
+
+	builder.WriteString("### `tools/call` Parameter Examples\n\n")
+	builder.WriteString("Discover the contract and root:\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString("{\"name\":\"vfs_workspace_info\",\"arguments\":{}}\n")
+	builder.WriteString("{\"name\":\"vfs_list\",\"arguments\":{}}\n")
+	builder.WriteString("```\n\n")
+	builder.WriteString("Create and read a RAM file:\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString("{\"name\":\"vfs_write\",\"arguments\":{\"path\":\"notes/todo.txt\",\"content\":\"hello\",\"encoding\":\"utf-8\"}}\n")
+	builder.WriteString("{\"name\":\"vfs_read\",\"arguments\":{\"path\":\"notes/todo.txt\"}}\n")
+	builder.WriteString("```\n\n")
+	builder.WriteString("Write a larger file in verified sequential chunks (SHA-256 shown is for `hello world`):\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString("{\"name\":\"vfs_write_chunk\",\"arguments\":{\"path\":\"artifacts/example.bin\",\"offset\":0,\"content\":\"hello \",\"encoding\":\"utf-8\",\"final\":false}}\n")
+	builder.WriteString("{\"name\":\"vfs_write_chunk\",\"arguments\":{\"path\":\"artifacts/example.bin\",\"offset\":6,\"content\":\"world\",\"encoding\":\"utf-8\",\"final\":true,\"sha256\":\"b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9\"}}\n")
+	builder.WriteString("```\n\n")
+	builder.WriteString("Discover and use a remote site (replace `{siteID}` with the returned ID):\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString("{\"name\":\"vfs_list\",\"arguments\":{\"path\":\"sites\"}}\n")
+	builder.WriteString("{\"name\":\"vfs_connect\",\"arguments\":{\"path\":\"sites/{siteID}\"}}\n")
+	builder.WriteString("{\"name\":\"vfs_list\",\"arguments\":{\"path\":\"sites/{siteID}\"}}\n")
+	builder.WriteString("{\"name\":\"vfs_read\",\"arguments\":{\"path\":\"sites/{siteID}/config/app.yml\"}}\n")
+	builder.WriteString("```\n\n")
+	builder.WriteString("Continue a truncated read using `offset + returnedBytes` from the previous result:\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString("{\"name\":\"vfs_read\",\"arguments\":{\"path\":\"notes/large.txt\",\"offset\":262144,\"limit\":262144}}\n")
+	builder.WriteString("```\n\n")
+
+	builder.WriteString("### Operation Rules and Troubleshooting\n\n")
+	builder.WriteString("- `vfs_write` defaults to UTF-8 and accepts one decoded payload up to 4 MiB. Set `encoding` to `base64` for binary data and `overwrite` to `true` when replacing an existing file.\n")
+	builder.WriteString("- `vfs_write_chunk` accepts decoded chunks up to 1 MiB and completed files up to 32 MiB. Start at offset 0, reuse each returned `nextOffset`, and provide the full decoded file SHA-256 with `final: true`. A failed hash discards the staged write.\n")
+	builder.WriteString("- `vfs_delete` requires `recursive: true` for a non-empty directory. The workspace root, `sites`, and saved-site roots cannot be deleted.\n")
+	builder.WriteString("- `vfs_rename` works only within RAM or within one saved-site mount. It cannot cross RAM and remote storage or cross sites.\n")
+	builder.WriteString(fmt.Sprintf("- The RAM workspace is limited to %d bytes, one inline write to %d bytes, one chunked file to %d bytes, and one `vfs_read` or write-chunk payload to %d bytes. The default read size is %d bytes.\n", mcpVFSTotalSize, mcpVFSMaxFileSize, mcpVFSMaxChunkedFile, mcpVFSMaxReadSize, mcpVFSDefaultReadSize))
+	builder.WriteString("- If a path is rejected, call `vfs_list` again and reuse a returned relative `path` or full `uri`. Do not substitute a host filesystem path.\n")
+	builder.WriteString("- If a remote site is unavailable, list `sites` to verify the saved ID, then call `vfs_connect` to surface the connection error explicitly.\n")
+	builder.WriteString("- Use `resources/read` only for a known file URI. Use `vfs_read` for chunking, files over 1 MiB, and explicit encoding metadata.\n\n")
+}
+
 func buildMCPVFSToolDocs() []mcpToolDoc {
 	return []mcpToolDoc{
-		{Name: "vfs_workspace_info", Description: "Read the workspace URI, RAM limits, saved-site count, and active mount count."},
-		{Name: "vfs_list", Description: "List RAM entries, saved sites, or files in a mounted remote directory."},
-		{Name: "vfs_connect", Description: "Connect a saved site by its `integterm-vfs` site URI."},
-		{Name: "vfs_stat", Description: "Read metadata for a RAM or mounted remote file or directory."},
-		{Name: "vfs_read", Description: "Read bounded UTF-8 or base64 content from a RAM or remote file."},
-		{Name: "vfs_write", Description: "Write UTF-8 or base64 content to a RAM or remote file."},
-		{Name: "vfs_mkdir", Description: "Create a RAM or remote directory."},
-		{Name: "vfs_rename", Description: "Rename an entry within one RAM namespace or saved-site mount."},
-		{Name: "vfs_delete", Description: "Delete a RAM or remote file or directory."},
+		{Name: "vfs_workspace_info", Description: "First VFS call. Returns the root URI, complete path model, next discovery call, RAM limits, saved-site count, and active mount count."},
+		{Name: "vfs_list", Description: "List immediate children. Use `{}` for the root, `sites` for saved site IDs, or a returned RAM/remote path. Returns namespace kind and next action."},
+		{Name: "vfs_connect", Description: "Explicitly connect a saved-site path returned by `vfs_list`; optional because remote file operations also connect lazily."},
+		{Name: "vfs_stat", Description: "Read normalized metadata for one known RAM or remote file or directory."},
+		{Name: "vfs_read", Description: "Read UTF-8 or base64 content in chunks; continue at `offset + returnedBytes` while `truncated` is true."},
+		{Name: "vfs_write", Description: "Create one UTF-8 or base64 payload up to 4 MiB; an existing destination requires `overwrite: true`."},
+		{Name: "vfs_write_chunk", Description: "Stage sequential chunks up to 1 MiB each and commit a file up to 32 MiB after final SHA-256 verification."},
+		{Name: "vfs_mkdir", Description: "Create a RAM or remote directory; RAM parent directories are created automatically."},
+		{Name: "vfs_rename", Description: "Rename only within RAM or one saved-site mount; cross-namespace and cross-site moves are rejected."},
+		{Name: "vfs_delete", Description: "Delete a file or directory; a non-empty directory requires `recursive: true`."},
 	}
 }
 
