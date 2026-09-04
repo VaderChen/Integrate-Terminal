@@ -291,6 +291,7 @@ export namespace model {
 	    keyType: string;
 	    fingerprintSHA256: string;
 	    authorizedKey: string;
+	    replacesExisting: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new HostTrustPrompt(source);
@@ -304,6 +305,7 @@ export namespace model {
 	        this.keyType = source["keyType"];
 	        this.fingerprintSHA256 = source["fingerprintSHA256"];
 	        this.authorizedKey = source["authorizedKey"];
+	        this.replacesExisting = source["replacesExisting"];
 	    }
 	}
 	

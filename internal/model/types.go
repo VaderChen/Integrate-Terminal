@@ -151,4 +151,5 @@ type HostTrustPrompt struct {
 	KeyType           string `json:"keyType"`
 	FingerprintSHA256 string `json:"fingerprintSHA256"`
 	AuthorizedKey     string `json:"authorizedKey"`
+	ReplacesExisting  bool   `json:"replacesExisting,omitempty"`
 }

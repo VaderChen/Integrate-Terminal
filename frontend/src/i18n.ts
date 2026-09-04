@@ -281,7 +281,7 @@ export type Messages = {
   terminalScaleResetConfirm: string;
   terminalOpenSFTP: string;
   hostTrustLabel: string;
-  hostTrustDescription: (host: string, port: number) => string;
+  hostTrustDescription: (host: string, port: number, replacesExisting: boolean) => string;
   hostTrustFingerprint: string;
   hostTrustKeyType: string;
   hostTrustHint: string;

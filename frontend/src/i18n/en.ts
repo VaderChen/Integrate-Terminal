@@ -274,10 +274,12 @@ export const enMessages: Messages = {
     terminalScaleResetConfirm: 'Reset the whole window back to the default 1:1 scale?',
     terminalOpenSFTP: 'Open SFTP',
     hostTrustLabel: 'Trust Host',
-    hostTrustDescription: (host, port) => `This is your first connection to ${host}:${port}. Verify the host key fingerprint before trusting it.`,
+    hostTrustDescription: (host, port, replacesExisting) => replacesExisting
+      ? `The host key fingerprint for ${host}:${port} has changed. Verify the new fingerprint with the host administrator before approving it again.`
+      : `This is your first connection to ${host}:${port}. Verify the host key fingerprint before trusting it.`,
     hostTrustFingerprint: 'SHA256 Fingerprint',
     hostTrustKeyType: 'Key Type',
-    hostTrustHint: 'Approving will add this host to ~/.ssh/known_hosts and retry the connection.',
+    hostTrustHint: 'Approving updates IntegTERM’s host trust record and retries the connection.',
     hostTrustApprove: 'Trust and Connect',
     confirmUploadToSSH: 'Confirm SSH Upload',
     confirmUploadToSSHDescription: (count, remotePath) => `Upload ${count} item(s) to ${remotePath}?`,

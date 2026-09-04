@@ -152,4 +152,5 @@ export type HostTrustPrompt = {
   keyType: string;
   fingerprintSHA256: string;
   authorizedKey: string;
+  replacesExisting?: boolean;
 };

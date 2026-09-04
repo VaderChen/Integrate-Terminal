@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 
-"github.com/VaderChen/Integrate-Terminal/internal/keystore"
+	"github.com/VaderChen/Integrate-Terminal/internal/keystore"
 )
 
 // SignerFromPPK 讀取 PPK 私鑰。
@@ -52,6 +52,7 @@ type HostTrustRequiredError struct {
 	KeyType           string `json:"keyType"`
 	FingerprintSHA256 string `json:"fingerprintSHA256"`
 	AuthorizedKey     string `json:"authorizedKey"`
+	ReplacesExisting  bool   `json:"replacesExisting,omitempty"`
 }
 
 func (e *HostTrustRequiredError) Error() string {
@@ -82,7 +83,7 @@ func KnownHostsCallback() (ssh.HostKeyCallback, error) {
 				return nil
 			} else {
 				var keyErr *knownhosts.KeyError
-				if errors.As(err, &keyErr) && len(keyErr.Want) == 0 {
+				if errors.As(err, &keyErr) {
 					host, port, hostPattern := resolveHostTrustTarget(hostname, remote.String())
 					return &HostTrustRequiredError{
 						Host:              host,
@@ -91,6 +92,7 @@ func KnownHostsCallback() (ssh.HostKeyCallback, error) {
 						KeyType:           key.Type(),
 						FingerprintSHA256: ssh.FingerprintSHA256(key),
 						AuthorizedKey:     strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
+						ReplacesExisting:  len(keyErr.Want) > 0,
 					}
 				}
 				return err
@@ -184,25 +186,66 @@ func ApproveHost(hostPattern string, authorizedKey string) error {
 	if err != nil {
 		return fmt.Errorf("read known_hosts: %w", err)
 	}
-	if strings.Contains(string(existing), line) {
+	updated, changed := replaceKnownHostEntry(string(existing), hostPattern, publicKey, line)
+	if !changed {
 		return nil
 	}
-
-	file, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("open known_hosts: %w", err)
-	}
-	defer file.Close()
-
-	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
-		if _, err := file.WriteString("\n"); err != nil {
-			return fmt.Errorf("append newline to known_hosts: %w", err)
-		}
-	}
-	if _, err := file.WriteString(line + "\n"); err != nil {
-		return fmt.Errorf("append host to known_hosts: %w", err)
+	if err := os.WriteFile(knownHostsPath, []byte(updated), 0o600); err != nil {
+		return fmt.Errorf("write known_hosts: %w", err)
 	}
 	return nil
+}
+
+func replaceKnownHostEntry(existing, hostPattern string, publicKey ssh.PublicKey, replacement string) (string, bool) {
+	keyType := publicKey.Type()
+	lines := strings.Split(existing, "\n")
+	if strings.HasSuffix(existing, "\n") {
+		lines = lines[:len(lines)-1]
+	}
+	updated := make([]string, 0, len(lines)+1)
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			updated = append(updated, line)
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 || fields[1] != keyType {
+			updated = append(updated, line)
+			continue
+		}
+
+		patterns := strings.Split(fields[0], ",")
+		remaining := make([]string, 0, len(patterns))
+		matched := false
+		for _, pattern := range patterns {
+			if pattern == hostPattern {
+				matched = true
+				continue
+			}
+			remaining = append(remaining, pattern)
+		}
+		if !matched {
+			updated = append(updated, line)
+			continue
+		}
+
+		if len(remaining) > 0 {
+			updated = append(updated, strings.Join(remaining, ",")+" "+strings.Join(fields[1:], " "))
+		}
+	}
+
+	updated = appendKnownHostLine(updated, replacement)
+	result := strings.Join(updated, "\n")
+	result += "\n"
+	return result, result != existing
+}
+
+func appendKnownHostLine(lines []string, replacement string) []string {
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return append(lines, replacement)
 }
 
 func splitHostPort(address string) (string, int) {
