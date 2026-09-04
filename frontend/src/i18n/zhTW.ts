@@ -274,10 +274,12 @@ export const zhTWMessages: Messages = {
     terminalScaleResetConfirm: '要將整個視窗重設回 1:1 預設比例嗎？',
     terminalOpenSFTP: '開啟 SFTP',
     hostTrustLabel: '信任主機',
-    hostTrustDescription: (host, port) => `這是你第一次連線到 ${host}:${port}。請確認主機金鑰指紋後再決定是否信任。`,
+    hostTrustDescription: (host, port, replacesExisting) => replacesExisting
+      ? `${host}:${port} 的主機金鑰指紋已變更。請先向主機管理者確認新指紋，再重新核准連線。`
+      : `這是你第一次連線到 ${host}:${port}。請確認主機金鑰指紋後再決定是否信任。`,
     hostTrustFingerprint: 'SHA256 指紋',
     hostTrustKeyType: '金鑰類型',
-    hostTrustHint: '核准後會把這台主機寫入 ~/.ssh/known_hosts，並重新嘗試連線。',
+    hostTrustHint: '核准後會更新 IntegTERM 的主機信任紀錄，並重新嘗試連線。',
     hostTrustApprove: '信任並連線',
     confirmUploadToSSH: '確認上傳到 SSH',
     confirmUploadToSSHDescription: (count, remotePath) => `要把 ${count} 個項目上傳到 ${remotePath} 嗎？`,

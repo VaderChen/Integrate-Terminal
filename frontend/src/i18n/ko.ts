@@ -274,10 +274,12 @@ export const koMessages: Messages = {
     terminalScaleResetConfirm: '창 전체를 기본 1:1 비율로 되돌릴까요?',
     terminalOpenSFTP: 'SFTP 열기',
     hostTrustLabel: '호스트 신뢰',
-    hostTrustDescription: (host, port) => `${host}:${port}에 처음 연결합니다. 신뢰하기 전에 호스트 키 지문을 확인하세요.`,
+    hostTrustDescription: (host, port, replacesExisting) => replacesExisting
+      ? `${host}:${port}의 호스트 키 지문이 변경되었습니다. 다시 승인하기 전에 호스트 관리자에게 새 지문을 확인하세요.`
+      : `${host}:${port}에 처음 연결합니다. 신뢰하기 전에 호스트 키 지문을 확인하세요.`,
     hostTrustFingerprint: 'SHA256 지문',
     hostTrustKeyType: '키 유형',
-    hostTrustHint: '승인하면 ~/.ssh/known_hosts에 추가한 뒤 연결을 다시 시도합니다.',
+    hostTrustHint: '승인하면 IntegTERM의 호스트 신뢰 기록을 업데이트하고 연결을 다시 시도합니다.',
     hostTrustApprove: '신뢰 후 연결',
     confirmUploadToSSH: 'SSH 업로드 확인',
     confirmUploadToSSHDescription: (count, remotePath) => `${count}개 항목을 ${remotePath}에 업로드할까요?`,

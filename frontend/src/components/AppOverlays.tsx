@@ -171,7 +171,11 @@ export function HostTrustModal({ dialog, locale, onApprove, onClose }: HostTrust
         </div>
         <div className="settings-body connect-choice-body">
           <p className="action-message connect-choice-message">
-            {t.hostTrustDescription(dialog.prompt.host, dialog.prompt.port)}
+            {t.hostTrustDescription(
+              dialog.prompt.host,
+              dialog.prompt.port,
+              dialog.prompt.replacesExisting ?? false,
+            )}
           </p>
           <div className="host-trust-details">
             <strong>{t.hostTrustFingerprint}</strong>

@@ -274,10 +274,12 @@ export const jaMessages: Messages = {
     terminalScaleResetConfirm: 'ウィンドウ全体を既定の 1:1 サイズに戻しますか？',
     terminalOpenSFTP: 'SFTP を開く',
     hostTrustLabel: 'ホストを信頼',
-    hostTrustDescription: (host, port) => `${host}:${port} への初回接続です。信頼する前にホスト鍵のフィンガープリントを確認してください。`,
+    hostTrustDescription: (host, port, replacesExisting) => replacesExisting
+      ? `${host}:${port} のホスト鍵フィンガープリントが変更されています。再承認する前に、ホスト管理者へ新しいフィンガープリントを確認してください。`
+      : `${host}:${port} への初回接続です。信頼する前にホスト鍵のフィンガープリントを確認してください。`,
     hostTrustFingerprint: 'SHA256 フィンガープリント',
     hostTrustKeyType: '鍵タイプ',
-    hostTrustHint: '承認すると ~/.ssh/known_hosts に追加され、接続を再試行します。',
+    hostTrustHint: '承認すると IntegTERM のホスト信頼記録が更新され、接続を再試行します。',
     hostTrustApprove: '信頼して接続',
     confirmUploadToSSH: 'SSH へアップロード確認',
     confirmUploadToSSHDescription: (count, remotePath) => `${count} 件を ${remotePath} にアップロードしますか？`,

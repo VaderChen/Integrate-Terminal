@@ -27,6 +27,12 @@
 
 程式會在第一次啟動時嘗試搬移舊沙盒版的站台、設定、known hosts、PPK 副本與 REST API token。公開原始碼不包含任何 Apple 簽章憑證、Provisioning Profile、私鑰或個人站台資料。
 
+## 站台與 SSH 主機信任
+
+編輯站台時，「收藏站台」位於表單右下方，並使用與「設定」頁一致的 Switch 控制。第一次建立 SSH／SFTP 連線時，或已儲存的主機指紋與伺服器目前指紋不同時，IntegTERM 會顯示主機信任視窗，要求先核對 SHA-256 指紋。
+
+只有使用者按下核准後才會更新主機信任紀錄。重新核准會取代同一主機與同一金鑰類型的舊紀錄；取消則保留原紀錄並中止連線。若伺服器近期沒有經過確認的換鑰或重建，請先向主機管理者核對新指紋，不要直接核准。
+
 ## MCP 整合（VFS 預設啟用）
 
 IntegTERM 內建本機 VFS MCP（stdio）與可選的 Streamable HTTP MCP。虛擬層統一 RAM 工作區與已儲存遠端站台的資源路徑。`integterm-vfs://` 是 MCP 連線內的 Resource URI／工具路徑，不是可直接連線的 URL。

@@ -27,6 +27,12 @@ The open source edition does not use StoreKit, limit the number of connections, 
 
 On first launch, the application attempts to migrate sites, settings, known hosts, PPK copies, and the REST API token from the previous sandboxed edition. The public source code does not include Apple signing certificates, provisioning profiles, private keys, or personal site data.
 
+## Sites and SSH Host Trust
+
+In the site editor, **Favorite Site** is placed at the bottom-right of the form and uses the same Switch control as **Settings**. On the first SSH/SFTP connection, or when a saved host fingerprint differs from the server's current fingerprint, IntegTERM shows a host-trust dialog and asks you to verify the SHA-256 fingerprint.
+
+The host-trust record changes only after you approve it. Re-approval replaces the old entry for the same host and key type; cancelling keeps the existing record and aborts the connection. If the server was not recently rebuilt or its host key was not intentionally rotated, verify the new fingerprint with the host administrator before approving it.
+
 ## MCP Integration (VFS enabled by default)
 
 IntegTERM includes a local VFS MCP server over stdio and an optional Streamable HTTP MCP server. A virtual layer unifies RAM workspace resources with saved remote-site mounts. The `integterm-vfs://` value is a resource URI and tool path inside an MCP connection, not a URL that an agent can connect to directly.

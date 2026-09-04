@@ -274,10 +274,12 @@ export const zhCNMessages: Messages = {
     terminalScaleResetConfirm: '要将整个窗口重设回 1:1 默认比例吗？',
     terminalOpenSFTP: '开启 SFTP',
     hostTrustLabel: '信任主机',
-    hostTrustDescription: (host, port) => `这是你第一次连接到 ${host}:${port}。请确认主机密钥指纹后再决定是否信任。`,
+    hostTrustDescription: (host, port, replacesExisting) => replacesExisting
+      ? `${host}:${port} 的主机密钥指纹已变更。请先向主机管理员确认新指纹，再重新核准连接。`
+      : `这是你第一次连接到 ${host}:${port}。请确认主机密钥指纹后再决定是否信任。`,
     hostTrustFingerprint: 'SHA256 指纹',
     hostTrustKeyType: '密钥类型',
-    hostTrustHint: '核准后会把这台主机写入 ~/.ssh/known_hosts，并重新尝试连接。',
+    hostTrustHint: '核准后会更新 IntegTERM 的主机信任记录，并重新尝试连接。',
     hostTrustApprove: '信任并连接',
     confirmUploadToSSH: '确认上传到 SSH',
     confirmUploadToSSHDescription: (count, remotePath) => `要把 ${count} 个项目上传到 ${remotePath} 吗？`,

@@ -100,14 +100,6 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
                 placeholder={t.placeholderTags}
               />
             </label>
-            <label className="form-checkbox-label">
-              <span>{t.fieldFavorite}</span>
-              <input
-                type="checkbox"
-                checked={draft.favorite ?? false}
-                onChange={(e) => update('favorite', e.target.checked)}
-              />
-            </label>
             <label>
               <span>{t.fieldProtocol}</span>
               <div className="select-shell">
@@ -203,6 +195,21 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
             <label>
               <span>{t.fieldRemotePath}</span>
               <input {...textInputProps} value={draft.remotePath} onChange={(e) => update('remotePath', e.target.value)} />
+            </label>
+            <label className="form-switch-label">
+              <span>{t.fieldFavorite}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={draft.favorite ?? false}
+                aria-label={t.fieldFavorite}
+                className={`ios-switch ${draft.favorite ? 'active' : ''}`}
+                onClick={() => update('favorite', !(draft.favorite ?? false))}
+                title={draft.favorite ? t.settingsOn : t.settingsOff}
+              >
+                <span className="ios-switch-track" />
+                <span className="ios-switch-thumb" />
+              </button>
             </label>
           </div>
 

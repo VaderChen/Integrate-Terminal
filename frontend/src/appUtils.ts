@@ -125,7 +125,8 @@ export function extractHostTrustPrompt(error: unknown): HostTrustPrompt | null {
       typeof payload.hostPattern === 'string' &&
       typeof payload.keyType === 'string' &&
       typeof payload.fingerprintSHA256 === 'string' &&
-      typeof payload.authorizedKey === 'string'
+      typeof payload.authorizedKey === 'string' &&
+      (typeof payload.replacesExisting === 'undefined' || typeof payload.replacesExisting === 'boolean')
     ) {
       return payload;
     }
