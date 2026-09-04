@@ -46,6 +46,8 @@ IntegTERM は stdio のローカル VFS MCP と、オプションの Streamable 
 }
 ```
 
+この設定は、コンパイル済みの IntegTERM 実行ファイルをヘッドレス MCP モードで直接起動します。ソースツリーは不要で、デスクトップ UI も開きません。各 stdio クライアントは独立した MCP プロセスと RAM ワークスペースを起動して所有するため、このワークスペースはディスク上の共有ファイルではなく、他の Agent と自動的に共有されることもありません。
+
 ソースから実行する場合は `go run . mcp` を使用します。接続後に `tools/list` を呼び出し、空の path または `integterm-vfs://workspace/mcp` を指定して `vfs_list` を使用してください。この URI を HTTP URL 欄に入れたり、shell コマンドとして実行したりしないでください。
 
 ### Agent の呼び出し手順
@@ -55,7 +57,9 @@ IntegTERM は stdio のローカル VFS MCP と、オプションの Streamable 
 1. `tools/list` を呼び出して現在のツールスキーマを取得します。
 2. `vfs_workspace_info` を呼び出してルート URI とワークスペース制限を確認します。
 3. `path` を省略した `vfs_list`（または `integterm-vfs://workspace/mcp`）でルートを一覧表示します。
-4. ファイル操作には `vfs_stat`、`vfs_read`、`vfs_write` などを使用します。MCP Resources に対応するクライアントだけが Resource URI に `resources/read` を使用します。
+4. ファイル操作には `vfs_stat`、`vfs_read`、`vfs_write`、`vfs_write_chunk` などを使用します。MCP Resources に対応するクライアントだけが Resource URI に `resources/read` を使用します。
+
+MCP の `initialize` 応答には完全な VFS ワークフローが含まれ、`tools/list` には現在の入出力スキーマが含まれます。これらが Agent の正式な操作基準であり、IntegTERM のソースコードを調べる必要はありません。
 
 `integterm-vfs://workspace/mcp` は接続を開始する URL ではなく、shell コマンドとして実行するものでもありません。
 
@@ -63,13 +67,15 @@ IntegTERM は stdio のローカル VFS MCP と、オプションの Streamable 
 
 1. IntegTERM を起動し、**設定** → **MCP** を開きます。
 2. ローカル VFS MCP は stdio で既定提供され、ネットワークポートは待ち受けません。
-3. 外部 Agent が接続する場合のみ HTTP MCP Server を有効にします。デフォルトのポートは `18080`、許可リストは `127.0.0.1`、エンドポイントは `http://127.0.0.1:18080/mcp` です。
+3. 外部 Agent が接続する場合、または複数の Agent が同じサーバー側 RAM ワークスペースを共有する場合のみ HTTP MCP Server を有効にします。すべての Agent は同じエンドポイントへ接続する必要があります。デフォルトのポートは `18080`、許可リストは `127.0.0.1`、エンドポイントは `http://127.0.0.1:18080/mcp` です。
 
 ### 仮想ワークスペース: RAM とリモートサイト
 
-仮想ルート URI は `integterm-vfs://workspace/mcp` です。`sites` 名前空間以外のパスは RAM データ、`sites/{siteID}` は保存済みリモートサイトを表します。最初の `vfs_connect` またはファイル操作で接続を遅延確立します。RAM データはバックグラウンドサービス停止時に消去され、リモート操作はサイトに設定されたリモートルートへ直接適用されます。
+仮想ルート URI は `integterm-vfs://workspace/mcp` です。`sites` 名前空間以外のパスは RAM データ、`sites/{siteID}` は保存済みリモートサイトを表します。最初の `vfs_connect` またはファイル操作で接続を遅延確立します。RAM データは、そのデータを所有する stdio MCP プロセスまたは Streamable HTTP バックグラウンドサービスの停止時に消去されます。同じ HTTP MCP サービスに接続した Agent は、そのサービスの RAM ワークスペースを共有します。リモート操作はサイトに設定されたリモートルートへ直接適用されます。
 
-リモートサイトのパス形式は `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}` です。`sites` を一覧表示してサイト ID を取得し、`vfs_list`、`vfs_stat`、`vfs_read`、`vfs_write`、`vfs_mkdir`、`vfs_rename`、`vfs_delete` で通常のファイル操作を行います。仮想 URI にパスワードや秘密鍵が含まれることはありません。
+リモートサイトのパス形式は `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}` です。`sites` を一覧表示してサイト ID を取得し、`vfs_list`、`vfs_stat`、`vfs_read`、`vfs_write`、`vfs_write_chunk`、`vfs_mkdir`、`vfs_rename`、`vfs_delete` で通常のファイル操作を行います。仮想 URI にパスワードや秘密鍵が含まれることはありません。
+
+`vfs_write` は 4 MiB までの単一ペイロードに使用します。より大きなファイルは、返された `nextOffset` を使って `vfs_write_chunk` を順番に呼び出します。各 chunk は 1 MiB、完成ファイルは 32 MiB までで、最後の呼び出しでは `final: true` と完成ファイル全体の SHA-256 を指定します。Resources 対応クライアントは、ツールが返した入れ子の `integterm-vfs` URI を直接読み取れます。
 
 ### ネットワーク経由: 既存の操作と仮想ワークスペース
 
@@ -126,6 +132,8 @@ UI はデフォルトで単一インスタンスとして動作します。再�
 ```
 
 出力先は `dist/IntegTERM.app` です。デフォルトでは ad-hoc 署名を使用し、App Sandbox は有効にしないため、ビルド完了後にローカル環境で直接起動できます。`build.command` をダブルクリックしてビルドし、`run.command` でビルド済み App を起動できます。開発モードは `run.command --dev` を使用してください。
+
+バージョン情報を注入しない場合、各ビルドは古いタグや `wails.json` を再利用せず、現在のシステム時刻から `1.YY.MMDD build HHmm` を生成します。再現可能なビルドでは ISO 8601 形式の `BUILD_TIMESTAMP` または標準の `SOURCE_DATE_EPOCH` を注入でき、`APP_MARKETING_VERSION`、`APP_BUILD_LABEL`、`APP_BUNDLE_VERSION` で各項目を明示的に上書きできます。
 
 ### Windows x64
 

@@ -51,7 +51,16 @@ fi
 
 mkdir -p "./dist"
 WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
-APP_VERSION="$(node -p "require('./wails.json').info.productVersion")"
+
+BUILD_VERSION_JSON="$(node "./scripts/resolve-build-version.mjs" --sync)"
+build_version_field() {
+  node -e 'const value = JSON.parse(process.argv[1])[process.argv[2]]; process.stdout.write(String(value));' "$BUILD_VERSION_JSON" "$1"
+}
+APP_VERSION="$(build_version_field marketingVersion)"
+APP_BUILD_LABEL="$(build_version_field buildLabel)"
+APP_DISPLAY_VERSION="$(build_version_field displayVersion)"
+APP_BUNDLE_VERSION="$(build_version_field bundleVersion)"
+BUILD_TIME_SOURCE="$(build_version_field timeSource)"
 
 if [[ -z "$WAILS_VERSION" || "$WAILS_VERSION" == "<no value>" ]]; then
   echo "無法取得 Wails 版本。"
@@ -59,10 +68,15 @@ if [[ -z "$WAILS_VERSION" || "$WAILS_VERSION" == "<no value>" ]]; then
 fi
 
 export CGO_ENABLED=1
-export VITE_APP_VERSION="$APP_VERSION"
+export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
+export APP_MARKETING_VERSION="$APP_VERSION"
+export APP_BUILD_LABEL
+export APP_BUNDLE_VERSION
 
 echo "產生第三方授權清冊..."
 node "./scripts/generate-third-party-notices.mjs"
+echo "版本號：$APP_DISPLAY_VERSION"
+echo "時間來源：$BUILD_TIME_SOURCE"
 
 if [[ -z "${BUILD_COMMIT:-}" || -z "${BUILD_TAG:-}" || -z "${BUILD_STATE:-}" ]]; then
   if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then

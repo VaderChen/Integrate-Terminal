@@ -10,7 +10,6 @@ SYNC_WATCHER_PID=""
 export MACOSX_DEPLOYMENT_TARGET="12.0"
 export CGO_CFLAGS="-mmacosx-version-min=12.0"
 export CGO_LDFLAGS="-mmacosx-version-min=12.0"
-export VITE_APP_VERSION="1.$(date +%y).$(date +%m%d) build $(date +%H%M)"
 export COPYFILE_DISABLE=1
 export COPY_EXTENDED_ATTRIBUTES_DISABLE=1
 
@@ -61,6 +60,11 @@ for cmd in "${required_commands[@]}"; do
     exit 1
   fi
 done
+
+BUILD_VERSION_JSON="$(node "./scripts/resolve-build-version.mjs")"
+VITE_APP_VERSION="$(node -e 'const value = JSON.parse(process.argv[1]).displayVersion; process.stdout.write(String(value));' "$BUILD_VERSION_JSON")"
+export VITE_APP_VERSION
+echo "開發版本：$VITE_APP_VERSION"
 
 WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2 2>/dev/null || true)"
 if [[ -z "$WAILS_VERSION" || "$WAILS_VERSION" == "<no value>" ]]; then

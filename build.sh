@@ -41,29 +41,10 @@ if [[ -f "$HOME/.zshrc" ]]; then
   source "$HOME/.zshrc"
 fi
 
-APP_MARKETING_VERSION="${APP_MARKETING_VERSION:-1.$(date +%y).$(date +%m%d)}"
-APP_BUILD_LABEL="${APP_BUILD_LABEL:-$(date +%H%M)}"
-APP_DISPLAY_VERSION="$APP_MARKETING_VERSION build $APP_BUILD_LABEL"
-APP_BUNDLE_VERSION="${APP_BUNDLE_VERSION:-${APP_MARKETING_VERSION}${APP_BUILD_LABEL}}"
-
-if [[ ! "$APP_MARKETING_VERSION" =~ '^[0-9]+([.][0-9]+)*$' ]]; then
-  echo "APP_MARKETING_VERSION 格式錯誤：$APP_MARKETING_VERSION"
-  exit 1
-fi
-
-if [[ ! "$APP_BUNDLE_VERSION" =~ '^[0-9]+([.][0-9]+)*$' ]]; then
-  echo "APP_BUNDLE_VERSION 格式錯誤：$APP_BUNDLE_VERSION"
-  exit 1
-fi
-
 if [[ ! "$APP_BUNDLE_ID" =~ '^[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+$' ]]; then
   echo "APP_BUNDLE_ID 格式錯誤：$APP_BUNDLE_ID"
   exit 1
 fi
-
-export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
-export APP_MARKETING_VERSION
-export APP_BUNDLE_VERSION
 
 cleanup_appledouble() {
   local target_path="$1"
@@ -97,6 +78,22 @@ for cmd in "${required_commands[@]}"; do
   fi
 done
 
+echo "解析並同步產品版本..."
+BUILD_VERSION_JSON="$(node "./scripts/resolve-build-version.mjs" --sync)"
+build_version_field() {
+  node -e 'const value = JSON.parse(process.argv[1])[process.argv[2]]; process.stdout.write(String(value));' "$BUILD_VERSION_JSON" "$1"
+}
+APP_MARKETING_VERSION="$(build_version_field marketingVersion)"
+APP_BUILD_LABEL="$(build_version_field buildLabel)"
+APP_DISPLAY_VERSION="$(build_version_field displayVersion)"
+APP_BUNDLE_VERSION="$(build_version_field bundleVersion)"
+BUILD_TIME_SOURCE="$(build_version_field timeSource)"
+
+export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
+export APP_MARKETING_VERSION
+export APP_BUILD_LABEL
+export APP_BUNDLE_VERSION
+
 WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2 2>/dev/null || true)"
 if [[ -z "$WAILS_VERSION" || "$WAILS_VERSION" == "<no value>" ]]; then
   echo "無法取得 go.mod 指定的 Wails 版本。"
@@ -120,27 +117,9 @@ node "./scripts/generate-third-party-notices.mjs"
 echo "同步 App Icon..."
 "./sync-app-icon.sh"
 
-echo "同步產品版本..."
-node <<'EOF'
-const fs = require('fs');
-const path = require('path');
-
-const configPath = path.join(process.cwd(), 'wails.json');
-const serviceVersionPath = path.join(process.cwd(), 'internal', 'version', 'version.json');
-const appVersion = process.env.APP_MARKETING_VERSION || '1.00.00';
-const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-config.info = {
-  ...(config.info || {}),
-  productVersion: appVersion,
-};
-
-fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-fs.writeFileSync(serviceVersionPath, `${JSON.stringify({ productVersion: appVersion }, null, 2)}\n`);
-EOF
-
 echo "建置前端資產..."
 echo "版本號: $APP_DISPLAY_VERSION"
+echo "時間來源: $BUILD_TIME_SOURCE"
 cd "$FRONTEND_DIR"
 rm -rf dist
 npm run build

@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	appversion "github.com/VaderChen/Integrate-Terminal/internal/version"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -38,6 +39,9 @@ func newMCPVirtualLayer(a *App) *mcpVirtualLayer {
 		if vfs.remoteMounts == nil {
 			vfs.remoteMounts = make(map[string]mcpVFSRemoteMount)
 		}
+		if vfs.chunkWrites == nil {
+			vfs.chunkWrites = make(map[string]*mcpVFSChunkWrite)
+		}
 	}
 	return &mcpVirtualLayer{app: a, vfs: vfs}
 }
@@ -45,8 +49,10 @@ func newMCPVirtualLayer(a *App) *mcpVirtualLayer {
 func (layer *mcpVirtualLayer) newServer(contract mcpContract) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "integterm",
-		Version: "1.0.0",
-	}, nil)
+		Version: appversion.ProductVersion(),
+	}, &mcp.ServerOptions{
+		Instructions: mcpServerInstructions(contract),
+	})
 
 	switch contract {
 	case mcpContractLocal:
@@ -56,6 +62,28 @@ func (layer *mcpVirtualLayer) newServer(contract mcpContract) *mcp.Server {
 		addMCPVFSFeatures(server, layer)
 	}
 	return server
+}
+
+func mcpServerInstructions(contract mcpContract) string {
+	transport := "This local contract uses stdio: start the compiled IntegTERM executable with the single argument `mcp`. This runs a headless MCP server and does not require the source tree or open the desktop UI. Each stdio client owns an independent server process and RAM workspace; it is not a shared file on disk."
+	if contract == mcpContractNetwork {
+		transport = "This network contract uses Streamable HTTP through the configured `/mcp` endpoint. HTTP is disabled by default and must be enabled in IntegTERM settings before an external client connects or multiple clients need to share one server-side RAM workspace. Clients share RAM data only when they connect to the same running endpoint."
+	}
+
+	return strings.Join([]string{
+		"IntegTERM provides a virtual filesystem (VFS) that combines a bounded RAM workspace with saved remote-site mounts.",
+		transport,
+		"`integterm-vfs://workspace/mcp` is the VFS root resource identifier used inside this MCP session. It is not an HTTP endpoint, shell command, or host filesystem path.",
+		"Start every VFS task by calling `vfs_workspace_info` with `{}`, then call `vfs_list` with `{}` to list the root.",
+		"Path model: an empty path or the root URI selects the RAM workspace root; `notes/file.txt` selects a RAM file; `sites` lists saved remote sites; `sites/{siteID}` selects a remote root; `sites/{siteID}/{relativePath}` selects a remote file or directory.",
+		"Use relative VFS paths or full `integterm-vfs://workspace/mcp/...` URIs. Never substitute an absolute local path, a remote absolute path, or a guessed site name for a returned `siteID`.",
+		"For RAM work, call `vfs_write`, `vfs_write_chunk`, `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_mkdir`, `vfs_rename`, and `vfs_delete` directly. RAM parent directories are created automatically and RAM data is cleared when the service stops.",
+		"For remote work, call `vfs_list` with `path: \"sites\"`, reuse a returned site path or URI, then call `vfs_connect` or let the first remote file operation connect lazily. Remote changes apply directly under that saved site's configured remote root.",
+		"`vfs_write` accepts one inline payload up to 4 MiB. For larger content, call `vfs_write_chunk` sequentially with the returned `nextOffset`, set `final: true` on the last call, and provide the complete file SHA-256. Existing files require `overwrite: true` on the final call.",
+		"Chunked files are limited to 32 MiB. `vfs_read` returns at most 1 MiB per call and defaults to 256 KiB; when `truncated` is true, continue with `offset + returnedBytes`.",
+		"`vfs_delete` requires `recursive: true` for a non-empty directory. `vfs_rename` cannot cross between RAM and a site or between two sites.",
+		"Use `resources/read` only for a known file URI and only when the client supports MCP Resources. Prefer VFS tools for discovery, directory traversal, writes, large reads, and explicit error handling.",
+	}, "\n")
 }
 
 func (layer *mcpVirtualLayer) addNetworkFeatures(server *mcp.Server) {

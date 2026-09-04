@@ -28,17 +28,23 @@ try {
         throw "無法取得 Wails 版本。"
     }
 
-    $AppVersion = (& node -p "require('./wails.json').info.productVersion").Trim()
+    $BuildVersionJson = (& node ".\scripts\resolve-build-version.mjs" --sync)
     if ($LASTEXITCODE -ne 0) {
-        throw "無法取得應用程式版本。"
+        throw "無法解析應用程式版本。"
     }
+    $BuildVersion = $BuildVersionJson | ConvertFrom-Json
+    $AppVersion = [string]$BuildVersion.marketingVersion
+    $AppDisplayVersion = [string]$BuildVersion.displayVersion
+    $BuildTimeSource = [string]$BuildVersion.timeSource
 
-    $env:VITE_APP_VERSION = $AppVersion
+    $env:VITE_APP_VERSION = $AppDisplayVersion
     Write-Host "產生第三方授權清冊..."
     & node ".\scripts\generate-third-party-notices.mjs"
     if ($LASTEXITCODE -ne 0) {
         throw "第三方授權清冊產生失敗。"
     }
+    Write-Host "版本號：$AppDisplayVersion"
+    Write-Host "時間來源：$BuildTimeSource"
 
     $BuildCommit = $env:BUILD_COMMIT
     $BuildTag = $env:BUILD_TAG
