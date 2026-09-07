@@ -22,6 +22,7 @@ type BuildInfo struct {
 
 var (
 	Product    = ""
+	Build      = ""
 	Commit     = "unknown"
 	Tag        = "untagged"
 	BuildState = "unknown"
@@ -29,7 +30,30 @@ var (
 )
 
 func Current() string {
-	return "IntegTERM " + ProductVersion()
+	return "IntegTERM " + DisplayVersion()
+}
+
+func DisplayVersion() string {
+	productVersion := ProductVersion()
+	if buildLabel := BuildLabel(); buildLabel != "" {
+		return productVersion + " build " + buildLabel
+	}
+	return productVersion
+}
+
+// UpdateVersion returns the numeric identity used by GitHub release tags.
+// Older builds did not embed a build label, so they keep the marketing version
+// and remain eligible for a release that adds a fourth build component.
+func UpdateVersion() string {
+	productVersion := ProductVersion()
+	if buildLabel := BuildLabel(); buildLabel != "" {
+		return productVersion + "." + buildLabel
+	}
+	return productVersion
+}
+
+func BuildLabel() string {
+	return strings.TrimSpace(Build)
 }
 
 func ProductVersion() string {
