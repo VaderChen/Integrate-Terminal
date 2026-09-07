@@ -14,13 +14,13 @@ import (
 func (a *App) CheckForUpdates() (model.UpdateCheckResult, error) {
 	ctx, cancel := context.WithTimeout(a.updateContext(), 20*time.Second)
 	defer cancel()
-	return updater.CheckLatest(ctx, version.ProductVersion())
+	return updater.CheckLatest(ctx, version.UpdateVersion())
 }
 
 func (a *App) StartUpdate(expectedTag string) (model.UpdateActionResult, error) {
 	ctx, cancel := context.WithTimeout(a.updateContext(), 15*time.Minute)
 	defer cancel()
-	action, err := updater.PrepareLatest(ctx, version.ProductVersion(), expectedTag)
+	action, err := updater.PrepareLatest(ctx, version.UpdateVersion(), expectedTag)
 	if err != nil {
 		return model.UpdateActionResult{}, err
 	}
