@@ -131,7 +131,8 @@ node "./scripts/write-build-metadata.mjs" \
   "$BUILD_COMMIT" \
   "$BUILD_TAG" \
   "$BUILD_STATE" \
-  "$BUILD_SOURCE_URL"
+  "$BUILD_SOURCE_URL" \
+  "$APP_BUILD_LABEL"
 
 echo "完成：$OUTPUT_PATH"
 echo "授權文件：$LICENSE_OUTPUT_DIR"

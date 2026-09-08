@@ -25,7 +25,7 @@
 
 オープンソース版は StoreKit を使用せず、接続数を制限せず、App Sandbox も有効にしません。現在ログインしているユーザーアカウントが元からアクセス権を持つファイルとディレクトリを利用できます。ただし、macOS のプライバシー保護対象となる場所では、システムがユーザーに許可を求める場合があります。
 
-初回起動時には、以前のサンドボックス版からサイト、設定、known hosts、PPK のコピー、REST API トークンの移行を試みます。公開ソースコードには、Apple の署名証明書、Provisioning Profile、秘密鍵、個人のサイトデータは含まれません。
+初回起動時には、以前のサンドボックス版からサイト、設定、known hosts、PPK のコピーを移行します。MCP／REST のアクセスに API token は使用せず、送信元 IP／CIDR 許可リストで制御します。公開ソースコードには、Apple の署名証明書、Provisioning Profile、秘密鍵、個人のサイトデータは含まれません。
 
 ## サイトと SSH ホストの信頼
 
@@ -137,7 +137,7 @@ UI はデフォルトで単一インスタンスとして動作します。再�
 ./build.sh
 ```
 
-出力先は `dist/IntegTERM.app` です。デフォルトでは ad-hoc 署名を使用し、App Sandbox は有効にしないため、ビルド完了後にローカル環境で直接起動できます。`build.command` をダブルクリックしてビルドし、`run.command` でビルド済み App を起動できます。開発モードは `run.command --dev` を使用してください。
+出力先は `dist/IntegTERM.app` です。ビルド完了後はローカルで検証用に起動でき、App Sandbox は有効になりません。配布用の署名、公証、公開は管理されたリリース手順で処理し、署名識別情報はここに記載しません。`build.command` をダブルクリックしてビルドし、`run.command` でビルド済み App を起動できます。開発モードは `run.command --dev` を使用してください。
 
 バージョン情報を注入しない場合、各ビルドは古いタグや `wails.json` を再利用せず、現在のシステム時刻から `1.YY.MMDD build HHmm` を生成します。再現可能なビルドでは ISO 8601 形式の `BUILD_TIMESTAMP` または標準の `SOURCE_DATE_EPOCH` を注入でき、`APP_MARKETING_VERSION`、`APP_BUILD_LABEL`、`APP_BUNDLE_VERSION` で各項目を明示的に上書きできます。
 
@@ -174,6 +174,6 @@ GitHub の公開版には署名識別情報、公証設定、秘密鍵、その�
 
 商用ライセンスの対象は、ライセンサーが個別にライセンスする権利を持つコードと資産に限られます。第三者のパッケージ、アイコン、フォント、データセット、AI モデル、その他の第三者コンテンツは含まれず、それぞれ固有のライセンス条件が引き続き適用されます。依存関係の一覧は [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照してください。完全なライセンス本文はビルド時に生成され、配布物に含まれます。
 
-ビルド処理では、GPLv3 の本文、第三者ライセンス文書、および `build-metadata.json` を配布物に含めます。メタデータにはソースの Git tag、commit、作業ツリーの状態が記録され、バイナリから対応するソースリビジョンを追跡できます。
+ビルド処理では、GPLv3 の本文、第三者ライセンス文書、および `build-metadata.json` を配布物に含めます。メタデータにはソースの Git tag、commit、作業ツリーの状態、ビルド番号が記録され、バイナリから対応するソースリビジョンと同日のビルドを追跡できます。
 
 正式な Contributor License Agreement が整備されるまでは、Issue による報告とディスカッションのみ受け付けます。詳細は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。

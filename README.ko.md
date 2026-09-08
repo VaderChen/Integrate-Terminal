@@ -25,7 +25,7 @@
 
 오픈 소스 버전은 StoreKit을 사용하지 않고 연결 수를 제한하지 않으며 App Sandbox를 활성화하지 않습니다. 애플리케이션은 현재 로그인한 사용자 계정에 원래 접근 권한이 있는 파일과 디렉터리에 접근할 수 있습니다. 단, macOS의 개인정보 보호 대상 위치에서는 시스템이 사용자에게 권한을 요청할 수 있습니다.
 
-처음 실행할 때 이전 샌드박스 버전의 사이트, 설정, known hosts, PPK 복사본 및 REST API 토큰 마이그레이션을 시도합니다. 공개 소스 코드에는 Apple 서명 인증서, Provisioning Profile, 개인 키 또는 개인 사이트 데이터가 포함되지 않습니다.
+처음 실행할 때 이전 샌드박스 버전의 사이트, 설정, known hosts 및 PPK 복사본을 마이그레이션합니다. MCP/REST 액세스에는 API 토큰을 사용하지 않으며 소스 IP/CIDR 허용 목록으로 제어합니다. 공개 소스 코드에는 Apple 서명 인증서, Provisioning Profile, 개인 키 또는 개인 사이트 데이터가 포함되지 않습니다.
 
 ## 사이트 및 SSH 호스트 신뢰
 
@@ -137,7 +137,7 @@ UI는 기본적으로 단일 인스턴스로 실행됩니다. 다시 실행하�
 ./build.sh
 ```
 
-출력 파일은 `dist/IntegTERM.app`에 생성됩니다. 기본적으로 ad-hoc 서명을 사용하고 App Sandbox를 활성화하지 않으므로 빌드 완료 후 로컬에서 바로 실행할 수 있습니다. `build.command`를 두 번 클릭하여 빌드하고 `run.command`로 빌드된 App을 실행할 수 있으며, 개발 모드는 `run.command --dev`를 사용합니다.
+출력 파일은 `dist/IntegTERM.app`에 생성됩니다. 빌드 완료 후 로컬에서 검증용으로 실행할 수 있으며 App Sandbox는 활성화되지 않습니다. 배포 서명, 공증 및 공개는 관리된 릴리스 절차에서 처리하며 서명 식별 정보는 이 문서에 기록하지 않습니다. `build.command`를 두 번 클릭하여 빌드하고 `run.command`로 빌드된 App을 실행할 수 있으며, 개발 모드는 `run.command --dev`를 사용합니다.
 
 버전 정보를 주입하지 않으면 각 빌드는 이전 태그나 `wails.json`을 재사용하지 않고 현재 시스템 시간에서 `1.YY.MMDD build HHmm`를 생성합니다. 재현 가능한 빌드는 ISO 8601 형식의 `BUILD_TIMESTAMP` 또는 표준 `SOURCE_DATE_EPOCH`를 주입할 수 있으며, `APP_MARKETING_VERSION`, `APP_BUILD_LABEL`, `APP_BUNDLE_VERSION`으로 각 필드를 명시적으로 재정의할 수 있습니다.
 
@@ -174,6 +174,6 @@ GitHub 공개 버전에는 서명 식별 정보, 공증 설정, 개인 키 또�
 
 상업용 라이선스는 라이선스 제공자가 별도로 라이선스할 권리를 가진 코드와 자산에만 적용됩니다. 타사 패키지, 아이콘, 글꼴, 데이터 세트, AI 모델 및 기타 타사 콘텐츠는 포함되지 않으며 각각의 라이선스 조건이 계속 적용됩니다. 의존성 목록은 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)를 참조하십시오. 전체 라이선스 전문은 빌드 시 생성되어 배포 결과물에 포함됩니다.
 
-빌드 과정은 GPLv3 전문, 타사 라이선스 문서 및 `build-metadata.json`을 배포 결과물에 포함합니다. 메타데이터에는 소스 Git tag, commit 및 작업 트리 상태가 기록되어 바이너리를 해당 소스 리비전으로 추적할 수 있습니다.
+빌드 과정은 GPLv3 전문, 타사 라이선스 문서 및 `build-metadata.json`을 배포 결과물에 포함합니다. 메타데이터에는 소스 Git tag, commit, 작업 트리 상태 및 빌드 번호가 기록되어 바이너리를 해당 소스 리비전과 같은 날의 빌드로 추적할 수 있습니다.
 
 정식 Contributor License Agreement가 마련되기 전까지는 문제 보고와 토론만 받습니다. 자세한 내용은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참조하십시오.
