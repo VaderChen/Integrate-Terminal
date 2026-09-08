@@ -207,7 +207,8 @@ node "$STAGING_DIR/scripts/write-build-metadata.mjs" \
   "$BUILD_COMMIT" \
   "$BUILD_TAG" \
   "$BUILD_STATE" \
-  "$BUILD_SOURCE_URL"
+  "$BUILD_SOURCE_URL" \
+  "$APP_BUILD_LABEL"
 cleanup_appledouble "$STAGING_APP_PATH"
 cleanup_codesign_artifacts "$STAGING_APP_PATH"
 normalize_bundle_permissions "$STAGING_APP_PATH"

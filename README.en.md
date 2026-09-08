@@ -25,7 +25,7 @@
 
 The open source edition does not use StoreKit, limit the number of connections, or enable App Sandbox. The application can access files and directories already available to the current user account; macOS may still request permission for privacy-protected locations.
 
-On first launch, the application attempts to migrate sites, settings, known hosts, PPK copies, and the REST API token from the previous sandboxed edition. The public source code does not include Apple signing certificates, provisioning profiles, private keys, or personal site data.
+On first launch, the application attempts to migrate sites, settings, known hosts, and PPK copies from the previous sandboxed edition. MCP/REST access does not use an API token; it is controlled by the source IP/CIDR allowlist. The public source code does not include Apple signing certificates, provisioning profiles, private keys, or personal site data.
 
 ## Sites and SSH Host Trust
 
@@ -137,7 +137,7 @@ This argument only allows multiple UI instances; the background service remains 
 ./build.sh
 ```
 
-The output is written to `dist/IntegTERM.app`. By default, the app uses an ad-hoc signature and does not enable App Sandbox, so it can be opened locally after the build finishes. You can also double-click `build.command` to build, or `run.command` to launch the built app; use `run.command --dev` for development mode.
+The output is written to `dist/IntegTERM.app`. The app can be opened locally for verification after the build finishes, and App Sandbox is not enabled. Distribution signing, notarization, and publishing are handled by a controlled release process; signing identity details are not documented here. You can also double-click `build.command` to build, or `run.command` to launch the built app; use `run.command --dev` for development mode.
 
 Without injected version data, every build derives `1.YY.MMDD build HHmm` from the current system time instead of reusing an old tag or `wails.json`. Reproducible builds may inject an ISO 8601 `BUILD_TIMESTAMP` or the standard `SOURCE_DATE_EPOCH`; `APP_MARKETING_VERSION`, `APP_BUILD_LABEL`, and `APP_BUNDLE_VERSION` can override the individual fields explicitly.
 
@@ -174,6 +174,6 @@ This project uses dual licensing:
 
 The commercial license only covers code and assets that the licensor has the right to license separately. It excludes third-party packages, icons, fonts, datasets, AI models, and other third-party content, which remain subject to their respective terms. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the dependency inventory; complete license texts are generated at build time and included with release artifacts.
 
-The build process places the GPLv3 text, third-party licensing documents, and `build-metadata.json` in release artifacts. The metadata records the source Git tag, commit, and working-tree state so that a binary can be traced back to its source revision.
+The build process places the GPLv3 text, third-party licensing documents, and `build-metadata.json` in release artifacts. The metadata records the source Git tag, commit, working-tree state, and build number so that a binary can be traced back to its source revision and same-day build.
 
 Until a formal Contributor License Agreement is available, only issue reports and discussions are accepted. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.

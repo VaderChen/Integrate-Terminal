@@ -111,7 +111,7 @@ try {
     Copy-Item -LiteralPath ".\LICENSE" -Destination (Join-Path $LicenseOutputDirectory "GPL-3.0.txt")
     Copy-Item -LiteralPath ".\THIRD-PARTY-NOTICES.md" -Destination $LicenseOutputDirectory
     Copy-Item -LiteralPath ".\THIRD-PARTY-LICENSES.txt" -Destination $LicenseOutputDirectory
-    & node ".\scripts\write-build-metadata.mjs" $MetadataOutputPath $AppVersion $BuildCommit $BuildTag $BuildState $BuildSourceUrl
+    & node ".\scripts\write-build-metadata.mjs" $MetadataOutputPath $AppVersion $BuildCommit $BuildTag $BuildState $BuildSourceUrl $AppBuildLabel
     if ($LASTEXITCODE -ne 0) {
         throw "建置中繼資料寫入失敗。"
     }

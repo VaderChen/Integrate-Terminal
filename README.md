@@ -25,7 +25,7 @@
 
 公開版本不使用 StoreKit、不限制連線數，也不啟用 App Sandbox。程式可存取目前登入帳號原本就有權限的檔案與目錄；macOS 的隱私保護目錄仍可能由系統要求使用者授權。
 
-程式會在第一次啟動時嘗試搬移舊沙盒版的站台、設定、known hosts、PPK 副本與 REST API token。公開原始碼不包含任何 Apple 簽章憑證、Provisioning Profile、私鑰或個人站台資料。
+程式會在第一次啟動時嘗試搬移舊沙盒版的站台、設定、known hosts 與 PPK 副本。MCP／REST 存取不使用 API token，改由來源 IP／CIDR 白名單控制；公開原始碼不包含任何 Apple 簽章憑證、Provisioning Profile、私鑰或個人站台資料。
 
 ## 站台與 SSH 主機信任
 
@@ -137,7 +137,7 @@ UI 預設採單一實例；再次啟動時會喚醒已開啟的視窗，不會�
 ./build.sh
 ```
 
-輸出位於 `dist/IntegTERM.app`。預設採 ad-hoc 簽章且不啟用 App Sandbox，建置完成後可直接在本機開啟使用。也可以雙擊 `build.command` 建置，或雙擊 `run.command` 啟動已建置的 App；需要開發模式時使用 `run.command --dev`。
+輸出位於 `dist/IntegTERM.app`。建置完成後可直接在本機驗證使用，且不啟用 App Sandbox。正式簽署、公證與發布由受控流程處理，相關識別資料不記載於本文件。也可以雙擊 `build.command` 建置，或雙擊 `run.command` 啟動已建置的 App；需要開發模式時使用 `run.command --dev`。
 
 未注入版本資訊時，每次建置都會依目前系統時間產生 `1.YY.MMDD build HHmm`，不會沿用舊標籤或 `wails.json`。需要可重現建置時，可注入 ISO 8601 格式的 `BUILD_TIMESTAMP` 或標準 `SOURCE_DATE_EPOCH`；也可用 `APP_MARKETING_VERSION`、`APP_BUILD_LABEL` 與 `APP_BUNDLE_VERSION` 明確覆寫各欄位。
 
@@ -178,6 +178,6 @@ GitHub 公開版本不包含簽章憑證、私鑰或其他發布機密；散布�
 
 商業授權僅涵蓋授權方有權另行授權的程式碼與資產，不包含第三方套件、圖示、字型、資料集、AI 模型或其他第三方內容；這些項目仍適用各自的授權條款。第三方清冊請參閱 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)；完整授權文字會在建置時產生並隨發行產物提供。
 
-建置流程會將 GPLv3、第三方授權文件及 `build-metadata.json` 放入發行產物。中繼資料記錄來源 Git tag、commit 與工作區狀態，讓執行檔可追溯至對應原始碼。
+建置流程會將 GPLv3、第三方授權文件及 `build-metadata.json` 放入發行產物。中繼資料記錄來源 Git tag、commit、工作區狀態與 Build 編號，讓執行檔可追溯至對應原始碼與同日建置。
 
 目前在正式 Contributor License Agreement 完成前，僅接受問題回報與討論；詳細說明請參閱 [CONTRIBUTING.md](CONTRIBUTING.md)。
