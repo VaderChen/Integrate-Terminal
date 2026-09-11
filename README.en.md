@@ -18,7 +18,7 @@
 - Site groups, tab restoration, and ZIP backup and restore.
 - An MCP virtual layer with a RAM workspace and remote-site mounts.
 - Background service and system tray controls.
-- Manual GitHub Release checks in Settings plus one automatic check at a random time each day, with verified platform update downloads.
+- Manual GitHub Release checks in Settings plus one automatic check at a random time each day, with verified platform update downloads. On macOS, a verified DMG update is installed automatically and the app restarts after the current UI and background service exit.
 - English, Japanese, Korean, Traditional Chinese, and Simplified Chinese interfaces.
 
 ## Open Source Edition
@@ -158,6 +158,10 @@ The output is written to `dist\IntegTERM.exe`. The script creates only an x64 ex
 The output is written to `dist/IntegTERM`. The script detects the installed WebKitGTK and AppIndicator versions and creates only an x64 executable, without AppImage, DEB, or RPM packaging.
 
 The public GitHub repository does not include signing identities, notarization settings, private keys, or release credentials. Distributors must handle platform signing, installers, and release requirements separately.
+
+### Automatic updates
+
+When a compatible macOS DMG is downloaded from a newer GitHub Release, IntegTERM schedules an isolated installer, stops the background service, waits for the current app to exit, verifies the replacement bundle, and launches the updated app. If replacement verification fails, the installer restores the previous bundle. Other platforms and unsupported assets continue to use the release-page fallback.
 
 ## Data and Security
 

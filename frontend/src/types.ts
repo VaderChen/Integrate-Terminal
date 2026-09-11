@@ -127,6 +127,8 @@ export type UpdateCheckResult = {
 
 export type UpdateActionResult = {
   downloaded: boolean;
+  installScheduled: boolean;
+  restarting: boolean;
 };
 
 export type BootstrapPayload = {

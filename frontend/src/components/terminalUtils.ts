@@ -148,59 +148,11 @@ export const FONT_SIZES: Record<FontScale, number> = {
 export const FALLBACK_FONT_FAMILIES = ['SF Mono', 'Menlo', 'Monaco', 'Cascadia Mono', 'Consolas'];
 export const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
 
-function syncTerminalLayout(container: HTMLDivElement | null) {
-  if (!container) {
-    return;
-  }
-
-  const xtermElement = container.querySelector<HTMLElement>('.xterm');
-  if (!xtermElement) {
-    return;
-  }
-
-  xtermElement.style.transform = '';
-  xtermElement.style.transformOrigin = '';
-  xtermElement.style.width = '';
-  xtermElement.style.height = '';
-
-  const availableHeight = Math.max(container.clientHeight - 20, 0);
-  const widthBasedHeight = Math.max(Math.round(container.clientWidth * 0.78), 0);
-  const targetHeight = Math.min(availableHeight, widthBasedHeight || availableHeight);
-  const viewportElement = container.querySelector<HTMLElement>('.xterm-viewport');
-  const screenElement = container.querySelector<HTMLElement>('.xterm-screen');
-  const helperElement = container.querySelector<HTMLElement>('.xterm-helpers');
-
-  if (xtermElement) {
-    xtermElement.style.height = `${targetHeight}px`;
-    xtermElement.style.maxHeight = `${targetHeight}px`;
-  }
-  if (viewportElement) {
-    viewportElement.style.height = `${targetHeight}px`;
-    viewportElement.style.maxHeight = `${targetHeight}px`;
-  }
-  if (screenElement) {
-    screenElement.style.height = `${targetHeight}px`;
-    screenElement.style.maxHeight = `${targetHeight}px`;
-  }
-  if (helperElement) {
-    helperElement.style.transform = '';
-    helperElement.style.transformOrigin = '';
-    helperElement.style.height = `${targetHeight}px`;
-    helperElement.style.maxHeight = `${targetHeight}px`;
-  }
-  if (screenElement) {
-    screenElement.style.transform = '';
-    screenElement.style.transformOrigin = '';
-  }
-}
-
 export function fitTerminal(container: HTMLDivElement | null, fitAddon: FitAddon | null) {
   if (!container || !fitAddon) {
     return;
   }
-  syncTerminalLayout(container);
   fitAddon.fit();
-  syncTerminalLayout(container);
 }
 
 export function withSelectionTheme(theme: ITheme): ITheme {

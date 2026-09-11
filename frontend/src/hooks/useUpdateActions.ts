@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getMessages, type Locale } from '../i18n';
+import { Quit } from '../../wailsjs/runtime/runtime';
 import type { UpdateActionResult, UpdateCheckResult } from '../types';
 
 const AUTO_UPDATE_NEXT_CHECK_KEY = 'integterm.update.nextCheckAt';
@@ -139,6 +140,11 @@ export function useUpdateActions({ enabled, locale }: Params) {
         throw new Error('update action returned no result');
       }
       setActionResult(result);
+      if (result.installScheduled) {
+        await window.go?.app?.App?.StopBackgroundService?.();
+        await window.go?.app?.App?.ApproveQuit?.();
+        window.setTimeout(() => Quit(), 250);
+      }
     } catch {
       setActionError(t.settingsUpdateFailed);
     } finally {

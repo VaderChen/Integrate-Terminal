@@ -128,7 +128,9 @@ type UpdateCheckResult struct {
 }
 
 type UpdateActionResult struct {
-	Downloaded bool `json:"downloaded"`
+	Downloaded       bool `json:"downloaded"`
+	InstallScheduled bool `json:"installScheduled"`
+	Restarting       bool `json:"restarting"`
 }
 
 type FileComparison struct {

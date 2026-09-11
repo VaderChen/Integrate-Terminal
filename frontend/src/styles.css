@@ -846,6 +846,7 @@ label span,
   height: 100%;
   min-height: 0;
   flex: 1;
+  overflow: hidden;
 }
 
 .ssh-console-surface {
@@ -855,6 +856,7 @@ label span,
   border-radius: 14px;
   background: #111827;
   padding: 10px;
+  box-sizing: border-box;
   cursor: text;
 }
 
@@ -2703,13 +2705,16 @@ select {
 
 .transfer-item {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1.5fr) 110px minmax(78px, 0.5fr) 32px 32px;
+  grid-template-columns: 36px minmax(150px, 1fr) 104px 86px minmax(180px, 1.2fr) 32px 32px;
   align-items: center;
   justify-items: start;
   column-gap: 12px;
   padding: 8px 10px;
   border-radius: 12px;
   background: #f7f1e7;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .transfer-item strong,
@@ -2734,6 +2739,9 @@ select {
   color: #6b7280;
   white-space: nowrap;
   text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .transfer-progress-group {
@@ -3249,27 +3257,43 @@ select {
   }
 
   .transfer-item {
-    grid-template-columns: 36px minmax(0, 1fr) 28px 28px;
+    grid-template-columns: 28px minmax(0, 1fr) 28px 28px;
     gap: 8px;
+  }
+
+  .transfer-name {
+    grid-column: 2;
   }
 
   .transfer-speed {
     grid-column: 2;
+    grid-row: 2;
+  }
+
+  .transfer-attempt {
+    grid-column: 2;
+    grid-row: 3;
   }
 
   .transfer-progress-group {
     grid-column: 2;
+    grid-row: 4;
+  }
+
+  .transfer-error {
+    grid-column: 2;
+    grid-row: 5;
   }
 
   .transfer-cancel-button {
     grid-column: 4;
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 5;
     align-self: center;
   }
 
   .transfer-pause-button {
     grid-column: 3;
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 5;
     align-self: center;
   }
 }
@@ -3583,11 +3607,20 @@ select {
 
 .transfer-attempt {
   color: var(--app-muted);
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .transfer-error {
-  max-width: 180px;
+  grid-column: 2 / 6;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
   overflow: hidden;
   color: var(--app-danger-text);
   text-overflow: ellipsis;

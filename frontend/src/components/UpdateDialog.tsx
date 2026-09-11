@@ -81,7 +81,7 @@ export function UpdateDialog({
           {actionError ? <p className="update-dialog-status error" aria-live="polite">{actionError}</p> : null}
           {actionResult ? (
             <p className="update-dialog-status success" aria-live="polite">
-              {actionResult.downloaded ? t.settingsUpdateInstallerOpened : t.settingsUpdateReleaseOpened}
+              {actionResult.installScheduled ? t.settingsUpdateInstallerOpened : actionResult.downloaded ? t.settingsUpdateInstallerOpened : t.settingsUpdateReleaseOpened}
             </p>
           ) : null}
         </div>
