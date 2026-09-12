@@ -104,6 +104,10 @@ export function useSettingsActions({
     }));
   };
 
+  const handleForceUpdateChange = async (forceUpdate: boolean) => {
+    await saveConfig((current) => ({ ...current, forceUpdate }));
+  };
+
   return {
     handleFontScaleChange,
     handleLanguageChange,
@@ -119,5 +123,6 @@ export function useSettingsActions({
     handleTransferConflictStrategyChange,
     handleRestoreTabsChange,
     handleCloseTerminalTabOnDisconnectChange,
+    handleForceUpdateChange,
   };
 }

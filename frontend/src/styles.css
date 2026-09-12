@@ -1546,8 +1546,28 @@ select {
 }
 
 .settings-about-row strong,
-.settings-about-row span {
+.settings-about-row span,
+.settings-about-row a {
   display: block;
+}
+
+.settings-about-row a {
+  color: var(--app-accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.settings-about-row a:hover {
+  text-decoration: underline;
+}
+
+.settings-about-hint {
+  display: block;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 0 14px;
 }
 
 .update-modal-overlay {

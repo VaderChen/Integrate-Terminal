@@ -75,6 +75,7 @@ func (s *Store) LoadConfig() (model.Config, error) {
 			SiteFolders:                  []string{},
 			TransferRetryCount:           2,
 			TransferConflictStrategy:     "overwrite",
+			ForceUpdate:                  false,
 		}, nil
 	}
 	return record, err

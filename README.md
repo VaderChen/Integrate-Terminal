@@ -169,6 +169,8 @@ GitHub 公開版本不包含簽章憑證、私鑰或其他發布機密；散布�
 
 請勿提交 `cert/`、`data/`、`.env*`、安裝包、簽章資產或任何包含真實帳密的檔案。安全問題請參閱 [SECURITY.md](SECURITY.md)。
 
+「設定」→「關於」頁面提供「強制更新」Switch。開啟後，更新檢查會將 GitHub Release 最新版本視為可更新，即使版本號與目前版本相同或較舊，也會允許重新下載 Release 檔案。此開關預設關閉，並會隨應用程式設定保存。「關於」頁面也提供[作者的 GitHub 個人頁面](https://github.com/VaderChen)與 [Buy Me a Coffee](https://buymeacoffee.com/vaderchen)連結。
+
 ## 授權
 
 本專案採雙軌授權：

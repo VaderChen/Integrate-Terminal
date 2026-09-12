@@ -91,6 +91,7 @@ export type Config = {
   siteFolders: string[];
   transferRetryCount: number;
   transferConflictStrategy: 'overwrite' | 'skip' | 'fail';
+  forceUpdate: boolean;
 };
 
 export type FileComparison = {

@@ -33,6 +33,8 @@ type githubRelease struct {
 type PreparedUpdate struct {
 	Target     string
 	Downloaded bool
+	Version    string
+	Build      string
 }
 
 type githubAsset struct {
@@ -42,7 +44,8 @@ type githubAsset struct {
 	Size               int64  `json:"size"`
 }
 
-func CheckLatest(ctx context.Context, currentVersion string) (model.UpdateCheckResult, error) {
+func CheckLatest(ctx context.Context, currentVersion string, forceUpdate ...bool) (model.UpdateCheckResult, error) {
+	force := len(forceUpdate) > 0 && forceUpdate[0]
 	release, err := fetchLatestRelease(ctx, currentVersion)
 	if err != nil {
 		return model.UpdateCheckResult{}, err
@@ -65,7 +68,7 @@ func CheckLatest(ctx context.Context, currentVersion string) (model.UpdateCheckR
 		CurrentVersion:  currentVersion,
 		LatestVersion:   latestVersion,
 		LatestTag:       release.TagName,
-		UpdateAvailable: comparison > 0,
+		UpdateAvailable: comparison > 0 || force,
 	}
 	if asset, ok := selectAsset(release.Assets, runtime.GOOS, runtime.GOARCH); ok {
 		result.AssetName = asset.Name
@@ -74,7 +77,8 @@ func CheckLatest(ctx context.Context, currentVersion string) (model.UpdateCheckR
 	return result, nil
 }
 
-func PrepareLatest(ctx context.Context, currentVersion string, expectedTag string) (PreparedUpdate, error) {
+func PrepareLatest(ctx context.Context, currentVersion string, expectedTag string, forceUpdate ...bool) (PreparedUpdate, error) {
+	force := len(forceUpdate) > 0 && forceUpdate[0]
 	release, err := fetchLatestRelease(ctx, currentVersion)
 	if err != nil {
 		return PreparedUpdate{}, err
@@ -95,7 +99,7 @@ func PrepareLatest(ctx context.Context, currentVersion string, expectedTag strin
 	if err != nil {
 		return PreparedUpdate{}, err
 	}
-	if comparison <= 0 {
+	if comparison <= 0 && !force {
 		return PreparedUpdate{}, errors.New("the installed version is already up to date")
 	}
 
@@ -114,7 +118,17 @@ func PrepareLatest(ctx context.Context, currentVersion string, expectedTag strin
 	return PreparedUpdate{
 		Downloaded: true,
 		Target:     targetPath,
+		Version:    latestVersion,
+		Build:      versionBuildLabel(latestVersion),
 	}, nil
+}
+
+func versionBuildLabel(normalized string) string {
+	parts := strings.Split(normalized, ".")
+	if len(parts) < 4 {
+		return ""
+	}
+	return parts[len(parts)-1]
 }
 
 func fetchLatestRelease(ctx context.Context, currentVersion string) (githubRelease, error) {

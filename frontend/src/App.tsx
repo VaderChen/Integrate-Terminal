@@ -215,6 +215,7 @@ export default function App() {
           transferRetryCount: payload.config?.transferRetryCount ?? 2,
           transferConflictStrategy:
             payload.config?.transferConflictStrategy ?? "overwrite",
+          forceUpdate: payload.config?.forceUpdate ?? false,
           language: payload.config?.language ?? "",
           theme: payload.config?.theme ?? "neutral",
           siteFolders: payload.config?.siteFolders ?? [],
@@ -715,6 +716,7 @@ export default function App() {
     handleTransferConflictStrategyChange,
     handleRestoreTabsChange,
     handleCloseTerminalTabOnDisconnectChange,
+    handleForceUpdateChange,
   } = useSettingsActions({
     config,
     setConfig,
@@ -1011,6 +1013,7 @@ export default function App() {
         onCloseTerminalTabOnDisconnectChange={
           handleCloseTerminalTabOnDisconnectChange
         }
+        onForceUpdateChange={handleForceUpdateChange}
         onShowHiddenFilesChange={handleShowHiddenFilesChange}
         onShowTrayIconChange={handleShowTrayIconChange}
         onRememberWindowPositionChange={handleRememberWindowPositionChange}

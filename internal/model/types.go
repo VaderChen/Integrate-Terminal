@@ -90,6 +90,7 @@ type Config struct {
 	SiteFolders                  []string `json:"siteFolders"`
 	TransferRetryCount           int      `json:"transferRetryCount"`
 	TransferConflictStrategy     string   `json:"transferConflictStrategy"`
+	ForceUpdate                  bool     `json:"forceUpdate"`
 }
 
 type SiteLibraryMutationResult struct {

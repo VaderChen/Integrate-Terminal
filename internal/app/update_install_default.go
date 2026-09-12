@@ -7,7 +7,7 @@ import (
 	"os/exec"
 )
 
-func scheduleUpdateInstall(_, _, _ string, _ int) error {
+func scheduleUpdateInstall(_, _, _, _ string, _ int) error {
 	return fmt.Errorf("automatic installation is only supported on macOS DMG updates")
 }
 

@@ -89,6 +89,7 @@ export namespace model {
 	    siteFolders: string[];
 	    transferRetryCount: number;
 	    transferConflictStrategy: string;
+	    forceUpdate: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -116,6 +117,7 @@ export namespace model {
 	        this.siteFolders = source["siteFolders"];
 	        this.transferRetryCount = source["transferRetryCount"];
 	        this.transferConflictStrategy = source["transferConflictStrategy"];
+	        this.forceUpdate = source["forceUpdate"];
 	    }
 	}
 	export class Tab {
@@ -335,6 +337,8 @@ export namespace model {
 	}
 	export class UpdateActionResult {
 	    downloaded: boolean;
+	    installScheduled: boolean;
+	    restarting: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new UpdateActionResult(source);
@@ -343,6 +347,8 @@ export namespace model {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.downloaded = source["downloaded"];
+	        this.installScheduled = source["installScheduled"];
+	        this.restarting = source["restarting"];
 	    }
 	}
 	export class UpdateCheckResult {
