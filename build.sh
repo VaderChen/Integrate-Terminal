@@ -198,7 +198,12 @@ fi
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_BUNDLE_ID" "$STAGING_APP_PATH/Contents/Info.plist"
 APP_LICENSE_DIR="$STAGING_APP_PATH/Contents/Resources/Licenses"
 mkdir -p "$APP_LICENSE_DIR"
-cp "$STAGING_DIR/LICENSE" "$APP_LICENSE_DIR/GPL-3.0.txt"
+LICENSE_SOURCE="$STAGING_DIR/LICENSE.md"
+if [[ ! -s "$LICENSE_SOURCE" ]]; then
+  echo "建置失敗：找不到目前版本授權文件 $LICENSE_SOURCE"
+  exit 1
+fi
+cp "$LICENSE_SOURCE" "$APP_LICENSE_DIR/LICENSE.md"
 cp "$STAGING_DIR/THIRD-PARTY-NOTICES.md" "$APP_LICENSE_DIR/THIRD-PARTY-NOTICES.md"
 cp "$STAGING_DIR/THIRD-PARTY-LICENSES.txt" "$APP_LICENSE_DIR/THIRD-PARTY-LICENSES.txt"
 node "$STAGING_DIR/scripts/write-build-metadata.mjs" \

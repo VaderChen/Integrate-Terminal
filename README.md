@@ -173,7 +173,7 @@ GitHub 公開版本不包含簽章憑證、私鑰或其他發布機密；散布�
 
 本專案採雙軌授權：
 
-1. 開放原始碼使用遵循 [GNU General Public License v3.0](LICENSE)。
+1. 開放原始碼使用遵循[原始碼公開・禁止商業販售授權](LICENSE.md)。
 2. 無法遵循 GPLv3、需要閉源整合或其他商業條款者，可另行取得[商業授權](COMMERCIAL-LICENSE.md)。
 
 商業授權僅涵蓋授權方有權另行授權的程式碼與資產，不包含第三方套件、圖示、字型、資料集、AI 模型或其他第三方內容；這些項目仍適用各自的授權條款。第三方清冊請參閱 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)；完整授權文字會在建置時產生並隨發行產物提供。

@@ -108,7 +108,7 @@ try {
         Remove-Item -LiteralPath $LicenseOutputDirectory -Recurse -Force
     }
     New-Item -ItemType Directory -Path $LicenseOutputDirectory -Force | Out-Null
-    Copy-Item -LiteralPath ".\LICENSE" -Destination (Join-Path $LicenseOutputDirectory "GPL-3.0.txt")
+    Copy-Item -LiteralPath ".\LICENSE.md" -Destination (Join-Path $LicenseOutputDirectory "LICENSE.md")
     Copy-Item -LiteralPath ".\THIRD-PARTY-NOTICES.md" -Destination $LicenseOutputDirectory
     Copy-Item -LiteralPath ".\THIRD-PARTY-LICENSES.txt" -Destination $LicenseOutputDirectory
     & node ".\scripts\write-build-metadata.mjs" $MetadataOutputPath $AppVersion $BuildCommit $BuildTag $BuildState $BuildSourceUrl $AppBuildLabel
