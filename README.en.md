@@ -163,6 +163,10 @@ The public GitHub repository does not include signing identities, notarization s
 
 When a compatible macOS DMG is downloaded from a newer GitHub Release, IntegTERM schedules an isolated installer, stops the background service, waits for the current app to exit, verifies the replacement bundle, and launches the updated app. If replacement verification fails, the installer restores the previous bundle. Other platforms and unsupported assets continue to use the release-page fallback.
 
+The Settings → About page includes a **Force update** switch. When enabled, update checks treat the latest GitHub Release as available even when its version is equal to or older than the installed version, so the release asset can be downloaded again. The switch is disabled by default and is persisted with the application settings.
+
+The About page links to the author's [GitHub profile](https://github.com/VaderChen) and [Buy Me a Coffee](https://buymeacoffee.com/vaderchen).
+
 ## Data and Security
 
 Application data is stored in the `IntegTERM` directory under the platform's `os.UserConfigDir()`, such as `~/Library/Application Support/IntegTERM` on macOS, `%AppData%\IntegTERM` on Windows, and `~/.config/IntegTERM` on Linux. Site passwords and PPK passphrases are currently stored in local site data and site backup ZIP files. Restrict file permissions and protect backups appropriately. The REST/MCP service binds only to `127.0.0.1` by default; configure the IP allowlist correctly before permitting external sources.

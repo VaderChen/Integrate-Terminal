@@ -24,6 +24,7 @@ export const fallbackBootstrap: BootstrapPayload = {
     siteFolders: [],
     transferRetryCount: 2,
     transferConflictStrategy: 'overwrite',
+    forceUpdate: false,
   },
   defaultLocalPath: '/',
   localFiles: [],

@@ -21,6 +21,7 @@ type Props = {
   onThemeChange: (theme: Config['theme']) => void;
   onRestoreTabsChange: (restoreTabsOnStart: boolean) => void;
   onCloseTerminalTabOnDisconnectChange: (closeTerminalTabOnDisconnect: boolean) => void;
+  onForceUpdateChange: (forceUpdate: boolean) => void;
   onShowHiddenFilesChange: (showHiddenFiles: boolean) => void;
   onShowTrayIconChange: (showTrayIcon: boolean) => void;
   onRememberWindowPositionChange: (rememberWindowPosition: boolean) => void;
@@ -49,6 +50,7 @@ export function SettingsModal({
   onThemeChange,
   onRestoreTabsChange,
   onCloseTerminalTabOnDisconnectChange,
+  onForceUpdateChange,
   onShowHiddenFilesChange,
   onShowTrayIconChange,
   onRememberWindowPositionChange,
@@ -832,8 +834,28 @@ export function SettingsModal({
                   </div>
                   <div className="settings-about-row">
                     <strong>{t.settingsAboutAuthor}</strong>
-                    <span>Vader Chen</span>
+                    <a href="https://github.com/VaderChen" onClick={(event) => { event.preventDefault(); BrowserOpenURL('https://github.com/VaderChen'); }}>GitHub</a>
                   </div>
+                  <div className="settings-about-row">
+                    <strong>{t.settingsAboutBuyMeACoffee}</strong>
+                    <a href="https://buymeacoffee.com/vaderchen" onClick={(event) => { event.preventDefault(); BrowserOpenURL('https://buymeacoffee.com/vaderchen'); }}>https://buymeacoffee.com/vaderchen</a>
+                  </div>
+                  <div className="settings-about-row">
+                    <strong>{t.settingsAboutForceUpdate}</strong>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={config.forceUpdate}
+                      aria-label={t.settingsAboutForceUpdate}
+                      className={`ios-switch ${config.forceUpdate ? 'active' : ''}`}
+                      onClick={() => void onForceUpdateChange(!config.forceUpdate)}
+                      title={config.forceUpdate ? t.settingsOn : t.settingsOff}
+                    >
+                      <span className="ios-switch-track" />
+                      <span className="ios-switch-thumb" />
+                    </button>
+                  </div>
+                  <span className="settings-about-hint">{t.settingsAboutForceUpdateHint}</span>
                 </div>
               </div>
             ) : null}

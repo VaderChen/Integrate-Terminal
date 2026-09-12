@@ -102,6 +102,9 @@ export type Messages = {
   settingsConflictFail: string;
   settingsAboutVersion: string;
   settingsAboutAuthor: string;
+  settingsAboutForceUpdate: string;
+  settingsAboutForceUpdateHint: string;
+  settingsAboutBuyMeACoffee: string;
   settingsUpdateCheck: string;
   settingsUpdateChecking: string;
   settingsUpdateAvailableTitle: string;
