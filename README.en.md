@@ -173,7 +173,7 @@ Do not commit `cert/`, `data/`, `.env*`, installers, signing assets, or files co
 
 This project uses dual licensing:
 
-1. Open source use is licensed under the [GNU General Public License v3.0](LICENSE).
+1. Source-available use is governed by the [source-available, no-commercial-sales license](LICENSE.en.md).
 2. A separate [commercial license](COMMERCIAL-LICENSE.md) is available for users who cannot comply with GPLv3, require closed-source integration, or need other commercial terms.
 
 The commercial license only covers code and assets that the licensor has the right to license separately. It excludes third-party packages, icons, fonts, datasets, AI models, and other third-party content, which remain subject to their respective terms. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the dependency inventory; complete license texts are generated at build time and included with release artifacts.
