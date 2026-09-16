@@ -12,22 +12,10 @@ import (
 	"github.com/kayrus/putty"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
-
-	"github.com/VaderChen/Integrate-Terminal/internal/keystore"
 )
 
-// SignerFromPPK 讀取 PPK 私鑰。
-//
-// 內容一律經由 keystore 取得，而非直接開檔：App Sandbox 下，先前存起來的絕對路徑
-// 無法直接讀取，必須透過 security-scoped bookmark 或容器內副本。
-// 非沙箱環境（開發模式）keystore 會退回直接開檔，行為與過去相同。
 func SignerFromPPK(filePath string, passphrase string) (ssh.Signer, error) {
-	content, err := keystore.Read(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	puttyKey, err := putty.New(content)
+	puttyKey, err := putty.NewFromFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +40,6 @@ type HostTrustRequiredError struct {
 	KeyType           string `json:"keyType"`
 	FingerprintSHA256 string `json:"fingerprintSHA256"`
 	AuthorizedKey     string `json:"authorizedKey"`
-	ReplacesExisting  bool   `json:"replacesExisting,omitempty"`
 }
 
 func (e *HostTrustRequiredError) Error() string {
@@ -83,7 +70,7 @@ func KnownHostsCallback() (ssh.HostKeyCallback, error) {
 				return nil
 			} else {
 				var keyErr *knownhosts.KeyError
-				if errors.As(err, &keyErr) {
+				if errors.As(err, &keyErr) && len(keyErr.Want) == 0 {
 					host, port, hostPattern := resolveHostTrustTarget(hostname, remote.String())
 					return &HostTrustRequiredError{
 						Host:              host,
@@ -92,7 +79,6 @@ func KnownHostsCallback() (ssh.HostKeyCallback, error) {
 						KeyType:           key.Type(),
 						FingerprintSHA256: ssh.FingerprintSHA256(key),
 						AuthorizedKey:     strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))),
-						ReplacesExisting:  len(keyErr.Want) > 0,
 					}
 				}
 				return err
@@ -111,64 +97,40 @@ func KnownHostsCallback() (ssh.HostKeyCallback, error) {
 	}, nil
 }
 
-// dataDir 是 App 的資料目錄。App Sandbox 下 ~/.ssh 完全無法讀寫，
-// 因此主機指紋改存在這裡；非沙箱環境仍會一併讀取 ~/.ssh 既有紀錄。
-var dataDir string
-
-// Init 設定資料目錄，App 與背景服務啟動時各呼叫一次。
-func Init(dir string) { dataDir = dir }
-
-// managedKnownHostsPath 回傳 App 自有的 known_hosts 路徑（沙箱下唯一可寫的位置）。
-func managedKnownHostsPath() string {
-	if strings.TrimSpace(dataDir) == "" {
-		return ""
-	}
-	return filepath.Join(dataDir, "known_hosts")
-}
-
 func knownHostsFiles() ([]string, error) {
-	candidates := make([]string, 0, 3)
-
-	if managed := managedKnownHostsPath(); managed != "" {
-		candidates = append(candidates, managed)
+	homeDir, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(homeDir) == "" {
+		return nil, fmt.Errorf("cannot resolve user home for known_hosts")
 	}
 
-	// 沙箱下這兩個會讀不到，靜默略過即可；開發模式仍可沿用既有信任紀錄。
-	if homeDir, err := os.UserHomeDir(); err == nil && strings.TrimSpace(homeDir) != "" {
-		candidates = append(candidates,
-			filepath.Join(homeDir, ".ssh", "known_hosts"),
-			filepath.Join(homeDir, ".ssh", "known_hosts2"),
-		)
+	candidates := []string{
+		filepath.Join(homeDir, ".ssh", "known_hosts"),
+		filepath.Join(homeDir, ".ssh", "known_hosts2"),
 	}
 
 	paths := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
 		info, statErr := os.Stat(candidate)
-		if statErr != nil || info.IsDir() {
-			continue
+		if statErr == nil && !info.IsDir() {
+			paths = append(paths, candidate)
 		}
-		// 讀不到就別交給 knownhosts.New，否則整個 callback 會直接失敗。
-		file, openErr := os.Open(candidate)
-		if openErr != nil {
-			continue
-		}
-		_ = file.Close()
-		paths = append(paths, candidate)
 	}
 
 	return paths, nil
 }
 
 func ApproveHost(hostPattern string, authorizedKey string) error {
-	knownHostsPath := managedKnownHostsPath()
-	if knownHostsPath == "" {
-		return fmt.Errorf("資料目錄尚未初始化，無法寫入主機指紋")
+	homeDir, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(homeDir) == "" {
+		return fmt.Errorf("cannot resolve user home for known_hosts")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(knownHostsPath), 0o700); err != nil {
-		return fmt.Errorf("create data dir: %w", err)
+	sshDir := filepath.Join(homeDir, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		return fmt.Errorf("create ssh dir: %w", err)
 	}
 
+	knownHostsPath := filepath.Join(sshDir, "known_hosts")
 	if _, err := os.Stat(knownHostsPath); errors.Is(err, os.ErrNotExist) {
 		if err := os.WriteFile(knownHostsPath, []byte{}, 0o600); err != nil {
 			return fmt.Errorf("create known_hosts: %w", err)
@@ -186,66 +148,25 @@ func ApproveHost(hostPattern string, authorizedKey string) error {
 	if err != nil {
 		return fmt.Errorf("read known_hosts: %w", err)
 	}
-	updated, changed := replaceKnownHostEntry(string(existing), hostPattern, publicKey, line)
-	if !changed {
+	if strings.Contains(string(existing), line) {
 		return nil
 	}
-	if err := os.WriteFile(knownHostsPath, []byte(updated), 0o600); err != nil {
-		return fmt.Errorf("write known_hosts: %w", err)
+
+	file, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("open known_hosts: %w", err)
+	}
+	defer file.Close()
+
+	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
+		if _, err := file.WriteString("\n"); err != nil {
+			return fmt.Errorf("append newline to known_hosts: %w", err)
+		}
+	}
+	if _, err := file.WriteString(line + "\n"); err != nil {
+		return fmt.Errorf("append host to known_hosts: %w", err)
 	}
 	return nil
-}
-
-func replaceKnownHostEntry(existing, hostPattern string, publicKey ssh.PublicKey, replacement string) (string, bool) {
-	keyType := publicKey.Type()
-	lines := strings.Split(existing, "\n")
-	if strings.HasSuffix(existing, "\n") {
-		lines = lines[:len(lines)-1]
-	}
-	updated := make([]string, 0, len(lines)+1)
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			updated = append(updated, line)
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 3 || fields[1] != keyType {
-			updated = append(updated, line)
-			continue
-		}
-
-		patterns := strings.Split(fields[0], ",")
-		remaining := make([]string, 0, len(patterns))
-		matched := false
-		for _, pattern := range patterns {
-			if pattern == hostPattern {
-				matched = true
-				continue
-			}
-			remaining = append(remaining, pattern)
-		}
-		if !matched {
-			updated = append(updated, line)
-			continue
-		}
-
-		if len(remaining) > 0 {
-			updated = append(updated, strings.Join(remaining, ",")+" "+strings.Join(fields[1:], " "))
-		}
-	}
-
-	updated = appendKnownHostLine(updated, replacement)
-	result := strings.Join(updated, "\n")
-	result += "\n"
-	return result, result != existing
-}
-
-func appendKnownHostLine(lines []string, replacement string) []string {
-	for len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return append(lines, replacement)
 }
 
 func splitHostPort(address string) (string, int) {

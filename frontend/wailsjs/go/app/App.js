@@ -10,16 +10,8 @@ export function Bootstrap() {
   return window['go']['app']['App']['Bootstrap']();
 }
 
-export function BackupSiteLibrary() {
-  return window['go']['app']['App']['BackupSiteLibrary']();
-}
-
 export function CancelTransfer(arg1) {
   return window['go']['app']['App']['CancelTransfer'](arg1);
-}
-
-export function CheckForUpdates() {
-  return window['go']['app']['App']['CheckForUpdates']();
 }
 
 export function ClearAllTransfers() {
@@ -106,14 +98,6 @@ export function DownloadDroppedPaths(arg1, arg2, arg3) {
   return window['go']['app']['App']['DownloadDroppedPaths'](arg1, arg2, arg3);
 }
 
-export function CompareDirectories(arg1, arg2, arg3) {
-  return window['go']['app']['App']['CompareDirectories'](arg1, arg2, arg3);
-}
-
-export function SyncDirectories(arg1, arg2, arg3, arg4) {
-  return window['go']['app']['App']['SyncDirectories'](arg1, arg2, arg3, arg4);
-}
-
 export function ExecuteLocalPath(arg1) {
   return window['go']['app']['App']['ExecuteLocalPath'](arg1);
 }
@@ -134,8 +118,8 @@ export function GetLogs() {
   return window['go']['app']['App']['GetLogs']();
 }
 
-export function GetSiteDataDirectory() {
-  return window['go']['app']['App']['GetSiteDataDirectory']();
+export function GetPurchaseStatus() {
+  return window['go']['app']['App']['GetPurchaseStatus']();
 }
 
 export function GetRESTServerBaseURL() {
@@ -150,20 +134,12 @@ export function GetRESTServerStatus() {
   return window['go']['app']['App']['GetRESTServerStatus']();
 }
 
+export function GetRESTServerToken() {
+  return window['go']['app']['App']['GetRESTServerToken']();
+}
+
 export function GetRestAPIDocsMarkdown() {
   return window['go']['app']['App']['GetRestAPIDocsMarkdown']();
-}
-
-export function GetMCPContractMarkdown(arg1) {
-  return window['go']['app']['App']['GetMCPContractMarkdown'](arg1);
-}
-
-export function GetMCPStdioExecutable() {
-  return window['go']['app']['App']['GetMCPStdioExecutable']();
-}
-
-export function ExportMCPContractMarkdown(arg1) {
-  return window['go']['app']['App']['ExportMCPContractMarkdown'](arg1);
 }
 
 export function GetSSHOutputBuffer(arg1) {
@@ -202,8 +178,12 @@ export function OpenLocalPath(arg1) {
   return window['go']['app']['App']['OpenLocalPath'](arg1);
 }
 
-export function OpenSiteDataDirectory() {
-  return window['go']['app']['App']['OpenSiteDataDirectory']();
+export function PurchaseProUnlock() {
+  return window['go']['app']['App']['PurchaseProUnlock']();
+}
+
+export function RefreshPurchaseStatus() {
+  return window['go']['app']['App']['RefreshPurchaseStatus']();
 }
 
 export function RegisterBackgroundService(arg1) {
@@ -246,8 +226,8 @@ export function ResizeSSHSession(arg1, arg2, arg3) {
   return window['go']['app']['App']['ResizeSSHSession'](arg1, arg2, arg3);
 }
 
-export function RestoreSiteLibraryBackup() {
-  return window['go']['app']['App']['RestoreSiteLibraryBackup']();
+export function RestorePurchases() {
+  return window['go']['app']['App']['RestorePurchases']();
 }
 
 export function SaveConfig(arg1) {
@@ -274,6 +254,10 @@ export function ServiceStartup() {
   return window['go']['app']['App']['ServiceStartup']();
 }
 
+export function SetProUnlock(arg1) {
+  return window['go']['app']['App']['SetProUnlock'](arg1);
+}
+
 export function SortSiteFolders() {
   return window['go']['app']['App']['SortSiteFolders']();
 }
@@ -284,10 +268,6 @@ export function SortSitesByName() {
 
 export function StartSSHSession(arg1) {
   return window['go']['app']['App']['StartSSHSession'](arg1);
-}
-
-export function StartUpdate(arg1) {
-  return window['go']['app']['App']['StartUpdate'](arg1);
 }
 
 export function StartTelnetSession(arg1) {

@@ -32,7 +32,6 @@ type Props = {
   sortState: FileSortState;
   onSort: (key: FileSortKey) => void;
   onRefresh?: () => void;
-  onCompare?: () => void;
   onDropFiles?: (paths: string[]) => void;
   onDropFilesToDirectory?: (paths: string[], targetDirectory: string) => void;
   onMoveEntriesToDirectory?: (paths: string[], targetDirectory: string) => void;
@@ -53,7 +52,6 @@ export function FilePanel({
   sortState,
   onSort,
   onRefresh,
-  onCompare,
   onDropFiles,
   onDropFilesToDirectory,
   onMoveEntriesToDirectory,
@@ -190,33 +188,20 @@ export function FilePanel({
             />
           )}
         </div>
-        <div className="file-panel-header-actions">
-          {onCompare ? (
-            <button
-              type="button"
-              className="ghost compact-button"
-              onClick={onCompare}
-              aria-label={t.compareDirectories}
-              title={t.compareDirectories}
-            >
-              {t.compareDirectories}
-            </button>
-          ) : null}
-          <button
-            className="ghost compact-icon-button"
-            onClick={() => {
-              if (side === 'remote' && pathDraft !== path) {
-                onSubmitPath?.(pathDraft);
-                return;
-              }
-              onRefresh?.();
-            }}
-            aria-label={t.refresh}
-            title={t.refresh}
-          >
-            <FontAwesomeIcon icon={faRotateRight} />
-          </button>
-        </div>
+        <button
+          className="ghost compact-icon-button"
+          onClick={() => {
+            if (side === 'remote' && pathDraft !== path) {
+              onSubmitPath?.(pathDraft);
+              return;
+            }
+            onRefresh?.();
+          }}
+          aria-label={t.refresh}
+          title={t.refresh}
+        >
+          <FontAwesomeIcon icon={faRotateRight} />
+        </button>
       </div>
       <div
         ref={tableRef}

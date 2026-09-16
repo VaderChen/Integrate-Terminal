@@ -12,8 +12,6 @@ export type Site = {
   localPath: string;
   remotePath: string;
   lastUsedAt: string;
-  tags: string[];
-  favorite: boolean;
 };
 
 export type Tab = {
@@ -58,9 +56,6 @@ export type TransferItem = {
   progress: number;
   speedBps: number;
   status: 'running' | 'paused' | 'done' | 'failed' | 'cancelled';
-  attempt?: number;
-  maxAttempts?: number;
-  error?: string;
 };
 
 export type LogItem = {
@@ -75,6 +70,7 @@ export type Config = {
   windowHeight: number;
   windowX: number;
   windowY: number;
+  proUnlock: boolean;
   lastActiveTab: string;
   restoreTabsOnStart: boolean;
   closeTerminalTabOnDisconnect: boolean;
@@ -84,52 +80,30 @@ export type Config = {
   telnetLocalEcho: boolean;
   restServerEnabled: boolean;
   restServerPort: number;
-  restServerAllowlist: string[];
   fontScale: 'xsmall' | 'small' | 'medium' | 'large' | 'xlarge';
   language: '' | 'zh-TW' | 'zh-CN' | 'en' | 'ja' | 'ko';
   theme: 'neutral' | 'light' | 'dark' | 'contrast';
   siteFolders: string[];
-  transferRetryCount: number;
-  transferConflictStrategy: 'overwrite' | 'skip' | 'fail';
-  forceUpdate: boolean;
-};
-
-export type FileComparison = {
-  relativePath: string;
-  localExists: boolean;
-  remoteExists: boolean;
-  localSize: number;
-  remoteSize: number;
-  localModified: string;
-  remoteModified: string;
-  localDirectory: boolean;
-  remoteDirectory: boolean;
-  status: 'same' | 'local-only' | 'remote-only' | 'different' | 'type-conflict';
 };
 
 export type RestServerStatus = {
   enabled: boolean;
   running: boolean;
   baseURL: string;
-  mcpURL: string;
   port: number;
   attached: boolean;
-  allowlist: string[];
 };
 
-export type UpdateCheckResult = {
-  currentVersion: string;
-  latestVersion: string;
-  latestTag: string;
-  updateAvailable: boolean;
-  canDownload: boolean;
-  assetName: string;
-};
-
-export type UpdateActionResult = {
-  downloaded: boolean;
-  installScheduled: boolean;
-  restarting: boolean;
+export type PurchaseStatus = {
+  productId: string;
+  planName: string;
+  source: string;
+  statusMessage: string;
+  proUnlock: boolean;
+  canPurchase: boolean;
+  canRestore: boolean;
+  maxTabs: number;
+  currentTabs: number;
 };
 
 export type BootstrapPayload = {
@@ -155,5 +129,4 @@ export type HostTrustPrompt = {
   keyType: string;
   fingerprintSHA256: string;
   authorizedKey: string;
-  replacesExisting?: boolean;
 };

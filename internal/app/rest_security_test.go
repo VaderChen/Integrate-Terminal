@@ -7,44 +7,29 @@ import (
 	"testing"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
-	"github.com/VaderChen/Integrate-Terminal/internal/session"
-	"github.com/VaderChen/Integrate-Terminal/internal/store"
+	"IntegTERM/internal/model"
+	"IntegTERM/internal/session"
+	"IntegTERM/internal/store"
 )
 
-func TestRESTSecurityUsesAllowlist(t *testing.T) {
-	instance := &App{config: model.Config{RESTServerAllowlist: []string{"127.0.0.1"}}}
+func TestRESTSecurityRequiresToken(t *testing.T) {
+	instance := &App{restServerToken: "secret"}
 	handler := instance.withRESTSecurity(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
-	blockedRequest := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-	blockedRequest.RemoteAddr = "192.0.2.10:54321"
-	blocked := httptest.NewRecorder()
-	handler.ServeHTTP(blocked, blockedRequest)
-	if blocked.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", blocked.Code)
+	unauthorized := httptest.NewRecorder()
+	handler.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/api/transfers", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", unauthorized.Code)
 	}
 
-	allowedRequest := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-	allowedRequest.RemoteAddr = "127.0.0.1:54321"
-	allowed := httptest.NewRecorder()
-	handler.ServeHTTP(allowed, allowedRequest)
-	if allowed.Code != http.StatusNoContent {
-		t.Fatalf("expected 204, got %d", allowed.Code)
-	}
-}
-
-func TestRESTMuxDoesNotExposeLocalMCP(t *testing.T) {
-	instance := &App{config: model.Config{RESTServerAllowlist: []string{"127.0.0.1"}}}
-	request := httptest.NewRequest(http.MethodPost, "/mcp/local", nil)
-	request.RemoteAddr = "127.0.0.1:54321"
-	response := httptest.NewRecorder()
-
-	instance.restMux().ServeHTTP(response, request)
-
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("expected old local MCP endpoint to be unavailable, got %d", response.Code)
+	authorizedRequest := httptest.NewRequest(http.MethodGet, "/api/transfers", nil)
+	authorizedRequest.Header.Set("Authorization", "Bearer secret")
+	authorized := httptest.NewRecorder()
+	handler.ServeHTTP(authorized, authorizedRequest)
+	if authorized.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", authorized.Code)
 	}
 }
 
@@ -141,17 +126,24 @@ func waitForOperationStatus(t *testing.T, instance *App, id string, expected str
 }
 
 func TestRESTSecurityRejectsForeignOrigin(t *testing.T) {
-	instance := &App{config: model.Config{RESTServerAllowlist: []string{"127.0.0.1"}}}
+	instance := &App{restServerToken: "secret"}
 	handler := instance.withRESTSecurity(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
 	request := httptest.NewRequest(http.MethodGet, "/api/status", nil)
-	request.RemoteAddr = "127.0.0.1:54321"
 	request.Header.Set("Origin", "https://example.com")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", response.Code)
+	}
+}
+
+func TestAddRESTAuthToCurl(t *testing.T) {
+	actual := addRESTAuthToCurl("curl http://127.0.0.1/api/sites", "secret")
+	expected := "curl -H 'Authorization: Bearer secret' http://127.0.0.1/api/sites"
+	if actual != expected {
+		t.Fatalf("expected %q, got %q", expected, actual)
 	}
 }

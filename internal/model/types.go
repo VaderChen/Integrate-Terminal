@@ -18,8 +18,6 @@ type Site struct {
 	LocalPath               string   `json:"localPath"`
 	RemotePath              string   `json:"remotePath"`
 	LastUsedAt              string   `json:"lastUsedAt"`
-	Tags                    []string `json:"tags,omitempty"`
-	Favorite                bool     `json:"favorite,omitempty"`
 }
 
 type Tab struct {
@@ -51,15 +49,12 @@ type FileEntry struct {
 }
 
 type TransferItem struct {
-	ID          string `json:"id"`
-	Direction   string `json:"direction"`
-	Name        string `json:"name"`
-	Progress    int    `json:"progress"`
-	SpeedBps    int64  `json:"speedBps"`
-	Status      string `json:"status"`
-	Attempt     int    `json:"attempt,omitempty"`
-	MaxAttempts int    `json:"maxAttempts,omitempty"`
-	Error       string `json:"error,omitempty"`
+	ID        string `json:"id"`
+	Direction string `json:"direction"`
+	Name      string `json:"name"`
+	Progress  int    `json:"progress"`
+	SpeedBps  int64  `json:"speedBps"`
+	Status    string `json:"status"`
 }
 
 type LogItem struct {
@@ -74,6 +69,7 @@ type Config struct {
 	WindowHeight                 int      `json:"windowHeight"`
 	WindowX                      int      `json:"windowX"`
 	WindowY                      int      `json:"windowY"`
+	ProUnlock                    bool     `json:"proUnlock"`
 	LastActiveTab                string   `json:"lastActiveTab"`
 	RestoreTabsOnStart           bool     `json:"restoreTabsOnStart"`
 	CloseTerminalTabOnDisconnect bool     `json:"closeTerminalTabOnDisconnect"`
@@ -83,14 +79,10 @@ type Config struct {
 	TelnetLocalEcho              bool     `json:"telnetLocalEcho"`
 	RESTServerEnabled            bool     `json:"restServerEnabled"`
 	RESTServerPort               int      `json:"restServerPort"`
-	RESTServerAllowlist          []string `json:"restServerAllowlist"`
 	FontScale                    string   `json:"fontScale"`
 	Language                     string   `json:"language"`
 	Theme                        string   `json:"theme"`
 	SiteFolders                  []string `json:"siteFolders"`
-	TransferRetryCount           int      `json:"transferRetryCount"`
-	TransferConflictStrategy     string   `json:"transferConflictStrategy"`
-	ForceUpdate                  bool     `json:"forceUpdate"`
 }
 
 type SiteLibraryMutationResult struct {
@@ -110,41 +102,23 @@ type BootstrapPayload struct {
 }
 
 type RESTServerStatus struct {
-	Enabled   bool     `json:"enabled"`
-	Running   bool     `json:"running"`
-	BaseURL   string   `json:"baseURL"`
-	MCPURL    string   `json:"mcpURL"`
-	Port      int      `json:"port"`
-	Attached  bool     `json:"attached"`
-	Allowlist []string `json:"allowlist"`
+	Enabled  bool   `json:"enabled"`
+	Running  bool   `json:"running"`
+	BaseURL  string `json:"baseURL"`
+	Port     int    `json:"port"`
+	Attached bool   `json:"attached"`
 }
 
-type UpdateCheckResult struct {
-	CurrentVersion  string `json:"currentVersion"`
-	LatestVersion   string `json:"latestVersion"`
-	LatestTag       string `json:"latestTag"`
-	UpdateAvailable bool   `json:"updateAvailable"`
-	CanDownload     bool   `json:"canDownload"`
-	AssetName       string `json:"assetName"`
-}
-
-type UpdateActionResult struct {
-	Downloaded       bool `json:"downloaded"`
-	InstallScheduled bool `json:"installScheduled"`
-	Restarting       bool `json:"restarting"`
-}
-
-type FileComparison struct {
-	RelativePath    string `json:"relativePath"`
-	LocalExists     bool   `json:"localExists"`
-	RemoteExists    bool   `json:"remoteExists"`
-	LocalSize       int64  `json:"localSize"`
-	RemoteSize      int64  `json:"remoteSize"`
-	LocalModified   string `json:"localModified"`
-	RemoteModified  string `json:"remoteModified"`
-	LocalDirectory  bool   `json:"localDirectory"`
-	RemoteDirectory bool   `json:"remoteDirectory"`
-	Status          string `json:"status"`
+type PurchaseStatus struct {
+	ProductID     string `json:"productId"`
+	PlanName      string `json:"planName"`
+	Source        string `json:"source"`
+	StatusMessage string `json:"statusMessage"`
+	ProUnlock     bool   `json:"proUnlock"`
+	CanPurchase   bool   `json:"canPurchase"`
+	CanRestore    bool   `json:"canRestore"`
+	MaxTabs       int    `json:"maxTabs"`
+	CurrentTabs   int    `json:"currentTabs"`
 }
 
 type HostTrustPrompt struct {
@@ -154,5 +128,4 @@ type HostTrustPrompt struct {
 	KeyType           string `json:"keyType"`
 	FingerprintSHA256 string `json:"fingerprintSHA256"`
 	AuthorizedKey     string `json:"authorizedKey"`
-	ReplacesExisting  bool   `json:"replacesExisting,omitempty"`
 }

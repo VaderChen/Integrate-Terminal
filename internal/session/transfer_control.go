@@ -3,7 +3,7 @@ package session
 import (
 	"fmt"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func (m *Manager) ClearCompletedTransfers() []model.TransferItem {

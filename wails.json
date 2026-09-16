@@ -7,10 +7,10 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "info": {
-    "productVersion": "1.26.0912"
+    "productVersion": "1.26.0714"
   },
   "author": {
-    "name": "Vader Chen",
-    "email": "8309425+VaderChen@users.noreply.github.com"
+    "name": "Codex",
+    "email": "codex@example.com"
   }
 }

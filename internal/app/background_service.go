@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func (a *App) ReloadConfig() model.Config {
@@ -20,7 +21,7 @@ func (a *App) ReloadConfig() model.Config {
 		a.config = cfg
 		a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
 	}
-	return cloneConfig(a.config)
+	return a.config
 }
 
 func (a *App) ConnectionCounts() (background int, foreground int) {
@@ -60,7 +61,7 @@ func (a *App) ensureBackgroundService() error {
 	}
 
 	cmd := exec.Command(executablePath, "serve")
-	configureBackgroundCommand(cmd)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -93,17 +94,6 @@ func (a *App) backgroundServicePIDPath() string {
 	return filepath.Join(a.store.BaseDir(), "background-service.pid")
 }
 
-func (a *App) backgroundServiceLockPath() string {
-	return filepath.Join(a.store.BaseDir(), "background-service.lock")
-}
-
-func (a *App) AcquireBackgroundServiceLock() (*BackgroundServiceLock, error) {
-	if err := a.store.Ensure(); err != nil {
-		return nil, err
-	}
-	return acquireBackgroundServiceLock(a.backgroundServiceLockPath())
-}
-
 func (a *App) backgroundServiceRunning() bool {
 	data, err := os.ReadFile(a.backgroundServicePIDPath())
 	if err != nil {
@@ -116,7 +106,12 @@ func (a *App) backgroundServiceRunning() bool {
 		return false
 	}
 
-	if !backgroundProcessRunning(pid) {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		_ = os.Remove(a.backgroundServicePIDPath())
+		return false
+	}
+	if err := process.Signal(syscall.Signal(0)); err != nil {
 		_ = os.Remove(a.backgroundServicePIDPath())
 		return false
 	}
@@ -128,22 +123,6 @@ func (a *App) RegisterBackgroundService(pid int) error {
 }
 
 func (a *App) UnregisterBackgroundService() error {
-	return os.Remove(a.backgroundServicePIDPath())
-}
-
-// StopBackgroundService stops the companion service when the user chooses a full quit.
-func (a *App) StopBackgroundService() error {
-	data, err := os.ReadFile(a.backgroundServicePIDPath())
-	if err != nil {
-		return nil
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil || pid <= 0 {
-		return os.Remove(a.backgroundServicePIDPath())
-	}
-	if process, err := os.FindProcess(pid); err == nil {
-		_ = process.Kill()
-	}
 	return os.Remove(a.backgroundServicePIDPath())
 }
 
@@ -171,7 +150,7 @@ func (a *App) ReloadRuntimeConfig() (model.Config, error) {
 	defer a.stateMu.Unlock()
 	cfg, err := a.store.LoadConfig()
 	if err != nil {
-		return cloneConfig(a.config), err
+		return a.config, err
 	}
 
 	previousConfig := a.config
@@ -180,13 +159,13 @@ func (a *App) ReloadRuntimeConfig() (model.Config, error) {
 
 	if a.allowRESTAttach {
 		a.syncAttachedRESTState()
-		return cloneConfig(a.config), nil
+		return a.config, nil
 	}
 
 	if err := a.applyRESTServerConfig(); err != nil {
 		a.config = previousConfig
 		_ = a.applyRESTServerConfig()
-		return cloneConfig(a.config), err
+		return a.config, err
 	}
-	return cloneConfig(a.config), nil
+	return a.config, nil
 }

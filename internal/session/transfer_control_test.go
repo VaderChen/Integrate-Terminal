@@ -3,7 +3,7 @@ package session
 import (
 	"testing"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func TestClearAllTransfersCancelsRunningWork(t *testing.T) {

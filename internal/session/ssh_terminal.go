@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
-	"github.com/VaderChen/Integrate-Terminal/internal/sshutil"
+	"IntegTERM/internal/model"
+	"IntegTERM/internal/sshutil"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
@@ -56,7 +56,7 @@ func (m *Manager) StartSSHSession(ctx context.Context, site model.Site) (string,
 		Timeout:         10 * time.Second,
 	}
 
-	client, err := sshutil.DialWithRouteRetry("tcp", fmt.Sprintf("%s:%d", site.Host, site.Port), sshConfig)
+	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", site.Host, site.Port), sshConfig)
 	if err != nil {
 		var trustErr *sshutil.HostTrustRequiredError
 		if errors.As(err, &trustErr) {
@@ -137,13 +137,10 @@ func (m *Manager) streamSSHOutput(ctx context.Context, session *sshTerminalSessi
 			chunk, rest := splitUTF8SafeChunk(pending, buffer[:n])
 			pending = rest
 			if len(chunk) > 0 {
-				visibleChunk, nextPendingControl, cwdPaths, clipboardTexts := stripTerminalSignals(pendingControl, chunk)
+				visibleChunk, nextPendingControl, cwdPaths := stripTerminalSignals(pendingControl, chunk)
 				pendingControl = nextPendingControl
 				for _, cwdPath := range cwdPaths {
 					emitSessionEvent(ctx, fmt.Sprintf("ssh:cwd:%s", session.id), cwdPath)
-				}
-				for _, clipboardText := range clipboardTexts {
-					emitSessionEvent(ctx, fmt.Sprintf("ssh:clipboard:%s", session.id), clipboardText)
 				}
 				if len(visibleChunk) == 0 {
 					goto afterChunk

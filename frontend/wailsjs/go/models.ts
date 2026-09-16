@@ -25,9 +25,6 @@ export namespace model {
 	    progress: number;
 	    speedBps: number;
 	    status: string;
-	    attempt: number;
-	    maxAttempts: number;
-	    error: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TransferItem(source);
@@ -41,9 +38,6 @@ export namespace model {
 	        this.progress = source["progress"];
 	        this.speedBps = source["speedBps"];
 	        this.status = source["status"];
-	        this.attempt = source["attempt"];
-	        this.maxAttempts = source["maxAttempts"];
-	        this.error = source["error"];
 	    }
 	}
 	export class FileEntry {
@@ -73,6 +67,7 @@ export namespace model {
 	    windowHeight: number;
 	    windowX: number;
 	    windowY: number;
+	    proUnlock: boolean;
 	    lastActiveTab: string;
 	    restoreTabsOnStart: boolean;
 	    closeTerminalTabOnDisconnect: boolean;
@@ -82,14 +77,10 @@ export namespace model {
 	    telnetLocalEcho: boolean;
 	    restServerEnabled: boolean;
 	    restServerPort: number;
-	    restServerAllowlist: string[];
 	    fontScale: string;
 	    language: string;
 	    theme: string;
 	    siteFolders: string[];
-	    transferRetryCount: number;
-	    transferConflictStrategy: string;
-	    forceUpdate: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -101,6 +92,7 @@ export namespace model {
 	        this.windowHeight = source["windowHeight"];
 	        this.windowX = source["windowX"];
 	        this.windowY = source["windowY"];
+	        this.proUnlock = source["proUnlock"];
 	        this.lastActiveTab = source["lastActiveTab"];
 	        this.restoreTabsOnStart = source["restoreTabsOnStart"];
 	        this.closeTerminalTabOnDisconnect = source["closeTerminalTabOnDisconnect"];
@@ -110,14 +102,10 @@ export namespace model {
 	        this.telnetLocalEcho = source["telnetLocalEcho"];
 	        this.restServerEnabled = source["restServerEnabled"];
 	        this.restServerPort = source["restServerPort"];
-	        this.restServerAllowlist = source["restServerAllowlist"];
 	        this.fontScale = source["fontScale"];
 	        this.language = source["language"];
 	        this.theme = source["theme"];
 	        this.siteFolders = source["siteFolders"];
-	        this.transferRetryCount = source["transferRetryCount"];
-	        this.transferConflictStrategy = source["transferConflictStrategy"];
-	        this.forceUpdate = source["forceUpdate"];
 	    }
 	}
 	export class Tab {
@@ -180,8 +168,6 @@ export namespace model {
 	    localPath: string;
 	    remotePath: string;
 	    lastUsedAt: string;
-	    tags: string[];
-	    favorite: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Site(source);
@@ -206,38 +192,6 @@ export namespace model {
 	        this.localPath = source["localPath"];
 	        this.remotePath = source["remotePath"];
 	        this.lastUsedAt = source["lastUsedAt"];
-	        this.tags = source["tags"];
-	        this.favorite = source["favorite"];
-	    }
-	}
-	export class FileComparison {
-	    relativePath: string;
-	    localExists: boolean;
-	    remoteExists: boolean;
-	    localSize: number;
-	    remoteSize: number;
-	    localModified: string;
-	    remoteModified: string;
-	    localDirectory: boolean;
-	    remoteDirectory: boolean;
-	    status: string;
-
-	    static createFrom(source: any = {}) {
-	        return new FileComparison(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.relativePath = source["relativePath"];
-	        this.localExists = source["localExists"];
-	        this.remoteExists = source["remoteExists"];
-	        this.localSize = source["localSize"];
-	        this.remoteSize = source["remoteSize"];
-	        this.localModified = source["localModified"];
-	        this.remoteModified = source["remoteModified"];
-	        this.localDirectory = source["localDirectory"];
-	        this.remoteDirectory = source["remoteDirectory"];
-	        this.status = source["status"];
 	    }
 	}
 	export class BootstrapPayload {
@@ -293,7 +247,6 @@ export namespace model {
 	    keyType: string;
 	    fingerprintSHA256: string;
 	    authorizedKey: string;
-	    replacesExisting: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new HostTrustPrompt(source);
@@ -307,18 +260,43 @@ export namespace model {
 	        this.keyType = source["keyType"];
 	        this.fingerprintSHA256 = source["fingerprintSHA256"];
 	        this.authorizedKey = source["authorizedKey"];
-	        this.replacesExisting = source["replacesExisting"];
 	    }
 	}
 	
+	export class PurchaseStatus {
+	    productId: string;
+	    planName: string;
+	    source: string;
+	    statusMessage: string;
+	    proUnlock: boolean;
+	    canPurchase: boolean;
+	    canRestore: boolean;
+	    maxTabs: number;
+	    currentTabs: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PurchaseStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.productId = source["productId"];
+	        this.planName = source["planName"];
+	        this.source = source["source"];
+	        this.statusMessage = source["statusMessage"];
+	        this.proUnlock = source["proUnlock"];
+	        this.canPurchase = source["canPurchase"];
+	        this.canRestore = source["canRestore"];
+	        this.maxTabs = source["maxTabs"];
+	        this.currentTabs = source["currentTabs"];
+	    }
+	}
 	export class RESTServerStatus {
 	    enabled: boolean;
 	    running: boolean;
 	    baseURL: string;
-	    mcpURL: string;
 	    port: number;
 	    attached: boolean;
-	    allowlist: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new RESTServerStatus(source);
@@ -329,51 +307,11 @@ export namespace model {
 	        this.enabled = source["enabled"];
 	        this.running = source["running"];
 	        this.baseURL = source["baseURL"];
-	        this.mcpURL = source["mcpURL"];
 	        this.port = source["port"];
 	        this.attached = source["attached"];
-	        this.allowlist = source["allowlist"];
 	    }
 	}
-	export class UpdateActionResult {
-	    downloaded: boolean;
-	    installScheduled: boolean;
-	    restarting: boolean;
-
-	    static createFrom(source: any = {}) {
-	        return new UpdateActionResult(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.downloaded = source["downloaded"];
-	        this.installScheduled = source["installScheduled"];
-	        this.restarting = source["restarting"];
-	    }
-	}
-	export class UpdateCheckResult {
-	    currentVersion: string;
-	    latestVersion: string;
-	    latestTag: string;
-	    updateAvailable: boolean;
-	    canDownload: boolean;
-	    assetName: string;
-
-	    static createFrom(source: any = {}) {
-	        return new UpdateCheckResult(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.currentVersion = source["currentVersion"];
-	        this.latestVersion = source["latestVersion"];
-	        this.latestTag = source["latestTag"];
-	        this.updateAvailable = source["updateAvailable"];
-	        this.canDownload = source["canDownload"];
-	        this.assetName = source["assetName"];
-	    }
-	}
-
+	
 	export class SiteLibraryMutationResult {
 	    sites: Site[];
 	    config: Config;
@@ -409,3 +347,4 @@ export namespace model {
 	
 
 }
+

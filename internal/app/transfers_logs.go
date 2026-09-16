@@ -1,22 +1,17 @@
 package app
 
-import "github.com/VaderChen/Integrate-Terminal/internal/model"
+import "IntegTERM/internal/model"
 
 func (a *App) ListLocal(tabID string, path string) []model.FileEntry {
-	a.stateMu.RLock()
-	showHidden := a.config.ShowHiddenFiles
-	a.stateMu.RUnlock()
 	if path == "" {
 		path = defaultLocalPath()
 	}
 	a.markTabActivity(tabID)
-	return filterHiddenEntries(a.sessionManager.SampleLocalFiles(path), showHidden)
+	return filterHiddenEntries(a.sessionManager.SampleLocalFiles(path), a.config.ShowHiddenFiles)
 }
 
 func (a *App) ListRemote(tabID string, path string) []model.FileEntry {
 	a.markTabActivity(tabID)
-	a.stateMu.RLock()
-	defer a.stateMu.RUnlock()
 	for _, tab := range a.tabs {
 		if tab.ID == tabID && tab.Mode == "terminal" {
 			return []model.FileEntry{}
@@ -30,24 +25,6 @@ func (a *App) ListRemote(tabID string, path string) []model.FileEntry {
 		return []model.FileEntry{}
 	}
 	return filterHiddenEntries(entries, a.config.ShowHiddenFiles)
-}
-
-func (a *App) listRemoteWithError(tabID string, remotePath string) ([]model.FileEntry, error) {
-	a.stateMu.RLock()
-	defer a.stateMu.RUnlock()
-	for _, tab := range a.tabs {
-		if tab.ID == tabID && tab.Mode == "terminal" {
-			return []model.FileEntry{}, nil
-		}
-	}
-	if remotePath == "" {
-		remotePath = "/"
-	}
-	entries, err := a.sessionManager.ListRemote(tabID, remotePath)
-	if err != nil {
-		return nil, err
-	}
-	return filterHiddenEntries(entries, a.config.ShowHiddenFiles), nil
 }
 
 func (a *App) GetTransfers() []model.TransferItem {

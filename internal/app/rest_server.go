@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,17 +12,18 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/netip"
-	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/crashlog"
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/crashlog"
+	"IntegTERM/internal/model"
 )
 
 const defaultRESTServerPort = 18080
+
+const restTokenFilename = "rest-api.token"
 
 type siteEnvelope struct {
 	Sites []model.Site `json:"sites"`
@@ -64,31 +68,23 @@ func sanitizeRESTServerPort(port int) int {
 	return port
 }
 
-func sanitizeRESTServerAllowlist(values []string) []string {
-	seen := make(map[string]struct{})
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "localhost" {
-			value = "127.0.0.1"
+func loadOrCreateRESTToken(baseDir string) string {
+	tokenPath := filepath.Join(baseDir, restTokenFilename)
+	if data, err := os.ReadFile(tokenPath); err == nil {
+		if token := strings.TrimSpace(string(data)); token != "" {
+			return token
 		}
-		if address, err := netip.ParseAddr(value); err == nil {
-			value = address.Unmap().String()
-		} else if prefix, err := netip.ParsePrefix(value); err == nil {
-			value = prefix.Masked().String()
-		} else {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, value)
 	}
-	if len(result) == 0 {
-		return []string{"127.0.0.1"}
+
+	buffer := make([]byte, 32)
+	if _, err := rand.Read(buffer); err != nil {
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
 	}
-	return result
+	token := hex.EncodeToString(buffer)
+	if err := os.MkdirAll(baseDir, 0o755); err == nil {
+		_ = os.WriteFile(tokenPath, []byte(token+"\n"), 0o600)
+	}
+	return token
 }
 
 func (a *App) applyRESTServerConfig() error {
@@ -96,7 +92,6 @@ func (a *App) applyRESTServerConfig() error {
 	defer a.restServerMu.Unlock()
 
 	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
-	a.config.RESTServerAllowlist = sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
 	if !a.config.RESTServerEnabled {
 		return a.stopRESTServerLocked()
 	}
@@ -133,7 +128,7 @@ func (a *App) startRESTServerLocked() error {
 		return nil
 	}
 
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return err
 	}
@@ -185,22 +180,19 @@ func (a *App) stopRESTServerLocked() error {
 }
 
 func (a *App) GetRESTServerStatus() model.RESTServerStatus {
-	a.stateMu.RLock()
-	enabled := a.config.RESTServerEnabled
-	port := sanitizeRESTServerPort(a.config.RESTServerPort)
-	allowlist := sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
-	a.stateMu.RUnlock()
 	a.restServerMu.Lock()
 	defer a.restServerMu.Unlock()
 	return model.RESTServerStatus{
-		Enabled:   enabled,
-		Running:   a.restServer != nil || a.restAttached,
-		BaseURL:   a.restServerURL,
-		MCPURL:    strings.TrimRight(a.restServerURL, "/") + "/mcp",
-		Port:      port,
-		Attached:  a.restAttached,
-		Allowlist: append([]string(nil), allowlist...),
+		Enabled:  a.config.RESTServerEnabled,
+		Running:  a.restServer != nil || a.restAttached,
+		BaseURL:  a.restServerURL,
+		Port:     sanitizeRESTServerPort(a.config.RESTServerPort),
+		Attached: a.restAttached,
 	}
+}
+
+func (a *App) GetRESTServerToken() string {
+	return a.restServerToken
 }
 
 func detectExistingRESTServer(baseURL string) bool {
@@ -225,13 +217,6 @@ func detectExistingRESTServer(baseURL string) bool {
 }
 
 func (a *App) restMux() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", a.handleRESTStatus)
-	mux.Handle("/mcp", a.newMCPHTTPHandler())
-	return a.withRESTSecurity(mux)
-}
-
-func (a *App) restRoutesMux() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/docs.md", a.handleRESTDocsMarkdown)
 	mux.HandleFunc("/api/status", a.handleRESTStatus)
@@ -262,7 +247,7 @@ func (a *App) restRoutesMux() http.Handler {
 	mux.HandleFunc("/api/transfers", a.handleRESTTransfers)
 	mux.HandleFunc("/api/logs", a.handleRESTLogs)
 	mux.HandleFunc("/api/config", a.handleRESTConfig)
-	return mux
+	return a.withRESTSecurity(mux)
 }
 
 func (a *App) withRESTSecurity(next http.Handler) http.Handler {
@@ -273,13 +258,8 @@ func (a *App) withRESTSecurity(next http.Handler) http.Handler {
 				writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()
-		if !a.isAllowedRESTClient(r.RemoteAddr) {
-			writeError(w, http.StatusForbidden, "client IP not in allowlist")
-			return
-		}
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
-		originAllowed := a.isAllowedRESTOrigin(origin)
-		if origin != "" && !originAllowed {
+		if origin != "" && !isAllowedRESTOrigin(origin) {
 			writeError(w, http.StatusForbidden, "origin not allowed")
 			return
 		}
@@ -287,62 +267,61 @@ func (a *App) withRESTSecurity(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept, MCP-Protocol-Version, MCP-Session-Id, Last-Event-ID")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-IntegTERM-Token")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
+		}
+		if r.URL.Path != "/api/status" && !a.isAuthorizedRESTRequest(r) {
+			writeError(w, http.StatusUnauthorized, "invalid or missing API token")
+			return
+		}
+
+		if isRESTStatePath(r.URL.Path) {
+			needsWriteLock := r.Method != http.MethodGet || strings.HasPrefix(r.URL.Path, "/api/sites")
+			if !needsWriteLock {
+				a.stateMu.RLock()
+				defer a.stateMu.RUnlock()
+			} else {
+				a.stateMu.Lock()
+				defer a.stateMu.Unlock()
+				if strings.HasPrefix(r.URL.Path, "/api/sites") {
+					if err := a.reloadSitesFromStoreLocked(); err != nil {
+						writeError(w, http.StatusInternalServerError, "reload sites: "+err.Error())
+						return
+					}
+				}
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-func (a *App) isAllowedRESTClient(remoteAddr string) bool {
-	address, ok := restClientAddress(remoteAddr)
-	if !ok {
+func (a *App) isAuthorizedRESTRequest(r *http.Request) bool {
+	token := strings.TrimSpace(r.Header.Get("X-IntegTERM-Token"))
+	if authorization := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(authorization, "Bearer ") {
+		token = strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+	}
+	if token == "" || a.restServerToken == "" || len(token) != len(a.restServerToken) {
 		return false
 	}
-	a.stateMu.RLock()
-	allowlist := append([]string(nil), a.config.RESTServerAllowlist...)
-	a.stateMu.RUnlock()
-	for _, entry := range sanitizeRESTServerAllowlist(allowlist) {
-		if allowedAddress, err := netip.ParseAddr(entry); err == nil && address == allowedAddress.Unmap() {
-			return true
-		}
-		if prefix, err := netip.ParsePrefix(entry); err == nil && prefix.Contains(address) {
-			return true
-		}
-	}
-	return false
+	return subtle.ConstantTimeCompare([]byte(token), []byte(a.restServerToken)) == 1
 }
 
-func (a *App) isAllowedRESTOrigin(origin string) bool {
-	host, ok := restOriginHost(origin)
-	if !ok {
-		return false
-	}
-	return a.isAllowedRESTClient(net.JoinHostPort(host, "0"))
+func isAllowedRESTOrigin(origin string) bool {
+	return strings.HasPrefix(origin, "http://127.0.0.1:") ||
+		strings.HasPrefix(origin, "http://localhost:") ||
+		origin == "http://127.0.0.1" ||
+		origin == "http://localhost"
 }
 
-func restClientAddress(remoteAddr string) (netip.Addr, bool) {
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		host = remoteAddr
-	}
-	address, err := netip.ParseAddr(strings.Trim(host, "[]"))
-	if err != nil {
-		return netip.Addr{}, false
-	}
-	return address.Unmap(), true
-}
-
-func restOriginHost(origin string) (string, bool) {
-	parsed, err := url.Parse(origin)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "", false
-	}
-	host := parsed.Hostname()
-	return host, host != ""
+func isRESTStatePath(requestPath string) bool {
+	return requestPath == "/api/status" ||
+		requestPath == "/api/docs.md" ||
+		strings.HasPrefix(requestPath, "/api/sites") ||
+		strings.HasPrefix(requestPath, "/api/tabs") ||
+		requestPath == "/api/config"
 }
 
 func mustOpenCrashLogWriter() *os.File {

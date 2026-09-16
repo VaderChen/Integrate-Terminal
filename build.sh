@@ -2,32 +2,18 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
-
-FRONTEND_DIR="./frontend"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
 APP_NAME="IntegTERM"
-DIST_DIR="./dist"
-APP_PATH="$DIST_DIR/$APP_NAME.app"
+BUILD_BIN_DIR="$SCRIPT_DIR/build/bin"
+APP_PATH="$BUILD_BIN_DIR/$APP_NAME.app"
+PKG_PATH="$BUILD_BIN_DIR/$APP_NAME.pkg"
 TMP_ROOT=""
 export MACOSX_DEPLOYMENT_TARGET="12.0"
 export CGO_CFLAGS="-mmacosx-version-min=12.0"
 export CGO_LDFLAGS="-mmacosx-version-min=12.0"
 export COPYFILE_DISABLE=1
 export COPY_EXTENDED_ATTRIBUTES_DISABLE=1
-CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
-APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.vader.integterm}"
-BUILD_SOURCE_URL="${BUILD_SOURCE_URL:-https://github.com/VaderChen/Integrate-Terminal}"
-
-if (( $# > 0 )); then
-  echo "用法：$0"
-  echo "公開版使用 ad-hoc 簽章，不啟用 App Sandbox。"
-  exit 1
-fi
-
-if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
-  echo "此腳本只支援 Apple Silicon macOS。"
-  exit 1
-fi
 
 cleanup_tmp_root() {
   if [[ -n "$TMP_ROOT" && -d "$TMP_ROOT" ]]; then
@@ -41,10 +27,47 @@ if [[ -f "$HOME/.zshrc" ]]; then
   source "$HOME/.zshrc"
 fi
 
-if [[ ! "$APP_BUNDLE_ID" =~ '^[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+$' ]]; then
-  echo "APP_BUNDLE_ID 格式錯誤：$APP_BUNDLE_ID"
-  exit 1
-fi
+APP_MARKETING_VERSION="1.$(date +%y).$(date +%m%d)"
+APP_BUILD_LABEL="$(date +%H%M)"
+APP_DISPLAY_VERSION="$APP_MARKETING_VERSION build $APP_BUILD_LABEL"
+APP_BUNDLE_VERSION="1.$(date +%y).$(date +%m%d%H%M)"
+export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
+export APP_MARKETING_VERSION
+export APP_BUNDLE_VERSION
+
+find_wails() {
+  if command -v wails >/dev/null 2>&1; then
+    command -v wails
+    return 0
+  fi
+
+  local candidates=()
+  local gopath=""
+  gopath="$(go env GOPATH 2>/dev/null || true)"
+  if [[ -n "$gopath" ]]; then
+    candidates+=("$gopath/bin/wails")
+  fi
+  candidates+=(
+    "$HOME/go/bin/wails"
+    "/opt/homebrew/bin/wails"
+    "/usr/local/bin/wails"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+install_wails() {
+  echo "未找到 Wails，正在自動安裝..."
+  GO111MODULE=on go install github.com/wailsapp/wails/v2/cmd/wails@latest
+}
 
 cleanup_appledouble() {
   local target_path="$1"
@@ -69,7 +92,27 @@ normalize_bundle_permissions() {
   fi
 }
 
-required_commands=(go node npm rsync codesign ditto)
+copy_storekit_bridge() {
+  local app_path="$1"
+  local bridge_path="$SCRIPT_DIR/internal/purchase/native/libintegtermstorekit2.dylib"
+  local frameworks_dir="$app_path/Contents/Frameworks"
+  if [[ ! -f "$bridge_path" ]]; then
+    echo "找不到 StoreKit 2 橋接動態庫：$bridge_path"
+    exit 1
+  fi
+  mkdir -p "$frameworks_dir"
+  cp "$bridge_path" "$frameworks_dir/"
+}
+
+configure_storekit_bridge_rpath() {
+  local app_path="$1"
+  local executable_path="$app_path/Contents/MacOS/$APP_NAME"
+  if [[ -f "$executable_path" ]]; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$executable_path" 2>/dev/null || true
+  fi
+}
+
+required_commands=(go node npm)
 for cmd in "${required_commands[@]}"; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "缺少必要指令: $cmd"
@@ -78,28 +121,31 @@ for cmd in "${required_commands[@]}"; do
   fi
 done
 
-echo "解析並同步產品版本..."
-BUILD_VERSION_JSON="$(node "./scripts/resolve-build-version.mjs" --sync)"
-build_version_field() {
-  node -e 'const value = JSON.parse(process.argv[1])[process.argv[2]]; process.stdout.write(String(value));' "$BUILD_VERSION_JSON" "$1"
-}
-APP_MARKETING_VERSION="$(build_version_field marketingVersion)"
-APP_BUILD_LABEL="$(build_version_field buildLabel)"
-APP_DISPLAY_VERSION="$(build_version_field displayVersion)"
-APP_BUNDLE_VERSION="$(build_version_field bundleVersion)"
-BUILD_TIME_SOURCE="$(build_version_field timeSource)"
-
-export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
-export APP_MARKETING_VERSION
-export APP_BUILD_LABEL
-export APP_BUNDLE_VERSION
-
-WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2 2>/dev/null || true)"
-if [[ -z "$WAILS_VERSION" || "$WAILS_VERSION" == "<no value>" ]]; then
-  echo "無法取得 go.mod 指定的 Wails 版本。"
+if ! command -v rsync >/dev/null 2>&1; then
+  echo "缺少必要指令: rsync"
+  echo "請先安裝完成後再執行 $0"
   exit 1
 fi
-WAILS_COMMAND=(go run "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION")
+
+WAILS_BIN="$(find_wails || true)"
+if [[ -z "$WAILS_BIN" ]]; then
+  install_wails
+  WAILS_BIN="$(find_wails || true)"
+fi
+
+if [[ -z "$WAILS_BIN" ]]; then
+  echo "缺少必要指令: wails"
+  echo "已嘗試自動安裝，但仍未找到。"
+  echo "可手動執行：go install github.com/wailsapp/wails/v2/cmd/wails@latest"
+  echo "若已安裝，請確認 \$HOME/go/bin 或 \$(go env GOPATH)/bin 已加入 PATH。"
+  exit 1
+fi
+
+if ! command -v codesign >/dev/null 2>&1; then
+  echo "缺少必要指令: codesign"
+  echo "請先安裝完成後再執行 $0"
+  exit 1
+fi
 
 cd "$FRONTEND_DIR"
 if [[ ! -d node_modules ]]; then
@@ -107,86 +153,73 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
-cd ..
+cd "$SCRIPT_DIR"
 echo "整理 Go 模組..."
 go mod tidy
 
-echo "產生第三方授權清冊..."
-node "./scripts/generate-third-party-notices.mjs"
+echo "建置 StoreKit 2 原生橋接..."
+"$SCRIPT_DIR/scripts/build-storekit2-bridge.sh"
+export DYLD_LIBRARY_PATH="$SCRIPT_DIR/internal/purchase/native${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
 echo "同步 App Icon..."
-"./sync-app-icon.sh"
+"$SCRIPT_DIR/sync-app-icon.sh"
+
+echo "同步 Wails 產品版本..."
+node <<'EOF'
+const fs = require('fs');
+const path = require('path');
+
+const configPath = path.join(process.cwd(), 'wails.json');
+const serviceVersionPath = path.join(process.cwd(), 'internal', 'version', 'version.json');
+const appVersion = process.env.APP_MARKETING_VERSION || '1.00.00';
+const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+config.info = {
+  ...(config.info || {}),
+  productVersion: appVersion,
+};
+
+fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+fs.writeFileSync(serviceVersionPath, `${JSON.stringify({ productVersion: appVersion }, null, 2)}\n`);
+EOF
 
 echo "建置前端資產..."
 echo "版本號: $APP_DISPLAY_VERSION"
-echo "時間來源: $BUILD_TIME_SOURCE"
 cd "$FRONTEND_DIR"
+echo "清理前端舊產物..."
 rm -rf dist
 npm run build
 cleanup_appledouble "$FRONTEND_DIR/dist"
 
-cd ..
-if [[ -z "${BUILD_COMMIT:-}" || -z "${BUILD_TAG:-}" || -z "${BUILD_STATE:-}" ]]; then
-  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    BUILD_COMMIT="${BUILD_COMMIT:-$(git rev-parse HEAD)}"
-    exact_tag="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
-    BUILD_TAG="${BUILD_TAG:-${exact_tag:-untagged}}"
-    if [[ -z "${BUILD_STATE:-}" ]]; then
-      if [[ -n "$(git status --porcelain=v1 --untracked-files=normal)" ]]; then
-        BUILD_STATE="dirty"
-      else
-        BUILD_STATE="clean"
-      fi
-    fi
-  else
-    BUILD_COMMIT="${BUILD_COMMIT:-unknown}"
-    BUILD_TAG="${BUILD_TAG:-untagged}"
-    BUILD_STATE="${BUILD_STATE:-unknown}"
-  fi
-fi
-
-for metadata_value in "$BUILD_COMMIT" "$BUILD_TAG" "$BUILD_STATE" "$BUILD_SOURCE_URL"; do
-  if [[ ! "$metadata_value" =~ '^[A-Za-z0-9._/:+-]+$' ]]; then
-    echo "建置中繼資料包含不支援的字元：$metadata_value"
-    exit 1
-  fi
-done
-
-BUILD_LDFLAGS="-X github.com/VaderChen/Integrate-Terminal/internal/version.Product=$APP_MARKETING_VERSION -X github.com/VaderChen/Integrate-Terminal/internal/version.Build=$APP_BUILD_LABEL -X github.com/VaderChen/Integrate-Terminal/internal/version.Commit=$BUILD_COMMIT -X github.com/VaderChen/Integrate-Terminal/internal/version.Tag=$BUILD_TAG -X github.com/VaderChen/Integrate-Terminal/internal/version.BuildState=$BUILD_STATE -X github.com/VaderChen/Integrate-Terminal/internal/version.SourceURL=$BUILD_SOURCE_URL"
-
-mkdir -p "$DIST_DIR" "./.codex-tmp"
-rm -rf "$APP_PATH"
-TMP_ROOT="$(mktemp -d "./.codex-tmp/integterm-build.XXXXXX")"
+cd "$SCRIPT_DIR"
+mkdir -p "$BUILD_BIN_DIR"
+echo "清理桌面應用舊產物..."
+rm -rf "$APP_PATH" "$PKG_PATH"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/integterm-build.XXXXXX")"
 STAGING_DIR="$TMP_ROOT/project"
-STAGING_APP_PATH="$STAGING_DIR/build/bin/$APP_NAME.app"
+STAGING_BUILD_BIN_DIR="$STAGING_DIR/build/bin"
+STAGING_APP_PATH="$STAGING_BUILD_BIN_DIR/$APP_NAME.app"
 
 echo "同步專案到本機暫存目錄..."
 mkdir -p "$STAGING_DIR"
 rsync -a \
-  --exclude '/.git/' \
-  --exclude '/.codex-tmp/' \
+  --exclude '.git/' \
   --exclude '.DS_Store' \
   --exclude '._*' \
-  --exclude '*.bak' \
-  --exclude '/cert/' \
-  --exclude '/data/' \
-  --exclude '/dist/' \
-  --exclude '/build/bin/' \
-  --exclude '/frontend/node_modules/.cache/' \
-  ./ "$STAGING_DIR/"
+  --exclude 'build/bin/' \
+  --exclude 'frontend/node_modules/.cache/' \
+  "$SCRIPT_DIR/" "$STAGING_DIR/"
 
 cleanup_appledouble "$STAGING_DIR"
 cleanup_appledouble "$STAGING_DIR/frontend/dist"
 
-if [[ ! -s "$STAGING_DIR/frontend/dist/index.html" ]]; then
-  echo "建置失敗：暫存專案缺少 frontend/dist/index.html，無法嵌入 Wails 前端資產。"
-  exit 1
-fi
-
-echo "開始打包 Wails 應用程式..."
+echo "開始於本機暫存目錄打包 Wails 應用程式（production / App Store-safe build）..."
 (
   cd "$STAGING_DIR"
-  "${WAILS_COMMAND[@]}" build -clean -s -skipembedcreate -ldflags "$BUILD_LDFLAGS"
+  export CGO_CFLAGS="-mmacosx-version-min=12.0"
+  export CGO_LDFLAGS="-mmacosx-version-min=12.0"
+  export DYLD_LIBRARY_PATH="$STAGING_DIR/internal/purchase/native${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+  "$WAILS_BIN" build -clean -s
 )
 
 if [[ ! -d "$STAGING_APP_PATH" ]]; then
@@ -194,58 +227,24 @@ if [[ ! -d "$STAGING_APP_PATH" ]]; then
   exit 1
 fi
 
+echo "更新 App Store 版本資訊..."
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_BUNDLE_VERSION" "$STAGING_APP_PATH/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_BUNDLE_ID" "$STAGING_APP_PATH/Contents/Info.plist"
-APP_LICENSE_DIR="$STAGING_APP_PATH/Contents/Resources/Licenses"
-mkdir -p "$APP_LICENSE_DIR"
-LICENSE_SOURCE="$STAGING_DIR/LICENSE.md"
-if [[ ! -s "$LICENSE_SOURCE" ]]; then
-  echo "建置失敗：找不到目前版本授權文件 $LICENSE_SOURCE"
-  exit 1
-fi
-cp "$LICENSE_SOURCE" "$APP_LICENSE_DIR/LICENSE.md"
-cp "$STAGING_DIR/THIRD-PARTY-NOTICES.md" "$APP_LICENSE_DIR/THIRD-PARTY-NOTICES.md"
-cp "$STAGING_DIR/THIRD-PARTY-LICENSES.txt" "$APP_LICENSE_DIR/THIRD-PARTY-LICENSES.txt"
-node "$STAGING_DIR/scripts/write-build-metadata.mjs" \
-  "$STAGING_APP_PATH/Contents/Resources/build-metadata.json" \
-  "$APP_MARKETING_VERSION" \
-  "$BUILD_COMMIT" \
-  "$BUILD_TAG" \
-  "$BUILD_STATE" \
-  "$BUILD_SOURCE_URL" \
-  "$APP_BUILD_LABEL"
+
+echo "清理暫存 bundle 中繼檔..."
 cleanup_appledouble "$STAGING_APP_PATH"
 cleanup_codesign_artifacts "$STAGING_APP_PATH"
 normalize_bundle_permissions "$STAGING_APP_PATH"
-rm -f "$STAGING_APP_PATH/Contents/embedded.provisionprofile"
+copy_storekit_bridge "$STAGING_APP_PATH"
+configure_storekit_bridge_rpath "$STAGING_APP_PATH"
 xattr -cr "$STAGING_APP_PATH" 2>/dev/null || true
 
-signing_arguments=(--force --deep --sign "$CODESIGN_IDENTITY" --options runtime)
-if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
-  echo "以 ad-hoc 簽章簽署非沙盒 App Bundle..."
-else
-  echo "以 Developer ID Application 簽署非沙盒 App Bundle（簽章身分已驗證）"
-  signing_arguments+=(--timestamp)
-fi
-codesign "${signing_arguments[@]}" "$STAGING_APP_PATH"
+echo "重新簽署暫存 App Bundle..."
+codesign --force --deep --sign - "$STAGING_APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$STAGING_APP_PATH"
 
 echo "複製 App 回專案目錄..."
-ditto --norsrc --noextattr --noqtn "$STAGING_APP_PATH" "$APP_PATH"
-codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+ditto "$STAGING_APP_PATH" "$APP_PATH"
+cleanup_appledouble "$APP_PATH"
+normalize_bundle_permissions "$APP_PATH"
 
-BUILT_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist")"
-if [[ "$BUILT_BUNDLE_ID" != "$APP_BUNDLE_ID" ]]; then
-  echo "建置失敗：Bundle ID 為 $BUILT_BUNDLE_ID，預期為 $APP_BUNDLE_ID"
-  exit 1
-fi
-
-echo "完成：./dist/$APP_NAME.app"
-echo "Bundle ID：$BUILT_BUNDLE_ID"
-echo "來源版本：$BUILD_TAG ($BUILD_COMMIT, $BUILD_STATE)"
-if [[ "$CODESIGN_IDENTITY" == "-" ]]; then
-  echo "本機驗證版採 ad-hoc 簽章，不適合直接對外發布。"
-else
-  echo "Developer ID Application 簽章完成；仍須公證與 staple 後才能正式發布。"
-fi
-echo "公開版未啟用 App Sandbox，可直接存取目前帳號有權限的檔案與目錄。"
+echo "完成：$APP_PATH"

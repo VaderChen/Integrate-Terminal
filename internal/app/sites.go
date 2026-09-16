@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func (a *App) reloadSitesFromStoreLocked() error {
@@ -22,50 +22,25 @@ func (a *App) reloadSitesFromStoreLocked() error {
 	}
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
-	a.config.RESTServerAllowlist = sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
-	a.config.TransferRetryCount = sanitizeTransferRetryCount(a.config.TransferRetryCount)
-	a.config.TransferConflictStrategy = sanitizeTransferConflictStrategy(a.config.TransferConflictStrategy)
-	if a.sessionManager != nil {
-		a.sessionManager.ConfigureTransferPolicy(a.config.TransferRetryCount, a.config.TransferConflictStrategy)
-	}
 	return nil
 }
 
-func (a *App) touchSiteLastUsedLocked(siteID string) {
-	if strings.TrimSpace(siteID) == "" {
-		return
-	}
-	for index := range a.sites {
-		if a.sites[index].ID != siteID {
-			continue
-		}
-		a.sites[index].LastUsedAt = time.Now().Format(time.RFC3339)
-		_ = a.store.SaveSites(a.sites)
-		return
-	}
-}
-
 func (a *App) SaveSite(site model.Site) ([]model.Site, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousSites := cloneSites(a.sites)
-	previousConfig := cloneConfig(a.config)
 	site.Folder = normalizeSiteFolder(site.Folder)
-	site.Tags = normalizeSiteTags(site.Tags)
 	if strings.TrimSpace(site.Host) == "" {
-		return cloneSites(a.sites), fmt.Errorf("host is required")
+		return a.sites, fmt.Errorf("host is required")
 	}
 	if site.Port <= 0 {
-		return cloneSites(a.sites), fmt.Errorf("port must be greater than 0")
+		return a.sites, fmt.Errorf("port must be greater than 0")
 	}
 	if strings.TrimSpace(site.LocalPath) == "" {
-		return cloneSites(a.sites), fmt.Errorf("local path is required")
+		return a.sites, fmt.Errorf("local path is required")
 	}
 	if strings.TrimSpace(site.RemotePath) == "" {
-		return cloneSites(a.sites), fmt.Errorf("remote path is required")
+		return a.sites, fmt.Errorf("remote path is required")
 	}
 	if err := validateSiteByProtocol(site); err != nil {
-		return cloneSites(a.sites), err
+		return a.sites, err
 	}
 
 	if site.ID == "" {
@@ -74,12 +49,7 @@ func (a *App) SaveSite(site model.Site) ([]model.Site, error) {
 	if site.Name == "" {
 		site.Name = site.Host
 	}
-	for _, existing := range a.sites {
-		if existing.ID == site.ID {
-			site.LastUsedAt = existing.LastUsedAt
-			break
-		}
-	}
+	site.LastUsedAt = time.Now().Format(time.RFC3339)
 	a.config.SiteFolders = upsertSiteFolder(a.config.SiteFolders, site.Folder)
 
 	replaced := false
@@ -95,44 +65,23 @@ func (a *App) SaveSite(site model.Site) ([]model.Site, error) {
 	}
 
 	if err := a.store.SaveSites(a.sites); err != nil {
-		a.sites = previousSites
-		a.config = previousConfig
 		return enrichSites(a.sites), err
 	}
-	if err := a.store.SaveConfig(a.config); err != nil {
-		a.sites = previousSites
-		a.config = previousConfig
-		_ = a.store.SaveSites(previousSites)
-		return enrichSites(a.sites), err
-	}
-	return enrichSites(a.sites), nil
+	return enrichSites(a.sites), a.store.SaveConfig(a.config)
 }
 
 func (a *App) DeleteSite(id string) ([]model.Site, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousSites := cloneSites(a.sites)
 	filtered := make([]model.Site, 0, len(a.sites))
 	for _, site := range a.sites {
 		if site.ID != id {
 			filtered = append(filtered, site)
 		}
 	}
-	if len(filtered) == len(a.sites) {
-		return enrichSites(a.sites), fmt.Errorf("site not found: %s", id)
-	}
 	a.sites = filtered
-	if err := a.store.SaveSites(a.sites); err != nil {
-		a.sites = previousSites
-		return enrichSites(a.sites), err
-	}
-	return enrichSites(a.sites), nil
+	return enrichSites(a.sites), a.store.SaveSites(a.sites)
 }
 
 func (a *App) SortSitesByName() ([]model.Site, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousSites := cloneSites(a.sites)
 	sort.SliceStable(a.sites, func(i, j int) bool {
 		left := strings.ToLower(strings.TrimSpace(a.sites[i].Name))
 		right := strings.ToLower(strings.TrimSpace(a.sites[j].Name))
@@ -145,52 +94,30 @@ func (a *App) SortSitesByName() ([]model.Site, error) {
 		return left < right
 	})
 
-	if err := a.store.SaveSites(a.sites); err != nil {
-		a.sites = previousSites
-		return enrichSites(a.sites), err
-	}
-	return enrichSites(a.sites), nil
+	return enrichSites(a.sites), a.store.SaveSites(a.sites)
 }
 
 func (a *App) CreateSiteFolder(name string) (model.Config, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousConfig := cloneConfig(a.config)
 	folder := normalizeSiteFolder(name)
 	if folder == "" {
-		return cloneConfig(a.config), fmt.Errorf("folder name is required")
+		return a.config, fmt.Errorf("folder name is required")
 	}
 	a.config.SiteFolders = upsertSiteFolder(a.config.SiteFolders, folder)
-	if err := a.store.SaveConfig(a.config); err != nil {
-		a.config = previousConfig
-		return cloneConfig(a.config), err
-	}
-	return cloneConfig(a.config), nil
+	return a.config, a.store.SaveConfig(a.config)
 }
 
 func (a *App) SortSiteFolders() (model.Config, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousConfig := cloneConfig(a.config)
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	sort.SliceStable(a.config.SiteFolders, func(i, j int) bool {
 		return strings.ToLower(a.config.SiteFolders[i]) < strings.ToLower(a.config.SiteFolders[j])
 	})
-	if err := a.store.SaveConfig(a.config); err != nil {
-		a.config = previousConfig
-		return cloneConfig(a.config), err
-	}
-	return cloneConfig(a.config), nil
+	return a.config, a.store.SaveConfig(a.config)
 }
 
 func (a *App) RenameSiteFolder(name string, nextName string) (model.SiteLibraryMutationResult, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousSites := cloneSites(a.sites)
-	previousConfig := cloneConfig(a.config)
 	folder := normalizeSiteFolder(name)
 	renamedFolder := normalizeSiteFolder(nextName)
-	result := model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}
+	result := model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}
 	if folder == "" || renamedFolder == "" {
 		return result, fmt.Errorf("folder name is required")
 	}
@@ -221,26 +148,18 @@ func (a *App) RenameSiteFolder(name string, nextName string) (model.SiteLibraryM
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 
 	if err := a.store.SaveSites(a.sites); err != nil {
-		a.sites = previousSites
-		a.config = previousConfig
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}, err
+		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
 	}
 	if err := a.store.SaveConfig(a.config); err != nil {
-		a.sites = previousSites
-		a.config = previousConfig
-		_ = a.store.SaveSites(previousSites)
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}, err
+		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
 	}
-	return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}, nil
+	return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, nil
 }
 
 func (a *App) ReorderSiteFolders(folderNames []string) (model.Config, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousConfig := cloneConfig(a.config)
 	currentFolders := sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	if len(folderNames) != len(currentFolders) {
-		return cloneConfig(a.config), fmt.Errorf("site folder reorder length mismatch")
+		return a.config, fmt.Errorf("site folder reorder length mismatch")
 	}
 
 	currentByKey := make(map[string]string, len(currentFolders))
@@ -255,30 +174,22 @@ func (a *App) ReorderSiteFolders(folderNames []string) (model.Config, error) {
 		key := strings.ToLower(normalized)
 		existing, ok := currentByKey[key]
 		if !ok {
-			return cloneConfig(a.config), fmt.Errorf("site folder not found: %s", folder)
+			return a.config, fmt.Errorf("site folder not found: %s", folder)
 		}
 		if _, duplicated := seen[key]; duplicated {
-			return cloneConfig(a.config), fmt.Errorf("duplicate site folder: %s", folder)
+			return a.config, fmt.Errorf("duplicate site folder: %s", folder)
 		}
 		seen[key] = struct{}{}
 		reordered = append(reordered, existing)
 	}
 
 	a.config.SiteFolders = reordered
-	if err := a.store.SaveConfig(a.config); err != nil {
-		a.config = previousConfig
-		return cloneConfig(a.config), err
-	}
-	return cloneConfig(a.config), nil
+	return a.config, a.store.SaveConfig(a.config)
 }
 
 func (a *App) DeleteSiteFolder(name string) (model.SiteLibraryMutationResult, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousSites := cloneSites(a.sites)
-	previousConfig := cloneConfig(a.config)
 	folder := normalizeSiteFolder(name)
-	result := model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}
+	result := model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}
 	if folder == "" {
 		return result, fmt.Errorf("folder name is required")
 	}
@@ -299,17 +210,12 @@ func (a *App) DeleteSiteFolder(name string) (model.SiteLibraryMutationResult, er
 	}
 
 	if err := a.store.SaveSites(a.sites); err != nil {
-		a.sites = previousSites
-		a.config = previousConfig
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}, err
+		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
 	}
 	if err := a.store.SaveConfig(a.config); err != nil {
-		a.sites = previousSites
-		a.config = previousConfig
-		_ = a.store.SaveSites(previousSites)
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}, err
+		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
 	}
-	return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: cloneConfig(a.config)}, nil
+	return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, nil
 }
 
 func enrichSites(sites []model.Site) []model.Site {
@@ -346,7 +252,6 @@ func normalizeLoadedSites(sites []model.Site) []model.Site {
 	normalized := make([]model.Site, len(sites))
 	for index, site := range sites {
 		site.Folder = normalizeSiteFolder(site.Folder)
-		site.Tags = normalizeSiteTags(site.Tags)
 		normalized[index] = site
 	}
 	return normalized
@@ -354,24 +259,6 @@ func normalizeLoadedSites(sites []model.Site) []model.Site {
 
 func sitesEqualByStoredFields(left []model.Site, right []model.Site) bool {
 	return reflect.DeepEqual(left, right)
-}
-
-func normalizeSiteTags(tags []string) []string {
-	seen := make(map[string]struct{}, len(tags))
-	normalized := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		trimmed := strings.TrimSpace(tag)
-		if trimmed == "" {
-			continue
-		}
-		key := strings.ToLower(trimmed)
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		normalized = append(normalized, trimmed)
-	}
-	return normalized
 }
 
 func upsertSiteFolder(folders []string, folder string) []string {
@@ -412,11 +299,8 @@ func sanitizeSiteFolders(folders []string, sites []model.Site) []string {
 }
 
 func (a *App) ReorderSites(siteIDs []string) ([]model.Site, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	previousSites := cloneSites(a.sites)
 	if len(siteIDs) != len(a.sites) {
-		return cloneSites(a.sites), fmt.Errorf("site reorder length mismatch")
+		return a.sites, fmt.Errorf("site reorder length mismatch")
 	}
 
 	siteByID := make(map[string]model.Site, len(a.sites))
@@ -429,19 +313,15 @@ func (a *App) ReorderSites(siteIDs []string) ([]model.Site, error) {
 	for _, siteID := range siteIDs {
 		site, ok := siteByID[siteID]
 		if !ok {
-			return cloneSites(a.sites), fmt.Errorf("site not found: %s", siteID)
+			return a.sites, fmt.Errorf("site not found: %s", siteID)
 		}
 		if _, duplicated := seen[siteID]; duplicated {
-			return cloneSites(a.sites), fmt.Errorf("duplicate site id: %s", siteID)
+			return a.sites, fmt.Errorf("duplicate site id: %s", siteID)
 		}
 		seen[siteID] = struct{}{}
 		reordered = append(reordered, site)
 	}
 
 	a.sites = reordered
-	if err := a.store.SaveSites(a.sites); err != nil {
-		a.sites = previousSites
-		return enrichSites(a.sites), err
-	}
-	return enrichSites(a.sites), nil
+	return a.sites, a.store.SaveSites(a.sites)
 }

@@ -154,32 +154,25 @@ export function useConnectionActions(params: Params) {
     const currentTab = activeTabRef.current;
     if (!currentTab || currentTab.mode !== 'terminal') return;
 
-    try {
-      const nextTabs = await window.go?.app?.App?.CreateTab?.({
-        id: currentTab.siteId,
-        name: currentTab.title,
-        folder: '',
-        protocol: 'sftp',
-        host: currentTab.host,
-        port: currentTab.port,
-        username: currentTab.username,
-        password: currentTab.password,
-        ppkPath: currentTab.ppkPath,
-        ppkPassphrase: currentTab.ppkPassphrase,
-        localPath: currentTab.localPath,
-        remotePath: currentTab.remotePath,
-        lastUsedAt: '',
-        tags: [],
-        favorite: false,
-      });
+    const nextTabs = await window.go?.app?.App?.CreateTab?.({
+      id: currentTab.siteId,
+      name: currentTab.title,
+      folder: '',
+      protocol: 'sftp',
+      host: currentTab.host,
+      port: currentTab.port,
+      username: currentTab.username,
+      password: currentTab.password,
+      ppkPath: currentTab.ppkPath,
+      ppkPassphrase: currentTab.ppkPassphrase,
+      localPath: currentTab.localPath,
+      remotePath: currentTab.remotePath,
+      lastUsedAt: '',
+    });
 
-      if (nextTabs) {
-        setTabs(nextTabs);
-        setActiveTabId(latestVisibleTab(nextTabs)?.id ?? '');
-        setErrorMessage('');
-      }
-    } catch (error) {
-      setErrorMessage(extractErrorMessage(error, t.connectionFailed));
+    if (nextTabs) {
+      setTabs(nextTabs);
+      setActiveTabId(latestVisibleTab(nextTabs)?.id ?? '');
     }
   };
 
@@ -210,8 +203,6 @@ export function useConnectionActions(params: Params) {
       localPath: tab.localPath,
       remotePath: tab.remotePath,
       lastUsedAt: '',
-      tags: [],
-      favorite: false,
     });
 
     if (!nextTabs) return;

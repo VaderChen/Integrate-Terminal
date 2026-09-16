@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
-	"github.com/VaderChen/Integrate-Terminal/internal/sshutil"
+	"IntegTERM/internal/model"
+	"IntegTERM/internal/sshutil"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -193,7 +193,7 @@ func (a *App) ExecuteSSHCommand(site model.Site, command string, timeoutSeconds 
 		timeout = time.Duration(timeoutSeconds) * time.Second
 	}
 
-	client, err := sshutil.DialWithRouteRetry("tcp", fmt.Sprintf("%s:%d", site.Host, site.Port), &ssh.ClientConfig{
+	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", site.Host, site.Port), &ssh.ClientConfig{
 		User:            site.Username,
 		Auth:            authMethods,
 		HostKeyCallback: hostKeyCallback,

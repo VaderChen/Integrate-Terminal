@@ -2,9 +2,10 @@ package session
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func (m *Manager) updateTransfer(itemID string, progress int, speedBps int64, status string) {
@@ -28,9 +29,6 @@ func (m *Manager) updateTransferLocked(itemID string, progress int, speedBps int
 			}
 			m.transfers[i].Progress = progress
 			m.transfers[i].SpeedBps = speedBps
-			if status == "running" || status == "done" {
-				m.transfers[i].Error = ""
-			}
 			if !m.isTransferPausedLocked(itemID) || status == "paused" {
 				m.transfers[i].Status = status
 			}
@@ -41,21 +39,6 @@ func (m *Manager) updateTransferLocked(itemID string, progress int, speedBps int
 	if status == "done" || status == "cancelled" || status == "failed" {
 		delete(m.cancelledTransfers, itemID)
 		delete(m.pausedTransfers, itemID)
-	}
-}
-
-func (m *Manager) updateTransferAttempt(itemID string, attempt int, maxAttempts int, errorMessage string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for index := range m.transfers {
-		if m.transfers[index].ID != itemID {
-			continue
-		}
-		m.transfers[index].Attempt = attempt
-		m.transfers[index].MaxAttempts = maxAttempts
-		m.transfers[index].Error = errorMessage
-		m.notifyStateLocked()
-		return
 	}
 }
 
@@ -82,14 +65,12 @@ func (m *Manager) addTransfer(name string, direction string) string {
 	defer m.mu.Unlock()
 	itemID := fmt.Sprintf("transfer-%d", time.Now().UnixNano())
 	m.transfers = append([]model.TransferItem{{
-		ID:          itemID,
-		Direction:   direction,
-		Name:        name,
-		Progress:    0,
-		SpeedBps:    0,
-		Status:      "running",
-		Attempt:     1,
-		MaxAttempts: m.transferRetryCount + 1,
+		ID:        itemID,
+		Direction: direction,
+		Name:      name,
+		Progress:  0,
+		SpeedBps:  0,
+		Status:    "running",
 	}}, m.transfers...)
 	if m.pauseAllTransfers {
 		m.pausedTransfers[itemID] = true
@@ -153,4 +134,8 @@ func (m *Manager) addLogLocked(message string, status string) {
 		CreatedAt: time.Now().Format("15:04:05"),
 	}}, m.logs...)
 	m.notifyStateLocked()
+}
+
+func sanitizeDirectoryName(name string) string {
+	return strings.TrimSpace(strings.Trim(name, "/"))
 }

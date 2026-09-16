@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+func isHiddenName(name string) bool {
+	return len(name) > 0 && name[0] == '.'
+}
+
 type progressReader struct {
 	reader          io.Reader
 	total           int64

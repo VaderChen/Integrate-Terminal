@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func (a *App) handleRESTSites(w http.ResponseWriter, r *http.Request) {

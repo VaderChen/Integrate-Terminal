@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func (a *App) handleRESTTabs(w http.ResponseWriter, r *http.Request) {
@@ -77,24 +77,22 @@ func (a *App) handleRESTCreateLocalTab(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	_, err := a.CreateLocalTerminalTab(payload.Cwd)
+	tabs, err := a.CreateLocalTerminalTab(payload.Cwd)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	tabs := a.hideLatestTab()
+	tabs = a.hideLatestTab()
 	writeJSON(w, http.StatusOK, tabEnvelope{Tabs: tabs, SessionID: latestSessionID(tabs)})
 }
 
 func (a *App) hideLatestTab() []model.Tab {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
 	if len(a.tabs) == 0 {
-		return cloneTabs(a.tabs)
+		return a.tabs
 	}
 	a.tabs[len(a.tabs)-1].Hidden = true
-	_ = a.persistTabsLocked(a.tabs)
-	return cloneTabs(a.tabs)
+	_ = a.persistTabs()
+	return a.tabs
 }
 
 func latestSessionID(tabs []model.Tab) string {

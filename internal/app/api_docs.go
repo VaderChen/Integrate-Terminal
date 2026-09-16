@@ -4,7 +4,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
+
+type apiDocsEnvelope struct {
+	Version      string
+	GeneratedAt  string
+	Server       serverDoc
+	Skill        skillDoc
+	CoreRules    []string
+	OperationMap []operationDoc
+	Endpoints    []endpointDoc
+}
+
+type serverDoc struct {
+	Enabled bool
+	BaseURL string
+	Host    string
+	Port    int
+	Token   string
+}
+
+type skillDoc struct {
+	Name        string
+	Description string
+	Input       map[string]any
+	Output      map[string]any
+	Examples    []map[string]any
+}
 
 type operationDoc struct {
 	LogicalOperation string
@@ -24,236 +51,206 @@ type endpointDoc struct {
 	Example     string
 }
 
-type mcpToolDoc struct {
-	Name        string
-	Description string
-}
-
 func (a *App) GetRestAPIDocsMarkdown() (string, error) {
-	return a.GetMCPContractMarkdown(string(mcpContractNetwork))
-}
-
-func (a *App) GetMCPContractMarkdown(contract string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(contract)) {
-	case string(mcpContractLocal):
-		return a.buildMCPLocalContractMarkdown()
-	case string(mcpContractNetwork):
-		return a.buildMCPNetworkContractMarkdown()
-	default:
-		return "", fmt.Errorf("unknown MCP contract %q; use local or network", contract)
-	}
-}
-
-func (a *App) buildMCPNetworkContractMarkdown() (string, error) {
 	status := a.GetRESTServerStatus()
 	port := status.Port
 	if port <= 0 {
 		port = defaultRESTServerPort
 	}
-	mcpURL := status.MCPURL
-	if mcpURL == "" || mcpURL == "/mcp" {
-		mcpURL = fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
+	baseURL := status.BaseURL
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 	}
-	allowlist := status.Allowlist
-	operations := buildRESTOperationDocs()
-	endpoints := buildRESTEndpointDocs(strings.TrimSuffix(mcpURL, "/mcp"))
 
-	var builder strings.Builder
-	builder.WriteString("# IntegTERM MCP Server\n\n")
-	builder.WriteString("IntegTERM provides a local VFS MCP contract over stdio and an optional standard Model Context Protocol server over Streamable HTTP. Network MCP clients discover and call tools through the endpoint below; clients connected to the same running endpoint share that service's RAM workspace. No API token or custom authentication header is required.\n\n")
-	builder.WriteString("## Connection\n\n")
-	builder.WriteString("- Transport: `streamable-http`\n")
-	builder.WriteString("- MCP URL: `" + mcpURL + "`\n")
-	builder.WriteString(fmt.Sprintf("- Enabled: `%t`\n", status.Enabled))
-	builder.WriteString("- HTTP default: `disabled` (enable it only when an external client must connect)\n")
-	builder.WriteString("- Access control: source IP allowlist\n")
-	builder.WriteString("- Allowlist: `" + strings.Join(allowlist, ", ") + "`\n")
-	builder.WriteString("- Default allowlist: `127.0.0.1`\n\n")
-	builder.WriteString("## MCP Client Configuration\n\n")
-	builder.WriteString("```json\n")
-	builder.WriteString(mustJSONIndent(map[string]any{
-		"mcpServers": map[string]any{
-			"integterm": map[string]any{
-				"type": "streamable-http",
-				"url":  mcpURL,
+	doc := apiDocsEnvelope{
+		Version:     "1.0",
+		GeneratedAt: time.Now().Format(time.RFC3339),
+		Server: serverDoc{
+			Enabled: status.Enabled,
+			BaseURL: baseURL,
+			Host:    "127.0.0.1",
+			Port:    port,
+			Token:   a.GetRESTServerToken(),
+		},
+		Skill: skillDoc{
+			Name:        "integterm-rest-skill",
+			Description: "Use the local IntegTerm REST API server to automate SSH terminals, Telnet terminals, SFTP/FTP file tabs, local terminal tabs, transfer state, and configuration.",
+			Input: map[string]any{
+				"transport":   "http",
+				"auth":        "bearer",
+				"token":       a.GetRESTServerToken(),
+				"contentType": "application/json",
+				"host":        "127.0.0.1",
+				"port":        port,
+			},
+			Output: map[string]any{
+				"format": "markdown",
+				"contains": []string{
+					"REST API server metadata",
+					"core workflow rules",
+					"operation-to-endpoint mapping",
+					"request schema hints",
+					"response examples",
+					"curl examples",
+				},
+			},
+			Examples: []map[string]any{
+				{
+					"name": "execute_single_ssh_command_from_sftp_site_family",
+					"steps": []string{
+						"treat site protocol `sftp` as SSH + SFTP capability",
+						"GET /api/sites",
+						"POST /api/ssh/execute",
+						"read stdout/stderr/exitCode",
+					},
+				},
+				{
+					"name": "manage_remote_files_from_sftp_site_family",
+					"steps": []string{
+						"treat site protocol `sftp` as SSH + SFTP capability",
+						"GET /api/sites",
+						"POST /api/tabs/file",
+						"GET /api/files/remote?tabId={tabId}&path=/srv/app",
+						"POST /api/sftp/mkdir",
+						"POST /api/sftp/rename",
+						"POST /api/sftp/delete",
+					},
+				},
+				{
+					"name": "open_telnet_terminal_from_ftp_site_family",
+					"steps": []string{
+						"treat site protocol `ftp` as Telnet + FTP capability",
+						"GET /api/sites",
+						"POST /api/tabs/telnet",
+						"POST /api/terminal/input",
+						"GET /api/terminal/output?sessionId={sessionId}",
+					},
+				},
 			},
 		},
-	}))
+		CoreRules: []string{
+			"Always verify the server first with `GET /api/status` before assuming any endpoint is available.",
+			"Send the generated API token with every non-status request using `Authorization: Bearer {token}`.",
+			"File upload and download requests return HTTP 202 immediately with an operation id; never wait for the transfer on the original HTTP request.",
+			"Poll `GET /api/operations/{id}` until status is `done` or `failed`. Use `GET /api/transfers` only for detailed live progress.",
+			"Treat operation names in this file as logical workflow names, not shell commands.",
+			"When calling an endpoint, always build an explicit HTTP request with method, path, query parameters, and JSON body.",
+			"Do not replace a required structured object with a display label or alias unless the API explicitly allows it.",
+			"Reuse returned `site`, `tabId`, and `sessionId` values exactly as returned by previous API calls.",
+			"Use absolute paths for local and remote file operations.",
+			"If the target site is not yet known as a full site object, resolve it from `GET /api/sites` first.",
+			"Saved site `protocol` is a site family: `sftp` means SSH terminal + SFTP file transfer, and `ftp` means Telnet terminal + FTP file transfer.",
+		},
+		OperationMap: buildRESTOperationDocs(),
+		Endpoints:    buildRESTEndpointDocs(baseURL),
+	}
+
+	var builder strings.Builder
+	builder.WriteString("---\n")
+	builder.WriteString("name: integterm-rest-skill\n")
+	builder.WriteString("description: Use the local IntegTerm REST API server to automate SSH terminals, Telnet terminals, SFTP/FTP file tabs, local terminal tabs, transfer state, and configuration.\n")
+	builder.WriteString("generated_at: " + doc.GeneratedAt + "\n")
+	builder.WriteString("---\n\n")
+	builder.WriteString("# integterm-rest-skill\n\n")
+	builder.WriteString("Use this skill to operate IntegTerm through its local REST API server.\n\n")
+	builder.WriteString("This document is written as an execution-oriented contract for agents. It is not only a human overview. When generating requests, prefer the canonical request templates in this file over ad hoc examples.\n\n")
+	builder.WriteString("## Skill Summary\n\n")
+	builder.WriteString(doc.Skill.Description + "\n\n")
+	builder.WriteString("### Input\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString(mustJSONIndent(doc.Skill.Input))
 	builder.WriteString("\n```\n\n")
-	builder.WriteString("## Security\n\n")
-	builder.WriteString("1. Requests are accepted only when the TCP source address matches an allowlisted IP address or CIDR range.\n")
-	builder.WriteString("2. The default configuration accepts only `127.0.0.1`.\n")
-	builder.WriteString("3. Add a LAN address or CIDR only when a remote MCP client must connect.\n")
-	builder.WriteString("4. Browser origins are checked against the same allowlist.\n")
-	builder.WriteString("5. Do not configure a broad CIDR unless every host in that network is trusted.\n\n")
-	builder.WriteString("## Virtual Workspace\n\n")
-	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
-	builder.WriteString("- Saved sites namespace: `" + mcpVFSRootURI + "/sites/{siteID}`\n")
-	builder.WriteString("- External clients connect through the MCP URL above; the `integterm-vfs` URI identifies resources inside that MCP connection and is not a transport endpoint.\n")
-	builder.WriteString("- Use this optional HTTP service when multiple agents must share one server-side RAM workspace; every participating agent must connect to this same running endpoint.\n")
-	builder.WriteString("- Call `vfs_connect` with a saved-site URI before remote operations, or let the first remote `vfs_list`, `vfs_stat`, `vfs_read`, `vfs_write`, `vfs_write_chunk`, `vfs_mkdir`, `vfs_rename`, or `vfs_delete` call connect lazily.\n")
-	builder.WriteString("- Paths outside the `sites` namespace remain bounded RAM files and are cleared when the background service stops.\n\n")
-	writeMCPVFSAgentGuide(&builder)
-	builder.WriteString("## Available Tools\n\n")
-	builder.WriteString("| Tool | Description |\n")
-	builder.WriteString("| --- | --- |\n")
-	for _, operation := range operations {
-		description := operation.Notes
-		if endpoint, ok := findMCPEndpoint(endpoints, operation); ok && strings.TrimSpace(endpoint.Description) != "" {
-			description = endpoint.Description
+	builder.WriteString("### Output\n\n")
+	builder.WriteString("```json\n")
+	builder.WriteString(mustJSONIndent(doc.Skill.Output))
+	builder.WriteString("\n```\n\n")
+
+	builder.WriteString("## Installation\n\n")
+	builder.WriteString("- Server base URL: `" + doc.Server.BaseURL + "`\n")
+	builder.WriteString("- Server host: `" + doc.Server.Host + "`\n")
+	builder.WriteString(fmt.Sprintf("- Server port: `%d`\n", doc.Server.Port))
+	builder.WriteString(fmt.Sprintf("- Server enabled: `%t`\n", doc.Server.Enabled))
+	builder.WriteString("- Authorization: `Bearer " + doc.Server.Token + "`\n\n")
+
+	builder.WriteString("## Core Rules\n\n")
+	for index, rule := range doc.CoreRules {
+		builder.WriteString(fmt.Sprintf("%d. %s\n", index+1, rule))
+	}
+	builder.WriteString("\n")
+
+	builder.WriteString("## Data Model Rules\n\n")
+	builder.WriteString("### Site Object\n\n")
+	builder.WriteString("Many endpoints require a full `site` object, not only a site name or alias.\n\n")
+	builder.WriteString("Use this rule unless an endpoint explicitly accepts an `id` path parameter:\n\n")
+	builder.WriteString("- Allowed source for `site`:\n")
+	builder.WriteString("  - a full site object returned by `GET /api/sites`\n")
+	builder.WriteString("  - a full site object already stored from a previous successful step\n")
+	builder.WriteString("- Not sufficient by itself:\n")
+	builder.WriteString("  - site display name\n")
+	builder.WriteString("  - alias\n")
+	builder.WriteString("  - label\n")
+	builder.WriteString("  - guessed host\n\n")
+
+	builder.WriteString("### Session and Tab Identifiers\n\n")
+	builder.WriteString("- `sessionId` is produced by terminal-opening endpoints such as `POST /api/tabs/ssh`, `POST /api/tabs/telnet`, and `POST /api/tabs/local`.\n")
+	builder.WriteString("- `tabId` is produced by file-tab or tab-list endpoints such as `POST /api/tabs/file` and `GET /api/tabs`.\n")
+	builder.WriteString("- Do not invent `sessionId` or `tabId`.\n\n")
+
+	builder.WriteString("## Operation Map\n\n")
+	builder.WriteString("| Logical Operation | Method | Path | Notes |\n")
+	builder.WriteString("| --- | --- | --- | --- |\n")
+	for _, operation := range doc.OperationMap {
+		builder.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n", operation.LogicalOperation, operation.Method, operation.Path, operation.Notes))
+	}
+	builder.WriteString("\n")
+
+	builder.WriteString("## Canonical Request Templates\n\n")
+	for _, endpoint := range doc.Endpoints {
+		builder.WriteString("### " + endpoint.Operation + "\n\n")
+		builder.WriteString("**Method**\n")
+		builder.WriteString("`" + endpoint.Method + "`\n\n")
+		builder.WriteString("**Path**\n")
+		builder.WriteString("`" + endpoint.Path + "`\n\n")
+		builder.WriteString("**Description**\n")
+		builder.WriteString(endpoint.Description + "\n\n")
+		if len(endpoint.Request) > 0 {
+			builder.WriteString("**Request**\n")
+			builder.WriteString("```json\n")
+			builder.WriteString(mustJSONIndent(endpoint.Request))
+			builder.WriteString("\n```\n\n")
 		}
-		builder.WriteString(fmt.Sprintf("| `%s` | %s |\n", operation.LogicalOperation, strings.ReplaceAll(description, "|", "\\|")))
+		if len(endpoint.Response) > 0 {
+			builder.WriteString("**Expected response keys / shape**\n")
+			builder.WriteString("```json\n")
+			builder.WriteString(mustJSONIndent(endpoint.Response))
+			builder.WriteString("\n```\n\n")
+		}
+		builder.WriteString("**Example**\n")
+		builder.WriteString("```bash\n")
+		builder.WriteString(addRESTAuthToCurl(endpoint.Example, doc.Server.Token))
+		builder.WriteString("\n```\n\n")
 	}
-	for _, tool := range buildMCPVFSToolDocs() {
-		builder.WriteString(fmt.Sprintf("| `%s` | %s |\n", tool.Name, strings.ReplaceAll(tool.Description, "|", "\\|")))
+
+	builder.WriteString("## Workflow Examples\n\n")
+	for _, example := range doc.Skill.Examples {
+		name, _ := example["name"].(string)
+		builder.WriteString("### " + name + "\n\n")
+		if steps, ok := example["steps"].([]string); ok {
+			for index, step := range steps {
+				builder.WriteString(fmt.Sprintf("%d. %s\n", index+1, step))
+			}
+			builder.WriteString("\n")
+		}
 	}
-	builder.WriteString("\n## Usage Rules\n\n")
-	builder.WriteString("- Use `tools/list` to discover the current schemas instead of constructing REST requests.\n")
-	builder.WriteString("- Use `tools/call` with the exact tool name and arguments returned by the MCP server.\n")
-	builder.WriteString("- Reuse returned `site`, `tabId`, `sessionId`, and operation IDs exactly as returned.\n")
-	builder.WriteString("- Use absolute host paths for local and remote file operations exposed by the REST-backed tools; use `integterm-vfs` URIs for virtual workspace operations.\n")
-	builder.WriteString("- Upload and download tools return an operation ID; poll `get_operation` until it is `done` or `failed`.\n")
-	builder.WriteString("- Saved site protocol `sftp` provides SSH and SFTP capabilities; `ftp` provides Telnet and FTP capabilities.\n")
 
 	return builder.String(), nil
 }
 
-func (a *App) buildMCPLocalContractMarkdown() (string, error) {
-	status := a.GetRESTServerStatus()
-	stdioExecutable := a.GetMCPStdioExecutable()
-	stdioConfig := map[string]any{
-		"mcpServers": map[string]any{
-			"integterm-vfs": map[string]any{
-				"command": stdioExecutable,
-				"args":    []string{"mcp"},
-			},
-		},
+func addRESTAuthToCurl(example string, token string) string {
+	if token == "" || !strings.HasPrefix(example, "curl ") {
+		return example
 	}
-	stdioConfigJSON, err := json.MarshalIndent(stdioConfig, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	var builder strings.Builder
-	builder.WriteString("# IntegTERM Virtual Workspace Contract\n\n")
-	builder.WriteString("This contract defines a virtual filesystem spanning bounded RAM paths and saved remote-site mounts. Local MCP clients should start the compiled application with the `mcp` argument and communicate over stdio. This runs a headless MCP server; it does not require the source tree or open the desktop UI. Each stdio client owns an independent MCP process and RAM workspace, not a shared file on disk. The `integterm-vfs` URI identifies resources inside that MCP connection; it is not a command or network endpoint.\n\n")
-	builder.WriteString("## Local MCP Connection\n\n")
-	builder.WriteString("- Transport: `stdio`\n")
-	builder.WriteString("- Executable: `" + stdioExecutable + "`\n")
-	builder.WriteString("- Argument: `mcp`\n")
-	builder.WriteString("- Development command: `go run . mcp`\n\n")
-	builder.WriteString("Use this MCP client configuration (the command path is resolved from the running app):\n\n")
-	builder.WriteString("```json\n")
-	builder.WriteString(string(stdioConfigJSON))
-	builder.WriteString("\n```\n\n")
-	builder.WriteString("## Virtual Workspace\n\n")
-	builder.WriteString("- Virtual root URI: `" + mcpVFSRootURI + "`\n")
-	builder.WriteString("- Local VFS MCP: `available through the stdio command above`\n")
-	builder.WriteString(fmt.Sprintf("- HTTP MCP server: `%t`\n", status.Enabled))
-	builder.WriteString("- RAM paths: any path outside `sites`; data belongs to this stdio MCP process and is cleared when the process stops\n")
-	builder.WriteString("- Saved sites namespace: `" + mcpVFSRootURI + "/sites/{siteID}`\n")
-	builder.WriteString("- Remote paths: descendants of a saved-site URI, resolved relative to that site's configured remote root\n")
-	builder.WriteString("- Shared RAM option: enable Streamable HTTP only when multiple agents must connect to the same server-side workspace\n\n")
-	writeMCPVFSAgentGuide(&builder)
-
-	builder.WriteString("## Available Tools\n\n")
-	builder.WriteString("| Tool | Description |\n")
-	builder.WriteString("| --- | --- |\n")
-	for _, tool := range buildMCPVFSToolDocs() {
-		builder.WriteString(fmt.Sprintf("| `%s` | %s |\n", tool.Name, tool.Description))
-	}
-
-	builder.WriteString("\n## Resources\n\n")
-	builder.WriteString("- Root resource: `" + mcpVFSRootURI + "`\n")
-	builder.WriteString("- File resource template: `integterm-vfs://workspace/mcp/{+path}` (`+` allows nested paths)\n")
-	builder.WriteString("- Saved site root: `integterm-vfs://workspace/mcp/sites/{siteID}`\n")
-	builder.WriteString("- Remote file: `integterm-vfs://workspace/mcp/sites/{siteID}/{relativeRemotePath}`\n")
-	builder.WriteString("- Use the virtual URI returned by `vfs_list`, `vfs_stat`, and `vfs_read`; remote URIs never expose credentials.\n\n")
-
-	builder.WriteString("## Usage Rules\n\n")
-	builder.WriteString("- Connect the MCP client through stdio using the `mcp` command before using any virtual URI; the URI is not itself a transport.\n")
-	builder.WriteString("- Do not expect RAM paths from one stdio MCP process to appear in another process; use one shared Streamable HTTP endpoint when cross-agent RAM sharing is required.\n")
-	builder.WriteString("- Call `tools/list`, then call `vfs_list` with an empty path or the root URI to inspect the workspace.\n")
-	builder.WriteString("- Call `vfs_list` on `sites` to discover saved site IDs without exposing passwords.\n")
-	builder.WriteString("- Call `vfs_connect` with a saved-site URI, or let the first remote VFS operation connect lazily.\n")
-	builder.WriteString("- Use relative virtual paths or `integterm-vfs://workspace/mcp/...` URIs; cross-site rename is rejected.\n")
-	builder.WriteString("- Inline `vfs_write` calls are bounded to 4 MiB; use verified `vfs_write_chunk` calls for files up to 32 MiB and network transfer tools beyond that limit.\n")
-	builder.WriteString("- SSH and Telnet terminal sessions remain explicit network tools because they are streams rather than filesystem resources.\n")
-
-	return builder.String(), nil
-}
-
-func writeMCPVFSAgentGuide(builder *strings.Builder) {
-	builder.WriteString("## VFS Agent Quick Start\n\n")
-	builder.WriteString("The MCP `initialize` response contains the canonical VFS instructions, while `tools/list` contains the current input and output schemas. These two protocol responses are sufficient for operation; an Agent does not need to inspect IntegTERM source code.\n\n")
-	builder.WriteString("1. Call `vfs_workspace_info` with an empty argument object.\n")
-	builder.WriteString("2. Call `vfs_list` with `{}` to list the workspace root.\n")
-	builder.WriteString("3. For RAM work, use a normal relative path such as `notes/todo.txt`.\n")
-	builder.WriteString("4. For remote work, list `sites`, reuse a returned `siteID` path or URI, and optionally call `vfs_connect`. Remote file tools also connect lazily.\n")
-	builder.WriteString("5. Reuse the `path` or `uri` returned by VFS tools instead of constructing host paths or guessing identifiers.\n\n")
-
-	builder.WriteString("### Path Model\n\n")
-	builder.WriteString("| Path passed to a VFS tool | Meaning |\n")
-	builder.WriteString("| --- | --- |\n")
-	builder.WriteString("| omitted, empty, or `" + mcpVFSRootURI + "` | RAM workspace root |\n")
-	builder.WriteString("| `notes/file.txt` | RAM file or directory |\n")
-	builder.WriteString("| `sites` | Saved remote-site list |\n")
-	builder.WriteString("| `sites/{siteID}` | Saved site's configured remote root |\n")
-	builder.WriteString("| `sites/{siteID}/{relativePath}` | Remote file or directory below that root |\n\n")
-	builder.WriteString("The `integterm-vfs://` URI is carried inside an established MCP connection. It is not an HTTP URL, shell command, absolute local path, or absolute remote path.\n\n")
-
-	builder.WriteString("### `tools/call` Parameter Examples\n\n")
-	builder.WriteString("Discover the contract and root:\n\n")
-	builder.WriteString("```json\n")
-	builder.WriteString("{\"name\":\"vfs_workspace_info\",\"arguments\":{}}\n")
-	builder.WriteString("{\"name\":\"vfs_list\",\"arguments\":{}}\n")
-	builder.WriteString("```\n\n")
-	builder.WriteString("Create and read a RAM file:\n\n")
-	builder.WriteString("```json\n")
-	builder.WriteString("{\"name\":\"vfs_write\",\"arguments\":{\"path\":\"notes/todo.txt\",\"content\":\"hello\",\"encoding\":\"utf-8\"}}\n")
-	builder.WriteString("{\"name\":\"vfs_read\",\"arguments\":{\"path\":\"notes/todo.txt\"}}\n")
-	builder.WriteString("```\n\n")
-	builder.WriteString("Write a larger file in verified sequential chunks (SHA-256 shown is for `hello world`):\n\n")
-	builder.WriteString("```json\n")
-	builder.WriteString("{\"name\":\"vfs_write_chunk\",\"arguments\":{\"path\":\"artifacts/example.bin\",\"offset\":0,\"content\":\"hello \",\"encoding\":\"utf-8\",\"final\":false}}\n")
-	builder.WriteString("{\"name\":\"vfs_write_chunk\",\"arguments\":{\"path\":\"artifacts/example.bin\",\"offset\":6,\"content\":\"world\",\"encoding\":\"utf-8\",\"final\":true,\"sha256\":\"b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9\"}}\n")
-	builder.WriteString("```\n\n")
-	builder.WriteString("Discover and use a remote site (replace `{siteID}` with the returned ID):\n\n")
-	builder.WriteString("```json\n")
-	builder.WriteString("{\"name\":\"vfs_list\",\"arguments\":{\"path\":\"sites\"}}\n")
-	builder.WriteString("{\"name\":\"vfs_connect\",\"arguments\":{\"path\":\"sites/{siteID}\"}}\n")
-	builder.WriteString("{\"name\":\"vfs_list\",\"arguments\":{\"path\":\"sites/{siteID}\"}}\n")
-	builder.WriteString("{\"name\":\"vfs_read\",\"arguments\":{\"path\":\"sites/{siteID}/config/app.yml\"}}\n")
-	builder.WriteString("```\n\n")
-	builder.WriteString("Continue a truncated read using `offset + returnedBytes` from the previous result:\n\n")
-	builder.WriteString("```json\n")
-	builder.WriteString("{\"name\":\"vfs_read\",\"arguments\":{\"path\":\"notes/large.txt\",\"offset\":262144,\"limit\":262144}}\n")
-	builder.WriteString("```\n\n")
-
-	builder.WriteString("### Operation Rules and Troubleshooting\n\n")
-	builder.WriteString("- `vfs_write` defaults to UTF-8 and accepts one decoded payload up to 4 MiB. Set `encoding` to `base64` for binary data and `overwrite` to `true` when replacing an existing file.\n")
-	builder.WriteString("- `vfs_write_chunk` accepts decoded chunks up to 1 MiB and completed files up to 32 MiB. Start at offset 0, reuse each returned `nextOffset`, and provide the full decoded file SHA-256 with `final: true`. A failed hash discards the staged write.\n")
-	builder.WriteString("- `vfs_delete` requires `recursive: true` for a non-empty directory. The workspace root, `sites`, and saved-site roots cannot be deleted.\n")
-	builder.WriteString("- `vfs_rename` works only within RAM or within one saved-site mount. It cannot cross RAM and remote storage or cross sites.\n")
-	builder.WriteString(fmt.Sprintf("- The RAM workspace is limited to %d bytes, one inline write to %d bytes, one chunked file to %d bytes, and one `vfs_read` or write-chunk payload to %d bytes. The default read size is %d bytes.\n", mcpVFSTotalSize, mcpVFSMaxFileSize, mcpVFSMaxChunkedFile, mcpVFSMaxReadSize, mcpVFSDefaultReadSize))
-	builder.WriteString("- If a path is rejected, call `vfs_list` again and reuse a returned relative `path` or full `uri`. Do not substitute a host filesystem path.\n")
-	builder.WriteString("- If a remote site is unavailable, list `sites` to verify the saved ID, then call `vfs_connect` to surface the connection error explicitly.\n")
-	builder.WriteString("- Use `resources/read` only for a known file URI. Use `vfs_read` for chunking, files over 1 MiB, and explicit encoding metadata.\n\n")
-}
-
-func buildMCPVFSToolDocs() []mcpToolDoc {
-	return []mcpToolDoc{
-		{Name: "vfs_workspace_info", Description: "First VFS call. Returns the root URI, complete path model, next discovery call, RAM limits, saved-site count, and active mount count."},
-		{Name: "vfs_list", Description: "List immediate children. Use `{}` for the root, `sites` for saved site IDs, or a returned RAM/remote path. Returns namespace kind and next action."},
-		{Name: "vfs_connect", Description: "Explicitly connect a saved-site path returned by `vfs_list`; optional because remote file operations also connect lazily."},
-		{Name: "vfs_stat", Description: "Read normalized metadata for one known RAM or remote file or directory."},
-		{Name: "vfs_read", Description: "Read UTF-8 or base64 content in chunks; continue at `offset + returnedBytes` while `truncated` is true."},
-		{Name: "vfs_write", Description: "Create one UTF-8 or base64 payload up to 4 MiB; an existing destination requires `overwrite: true`."},
-		{Name: "vfs_write_chunk", Description: "Stage sequential chunks up to 1 MiB each and commit a file up to 32 MiB after final SHA-256 verification."},
-		{Name: "vfs_mkdir", Description: "Create a RAM or remote directory; RAM parent directories are created automatically."},
-		{Name: "vfs_rename", Description: "Rename only within RAM or one saved-site mount; cross-namespace and cross-site moves are rejected."},
-		{Name: "vfs_delete", Description: "Delete a file or directory; a non-empty directory requires `recursive: true`."},
-	}
+	return strings.Replace(example, "curl ", "curl -H 'Authorization: Bearer "+token+"' ", 1)
 }
 
 func buildRESTOperationDocs() []operationDoc {
@@ -306,7 +303,7 @@ func buildRESTEndpointDocs(baseURL string) []endpointDoc {
 			Method:      "GET",
 			Path:        "/api/docs.md",
 			Category:    "docs",
-			Description: "Return the MCP connection guide in Markdown format.",
+			Description: "Return the full REST API document in Markdown format.",
 			Response:    map[string]any{"contentType": "text/markdown", "body": "markdown document"},
 			Example:     fmt.Sprintf("curl %s/api/docs.md", baseURL),
 		},
@@ -315,7 +312,7 @@ func buildRESTEndpointDocs(baseURL string) []endpointDoc {
 			Method:      "GET",
 			Path:        "/api/status",
 			Category:    "docs",
-			Description: "Return MCP server runtime status.",
+			Description: "Return REST API server runtime status.",
 			Response:    map[string]any{"enabled": true, "running": true, "baseURL": baseURL},
 			Example:     fmt.Sprintf("curl %s/api/status", baseURL),
 		},
@@ -599,7 +596,7 @@ func buildRESTEndpointDocs(baseURL string) []endpointDoc {
 			Method:      "PUT",
 			Path:        "/api/config",
 			Category:    "config",
-			Description: "Update app config, including MCP server and allowlist settings.",
+			Description: "Update app config, including REST API server enable flag.",
 			Request:     map[string]any{"config": "full config object"},
 			Response:    map[string]any{"config": "updated config object"},
 			Example:     fmt.Sprintf("curl -X PUT %s/api/config -H 'Content-Type: application/json' -d '{\"config\":{\"restServerEnabled\":true,\"restServerPort\":18080}}'", baseURL),

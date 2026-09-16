@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 
 	"github.com/google/uuid"
 )
@@ -80,11 +80,8 @@ func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTermina
 			chunk, rest := splitUTF8SafeChunk(pending, payload)
 			pending = rest
 			if len(chunk) > 0 {
-				visibleChunk, nextPendingControl, _, clipboardTexts := stripTerminalSignals(pendingControl, chunk)
+				visibleChunk, nextPendingControl, _ := stripTerminalSignals(pendingControl, chunk)
 				pendingControl = nextPendingControl
-				for _, clipboardText := range clipboardTexts {
-					emitSessionEvent(ctx, fmt.Sprintf("ssh:clipboard:%s", session.id), clipboardText)
-				}
 				if len(visibleChunk) == 0 {
 					goto afterChunk
 				}

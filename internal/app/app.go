@@ -6,17 +6,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/fileaccess"
-	"github.com/VaderChen/Integrate-Terminal/internal/keystore"
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
-	"github.com/VaderChen/Integrate-Terminal/internal/session"
-	"github.com/VaderChen/Integrate-Terminal/internal/sshutil"
-	"github.com/VaderChen/Integrate-Terminal/internal/store"
+	"IntegTERM/internal/model"
+	"IntegTERM/internal/purchase"
+	"IntegTERM/internal/session"
+	"IntegTERM/internal/store"
 )
+
+const freePlanTabLimit = 2
 
 type App struct {
 	ctx             context.Context
 	store           *store.Store
+	purchaseService *purchase.Service
 	sessionManager  *session.Manager
 	sites           []model.Site
 	tabs            []model.Tab
@@ -28,44 +29,21 @@ type App struct {
 	operationMu     sync.RWMutex
 	restServer      *http.Server
 	restServerURL   string
+	restServerToken string
 	restAttached    bool
-	mcpVFS          *mcpVFS
 	allowRESTAttach bool
-	quitApproved    bool
 	operations      map[string]RESTOperation
-}
-
-// ApproveQuit allows the native window close event to complete once.
-func (a *App) ApproveQuit() {
-	a.stateMu.Lock()
-	a.quitApproved = true
-	a.stateMu.Unlock()
-}
-
-func (a *App) consumeQuitApproval() bool {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	approved := a.quitApproved
-	a.quitApproved = false
-	return approved
-}
-
-// ConsumeQuitApprovalForUI is used by the Wails window lifecycle callback.
-func (a *App) ConsumeQuitApprovalForUI() bool {
-	return a.consumeQuitApproval()
 }
 
 func New() *App {
 	dataDir := resolveAppDataDir()
-	fileaccess.Init(dataDir)
-	keystore.Init(dataDir)
-	sshutil.Init(dataDir)
 	return &App{
-		store:          store.New(dataDir),
-		sessionManager: session.NewManager(),
-		mcpVFS:         newMCPVFS(),
-		lastActivity:   make(map[string]time.Time),
-		operations:     make(map[string]RESTOperation),
+		store:           store.New(dataDir),
+		purchaseService: purchase.NewService(),
+		sessionManager:  session.NewManager(),
+		lastActivity:    make(map[string]time.Time),
+		restServerToken: loadOrCreateRESTToken(dataDir),
+		operations:      make(map[string]RESTOperation),
 	}
 }
 
@@ -78,14 +56,6 @@ func (a *App) Startup(ctx context.Context) {
 func (a *App) ServiceStartup() {
 	a.ctx = nil
 	a.initialize(false)
-}
-
-// MCPStartup loads the application state for the standalone local MCP
-// stdio process without binding the optional HTTP server itself. When HTTP
-// MCP is enabled, the process may attach to the existing background service.
-func (a *App) MCPStartup() {
-	a.ctx = nil
-	a.initialize(true)
 }
 
 func (a *App) initialize(allowRESTAttach bool) {
@@ -107,10 +77,6 @@ func (a *App) initialize(allowRESTAttach bool) {
 	}
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
-	a.config.RESTServerAllowlist = sanitizeRESTServerAllowlist(a.config.RESTServerAllowlist)
-	a.config.TransferRetryCount = sanitizeTransferRetryCount(a.config.TransferRetryCount)
-	a.config.TransferConflictStrategy = sanitizeTransferConflictStrategy(a.config.TransferConflictStrategy)
-	a.sessionManager.ConfigureTransferPolicy(a.config.TransferRetryCount, a.config.TransferConflictStrategy)
 	if a.allowRESTAttach && shouldRunBackgroundService(a.config) {
 		_ = a.ensureBackgroundService()
 	}
@@ -140,23 +106,17 @@ func (a *App) DomReady(ctx context.Context) {
 }
 
 func (a *App) Shutdown(ctx context.Context) {
-	fileaccess.Close()
 	_ = a.applyRESTServerShutdown()
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
 	a.captureWindowState()
-	_ = a.persistTabsLocked(a.tabs)
+	_ = a.persistTabs()
 	_ = a.store.SaveConfig(a.config)
 }
 
 func (a *App) ServiceShutdown() {
-	fileaccess.Close()
 	_ = a.applyRESTServerShutdown()
 }
 
 func (a *App) Bootstrap() model.BootstrapPayload {
-	a.stateMu.RLock()
-	defer a.stateMu.RUnlock()
 	localPath := defaultLocalPath()
 	visibleTabs := visibleTabs(a.tabs)
 
@@ -164,7 +124,7 @@ func (a *App) Bootstrap() model.BootstrapPayload {
 		localPath = visibleTabs[0].LocalPath
 	}
 
-	return cloneBootstrapPayload(model.BootstrapPayload{
+	return model.BootstrapPayload{
 		Sites:            enrichSites(a.sites),
 		Tabs:             visibleTabs,
 		Config:           a.config,
@@ -173,17 +133,51 @@ func (a *App) Bootstrap() model.BootstrapPayload {
 		RemoteFiles:      []model.FileEntry{},
 		Transfers:        a.sessionManager.SampleTransfers(),
 		Logs:             a.sessionManager.SampleLogs(),
-	})
+	}
 }
 
 func (a *App) GetSites() []model.Site {
-	a.stateMu.RLock()
-	defer a.stateMu.RUnlock()
 	return enrichSites(a.sites)
 }
 
 func (a *App) GetConfig() model.Config {
-	a.stateMu.RLock()
-	defer a.stateMu.RUnlock()
-	return cloneConfig(a.config)
+	return a.config
+}
+
+func (a *App) GetPurchaseStatus() model.PurchaseStatus {
+	status, err := a.purchaseService.CurrentState(a.purchaseContext())
+	return a.mergePurchaseStatus(status, err)
+}
+
+func (a *App) RefreshPurchaseStatus() (model.PurchaseStatus, error) {
+	status, err := a.purchaseService.Refresh(a.purchaseContext())
+	merged := a.mergePurchaseStatus(status, err)
+	if err == nil {
+		if saveErr := a.applyPurchaseState(status); saveErr != nil {
+			return merged, saveErr
+		}
+	}
+	return merged, err
+}
+
+func (a *App) PurchaseProUnlock() (model.PurchaseStatus, error) {
+	status, err := a.purchaseService.PurchaseProUnlock(a.purchaseContext())
+	merged := a.mergePurchaseStatus(status, err)
+	if err == nil {
+		if saveErr := a.applyPurchaseState(status); saveErr != nil {
+			return merged, saveErr
+		}
+	}
+	return merged, err
+}
+
+func (a *App) RestorePurchases() (model.PurchaseStatus, error) {
+	status, err := a.purchaseService.RestorePurchases(a.purchaseContext())
+	merged := a.mergePurchaseStatus(status, err)
+	if err == nil {
+		if saveErr := a.applyPurchaseState(status); saveErr != nil {
+			return merged, saveErr
+		}
+	}
+	return merged, err
 }

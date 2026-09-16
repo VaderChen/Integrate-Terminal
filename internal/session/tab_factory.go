@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
-	"github.com/VaderChen/Integrate-Terminal/internal/transport"
+	"IntegTERM/internal/model"
+	"IntegTERM/internal/transport"
 )
 
 func newClient(protocol string) (transport.Client, error) {

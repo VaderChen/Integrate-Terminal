@@ -63,3 +63,4 @@ function extractPromptPath(value: string) {
   }
   return '';
 }
+

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"path"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func (a *App) handleRESTListLocal(w http.ResponseWriter, r *http.Request) {
@@ -25,11 +25,7 @@ func (a *App) handleRESTListRemote(w http.ResponseWriter, r *http.Request) {
 	}
 	tabID := r.URL.Query().Get("tabId")
 	targetPath := r.URL.Query().Get("path")
-	entries, err := a.listRemoteWithError(tabID, targetPath)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
+	entries := a.ListRemote(tabID, targetPath)
 	writeJSON(w, http.StatusOK, fileEnvelope{Entries: entries})
 }
 

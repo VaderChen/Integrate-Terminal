@@ -38,12 +38,6 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
     }
   };
 
-  // 相容舊沙盒版本，選取金鑰時仍保留可跨版本使用的路徑資料。
-  // 授權整個資料夾一次，即可涵蓋其下所有金鑰，免去逐一重選。
-  const authorizeKeyDirectory = async () => {
-    await window.go?.app?.App?.AuthorizeKeyDirectory?.(draft.ppkPath ?? "");
-  };
-
   return (
     <section className={`${variant === 'dialog' ? 'site-editor-form' : 'card form-card'}`}>
       <div className="section-title site-editor-header">
@@ -89,15 +83,11 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
             </label>
             <label>
               <span>{t.fieldFolder}</span>
-              <input {...textInputProps} value={draft.folder ?? ''} onChange={(e) => update('folder', e.target.value)} placeholder={t.placeholderFolder} />
-            </label>
-            <label>
-              <span>{t.fieldTags}</span>
               <input
                 {...textInputProps}
-                value={(draft.tags ?? []).join(', ')}
-                onChange={(e) => update('tags', parseTags(e.target.value))}
-                placeholder={t.placeholderTags}
+                value={draft.folder ?? ''}
+                onChange={(e) => update('folder', e.target.value)}
+                placeholder={t.placeholderFolder}
               />
             </label>
             <label>
@@ -119,9 +109,7 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
                   <option value="sftp">{t.protocolSSHSFTP}</option>
                   <option value="ftp">{t.protocolTelnetFTP}</option>
                 </select>
-                <span className="select-arrow" aria-hidden="true">
-                  <FontAwesomeIcon icon={faChevronDown} />
-                </span>
+                <span className="select-arrow">v</span>
               </div>
             </label>
             <label>
@@ -154,7 +142,7 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
             </label>
             {supportsPPK ? (
               <>
-                <label>
+                <label className="full-width">
                   <span>{t.fieldPPKPath}</span>
                   <div className="path-picker">
                     <input
@@ -165,14 +153,6 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
                     />
                     <button type="button" className="site-view-button picker-button" onClick={choosePPK}>
                       {t.choosePPK}
-                    </button>
-                    <button
-                      type="button"
-                      className="site-view-button picker-button"
-                      onClick={authorizeKeyDirectory}
-                      title={t.authorizeKeyDirectoryHint}
-                    >
-                      {t.authorizeKeyDirectory}
                     </button>
                   </div>
                 </label>
@@ -196,32 +176,10 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
               <span>{t.fieldRemotePath}</span>
               <input {...textInputProps} value={draft.remotePath} onChange={(e) => update('remotePath', e.target.value)} />
             </label>
-            <label className="form-switch-label">
-              <span>{t.fieldFavorite}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={draft.favorite ?? false}
-                aria-label={t.fieldFavorite}
-                className={`ios-switch ${draft.favorite ? 'active' : ''}`}
-                onClick={() => update('favorite', !(draft.favorite ?? false))}
-                title={draft.favorite ? t.settingsOn : t.settingsOff}
-              >
-                <span className="ios-switch-track" />
-                <span className="ios-switch-thumb" />
-              </button>
-            </label>
           </div>
 
         </>
       ) : null}
     </section>
   );
-}
-
-function parseTags(value: string) {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean);
 }

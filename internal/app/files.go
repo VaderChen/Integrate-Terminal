@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/fileaccess"
-	"github.com/VaderChen/Integrate-Terminal/internal/keystore"
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -240,12 +239,13 @@ func (a *App) ExecuteLocalPath(targetPath string) error {
 	if info.IsDir() {
 		return fmt.Errorf("cannot execute a directory")
 	}
-	cmd, err := executableCommand(targetPath, info)
-	if err != nil {
-		return err
+	if info.Mode()&0o111 == 0 {
+		return fmt.Errorf("file is not executable")
 	}
+
+	cmd := exec.Command(targetPath)
 	cmd.Dir = filepath.Dir(targetPath)
-	configureDetachedCommand(cmd)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		a.sessionManager.AppendLog(fmt.Sprintf("執行本機檔案失敗: %s", targetPath), "failed")
 		return err
@@ -260,7 +260,7 @@ func (a *App) SelectPPKFile() (string, error) {
 		return "", nil
 	}
 
-	selectedPath, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title: "選擇 PPK 金鑰檔",
 		Filters: []wailsruntime.FileFilter{
 			{
@@ -269,18 +269,6 @@ func (a *App) SelectPPKFile() (string, error) {
 			},
 		},
 	})
-	if err != nil || selectedPath == "" {
-		return selectedPath, err
-	}
-
-	// 保留 bookmark 與副本，讓舊沙盒版本選取的金鑰可延續使用。
-	// 必須立刻建立 security-scoped bookmark 與容器副本，否則下次啟動就讀不到了。
-	if err := keystore.Remember(selectedPath); err != nil {
-		a.sessionManager.AppendLog(fmt.Sprintf("登記金鑰檔失敗: %v", err), "failed")
-		return "", fmt.Errorf("無法登記金鑰檔，請改選其他位置的檔案: %w", err)
-	}
-
-	return selectedPath, nil
 }
 
 func (a *App) SelectDirectory() (string, error) {
@@ -288,74 +276,7 @@ func (a *App) SelectDirectory() (string, error) {
 		return "", nil
 	}
 
-	selectedDirectory, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "選擇並授權本機目錄",
+	return wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "選擇下載目錄",
 	})
-	if err != nil || selectedDirectory == "" {
-		return selectedDirectory, err
-	}
-	if err := fileaccess.RememberDirectory(selectedDirectory); err != nil {
-		a.sessionManager.AppendLog(fmt.Sprintf("保存本機目錄授權失敗: %v", err), "failed")
-		return "", err
-	}
-
-	a.sessionManager.AppendLog(fmt.Sprintf("已授權本機目錄及其所有子目錄: %s", selectedDirectory), "done")
-	return selectedDirectory, nil
-}
-
-// AuthorizeKeyDirectory 讓使用者授權一整個金鑰資料夾。
-//
-// 舊沙盒版本保存的 PPK 絕對路徑可能需要重新授權。
-// 逐一重選每個金鑰很繁瑣，改為選一次資料夾即可涵蓋其下所有金鑰檔。
-func (a *App) AuthorizeKeyDirectory(suggestedPath string) (string, error) {
-	if a.ctx == nil {
-		return "", nil
-	}
-
-	// 直接把對話框開在金鑰所在資料夾，使用者不必自己找。
-	defaultDirectory := strings.TrimSpace(suggestedPath)
-	if defaultDirectory != "" {
-		if info, err := os.Stat(defaultDirectory); err != nil || !info.IsDir() {
-			defaultDirectory = filepath.Dir(defaultDirectory)
-		}
-	}
-
-	selectedDir, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title:            "選擇存放 PPK 金鑰的資料夾",
-		DefaultDirectory: defaultDirectory,
-	})
-	if err != nil || selectedDir == "" {
-		return selectedDir, err
-	}
-
-	if err := fileaccess.RememberDirectory(selectedDir); err != nil {
-		a.sessionManager.AppendLog(fmt.Sprintf("授權金鑰資料夾失敗: %v", err), "failed")
-		return "", fmt.Errorf("授權金鑰資料夾失敗: %w", err)
-	}
-
-	a.sessionManager.AppendLog(fmt.Sprintf("已授權金鑰資料夾: %s", selectedDir), "done")
-	return selectedDir, nil
-}
-
-// PendingKeyAuthorizations 回報哪些站台的金鑰目前讀不到，需要使用者授權。
-// 前端可用它提示使用者，而不必等到連線失敗才發現。
-func (a *App) PendingKeyAuthorizations() []string {
-	sites, err := a.store.LoadSites()
-	if err != nil {
-		return nil
-	}
-
-	seen := make(map[string]bool)
-	pending := make([]string, 0)
-	for _, site := range sites {
-		path := strings.TrimSpace(site.PPKPath)
-		if path == "" || seen[path] {
-			continue
-		}
-		seen[path] = true
-		if keystore.NeedsReselect(path) {
-			pending = append(pending, path)
-		}
-	}
-	return pending
 }

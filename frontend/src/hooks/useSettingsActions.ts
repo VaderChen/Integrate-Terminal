@@ -1,5 +1,5 @@
-import type React from "react";
-import type { Config, Tab } from "../types";
+import type React from 'react';
+import type { Config, Tab } from '../types';
 
 type Params = {
   config: Config;
@@ -8,14 +8,8 @@ type Params = {
   refreshPanels: (tab: Tab | null) => Promise<void>;
 };
 
-export function useSettingsActions({
-  config,
-  setConfig,
-  activeTabRef,
-  refreshPanels,
-}: Params) {
-  const saveConfig = async (update: Config | ((current: Config) => Config)) => {
-    const nextConfig = typeof update === "function" ? update(config) : update;
+export function useSettingsActions({ config, setConfig, activeTabRef, refreshPanels }: Params) {
+  const saveConfig = async (nextConfig: Config) => {
     const previousConfig = config;
     setConfig(nextConfig);
     try {
@@ -27,85 +21,49 @@ export function useSettingsActions({
     }
   };
 
-  const handleFontScaleChange = async (fontScale: Config["fontScale"]) => {
-    await saveConfig((current) => ({ ...current, fontScale }));
+  const handleFontScaleChange = async (fontScale: Config['fontScale']) => {
+    await saveConfig({ ...config, fontScale });
   };
 
-  const handleLanguageChange = async (language: Config["language"]) => {
-    await saveConfig((current) => ({ ...current, language }));
+  const handleLanguageChange = async (language: Config['language']) => {
+    await saveConfig({ ...config, language });
   };
 
-  const handleThemeChange = async (theme: Config["theme"]) => {
-    await saveConfig((current) => ({ ...current, theme }));
+  const handleThemeChange = async (theme: Config['theme']) => {
+    await saveConfig({ ...config, theme });
   };
 
   const handleShowHiddenFilesChange = async (showHiddenFiles: boolean) => {
-    await saveConfig((current) => ({ ...current, showHiddenFiles }));
+    await saveConfig({ ...config, showHiddenFiles });
     await refreshPanels(activeTabRef.current);
   };
 
   const handleShowTrayIconChange = async (showTrayIcon: boolean) => {
-    await saveConfig((current) => ({ ...current, showTrayIcon }));
+    await saveConfig({ ...config, showTrayIcon });
   };
 
-  const handleRememberWindowPositionChange = async (
-    rememberWindowPosition: boolean,
-  ) => {
-    await saveConfig((current) => ({ ...current, rememberWindowPosition }));
+  const handleRememberWindowPositionChange = async (rememberWindowPosition: boolean) => {
+    await saveConfig({ ...config, rememberWindowPosition });
   };
 
   const handleTelnetLocalEchoChange = async (telnetLocalEcho: boolean) => {
-    await saveConfig((current) => ({ ...current, telnetLocalEcho }));
+    await saveConfig({ ...config, telnetLocalEcho });
   };
 
-  const handleRESTServerEnabledChange = async (
-    restServerEnabled: boolean,
-    restServerPort = config.restServerPort,
-    restServerAllowlist = config.restServerAllowlist,
-  ) => {
-    await saveConfig((current) => ({
-      ...current,
-      restServerEnabled,
-      restServerPort,
-      restServerAllowlist,
-    }));
+  const handleRESTServerEnabledChange = async (restServerEnabled: boolean) => {
+    await saveConfig({ ...config, restServerEnabled });
   };
 
   const handleRESTServerPortChange = async (restServerPort: number) => {
-    await saveConfig((current) => ({ ...current, restServerPort }));
-  };
-
-  const handleRESTServerAllowlistChange = async (
-    restServerAllowlist: string[],
-  ) => {
-    await saveConfig((current) => ({ ...current, restServerAllowlist }));
-  };
-
-  const handleTransferRetryCountChange = async (transferRetryCount: number) => {
-    await saveConfig((current) => ({ ...current, transferRetryCount }));
-  };
-
-  const handleTransferConflictStrategyChange = async (
-    transferConflictStrategy: Config['transferConflictStrategy'],
-  ) => {
-    await saveConfig((current) => ({ ...current, transferConflictStrategy }));
+    await saveConfig({ ...config, restServerPort });
   };
 
   const handleRestoreTabsChange = async (restoreTabsOnStart: boolean) => {
-    await saveConfig((current) => ({ ...current, restoreTabsOnStart }));
+    await saveConfig({ ...config, restoreTabsOnStart });
   };
 
-  const handleCloseTerminalTabOnDisconnectChange = async (
-    closeTerminalTabOnDisconnect: boolean,
-  ) => {
-    await saveConfig((current) => ({
-      ...current,
-      closeTerminalTabOnDisconnect,
-    }));
-  };
-
-  const handleForceUpdateChange = async (forceUpdate: boolean) => {
-    await saveConfig((current) => ({ ...current, forceUpdate }));
+  const handleCloseTerminalTabOnDisconnectChange = async (closeTerminalTabOnDisconnect: boolean) => {
+    await saveConfig({ ...config, closeTerminalTabOnDisconnect });
   };
 
   return {
@@ -118,11 +76,7 @@ export function useSettingsActions({
     handleTelnetLocalEchoChange,
     handleRESTServerEnabledChange,
     handleRESTServerPortChange,
-    handleRESTServerAllowlistChange,
-    handleTransferRetryCountChange,
-    handleTransferConflictStrategyChange,
     handleRestoreTabsChange,
     handleCloseTerminalTabOnDisconnectChange,
-    handleForceUpdateChange,
   };
 }

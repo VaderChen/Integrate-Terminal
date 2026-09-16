@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func filterHiddenEntries(entries []model.FileEntry, showHidden bool) []model.FileEntry {
@@ -48,55 +48,24 @@ func defaultLocalPath() string {
 }
 
 func migrateLegacyDataDir(targetDir string) {
+	legacyDir := "data"
+	if filepath.Clean(targetDir) == filepath.Clean(legacyDir) {
+		return
+	}
+
 	if _, err := os.Stat(targetDir); err == nil {
 		return
 	}
 
-	legacyDirs := make([]string, 0, 2)
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		legacyDirs = append(legacyDirs, filepath.Join(
-			homeDir,
-			"Library",
-			"Containers",
-			"com.vader.integterm",
-			"Data",
-			"Library",
-			"Application Support",
-			"IntegTERM",
-		))
-	}
-	legacyDirs = append(legacyDirs, "data")
-
-	for _, legacyDir := range legacyDirs {
-		if filepath.Clean(targetDir) == filepath.Clean(legacyDir) {
-			continue
-		}
-		if _, err := os.Stat(legacyDir); err != nil {
-			continue
-		}
-		if migrateLegacyDataFiles(legacyDir, targetDir) {
-			return
-		}
-	}
-}
-
-func migrateLegacyDataFiles(sourceDir string, targetDir string) bool {
-	if err := os.MkdirAll(targetDir, 0o700); err != nil {
-		return false
+	if _, err := os.Stat(legacyDir); err != nil {
+		return
 	}
 
-	copied := false
-	for _, name := range []string{
-		"sites.json",
-		"tabs.json",
-		"config.json",
-		"known_hosts",
-		"ppk-keys.json",
-		"file-access.json",
-		"rest-api.token",
-	} {
-		sourcePath := filepath.Join(sourceDir, name)
+	_ = os.MkdirAll(targetDir, 0o755)
+	for _, name := range []string{"sites.json", "tabs.json", "config.json"} {
+		sourcePath := filepath.Join(legacyDir, name)
 		destPath := filepath.Join(targetDir, name)
+
 		if _, err := os.Stat(sourcePath); err != nil {
 			continue
 		}
@@ -108,31 +77,8 @@ func migrateLegacyDataFiles(sourceDir string, targetDir string) bool {
 		if err != nil {
 			continue
 		}
-		if os.WriteFile(destPath, data, 0o600) == nil {
-			copied = true
-		}
+		_ = os.WriteFile(destPath, data, 0o644)
 	}
-
-	sourceKeysDir := filepath.Join(sourceDir, "keys")
-	targetKeysDir := filepath.Join(targetDir, "keys")
-	entries, err := os.ReadDir(sourceKeysDir)
-	if err == nil {
-		_ = os.MkdirAll(targetKeysDir, 0o700)
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			data, readErr := os.ReadFile(filepath.Join(sourceKeysDir, entry.Name()))
-			if readErr != nil {
-				continue
-			}
-			if os.WriteFile(filepath.Join(targetKeysDir, entry.Name()), data, 0o600) == nil {
-				copied = true
-			}
-		}
-	}
-
-	return copied
 }
 
 type systemProfilerFontPayload struct {

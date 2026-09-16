@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 func TestWriteJSONAtomically(t *testing.T) {

@@ -2,29 +2,17 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
-
-FRONTEND_DIR="./frontend"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FRONTEND_DIR="$SCRIPT_DIR/frontend"
 TMP_ROOT=""
 SYNC_WATCHER_PID=""
 export MACOSX_DEPLOYMENT_TARGET="12.0"
 export CGO_CFLAGS="-mmacosx-version-min=12.0"
 export CGO_LDFLAGS="-mmacosx-version-min=12.0"
+export DYLD_LIBRARY_PATH="$SCRIPT_DIR/internal/purchase/native${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+export VITE_APP_VERSION="1.$(date +%y).$(date +%m%d) build $(date +%H%M)"
 export COPYFILE_DISABLE=1
 export COPY_EXTENDED_ATTRIBUTES_DISABLE=1
-
-MULTI_INSTANCE=0
-for argument in "$@"; do
-  case "$argument" in
-    --multi-instance)
-      MULTI_INSTANCE=1
-      ;;
-    *)
-      echo "用法：$0 [--multi-instance]"
-      exit 1
-      ;;
-  esac
-done
 
 cleanup_dev_runtime() {
   if [[ -n "$SYNC_WATCHER_PID" ]]; then
@@ -52,6 +40,41 @@ if [[ -f "$HOME/.zshrc" ]]; then
   source "$HOME/.zshrc"
 fi
 
+find_wails() {
+  if command -v wails >/dev/null 2>&1; then
+    command -v wails
+    return 0
+  fi
+
+  local candidates=()
+  local gopath=""
+  gopath="$(go env GOPATH 2>/dev/null || true)"
+  if [[ -n "$gopath" ]]; then
+    candidates+=("$gopath/bin/wails")
+  fi
+  candidates+=(
+    "$HOME/go/bin/wails"
+    "/opt/homebrew/bin/wails"
+    "/usr/local/bin/wails"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+install_wails() {
+  echo "未找到 Wails，正在自動安裝..."
+  local install_target="github.com/wailsapp/wails/v2/cmd/wails@latest"
+  GO111MODULE=on go install "$install_target"
+}
+
 required_commands=(go node npm rsync)
 for cmd in "${required_commands[@]}"; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -61,17 +84,19 @@ for cmd in "${required_commands[@]}"; do
   fi
 done
 
-BUILD_VERSION_JSON="$(node "./scripts/resolve-build-version.mjs")"
-VITE_APP_VERSION="$(node -e 'const value = JSON.parse(process.argv[1]).displayVersion; process.stdout.write(String(value));' "$BUILD_VERSION_JSON")"
-export VITE_APP_VERSION
-echo "開發版本：$VITE_APP_VERSION"
+WAILS_BIN="$(find_wails || true)"
+if [[ -z "$WAILS_BIN" ]]; then
+  install_wails
+  WAILS_BIN="$(find_wails || true)"
+fi
 
-WAILS_VERSION="$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2 2>/dev/null || true)"
-if [[ -z "$WAILS_VERSION" || "$WAILS_VERSION" == "<no value>" ]]; then
-  echo "無法取得 go.mod 指定的 Wails 版本。"
+if [[ -z "$WAILS_BIN" ]]; then
+  echo "缺少必要指令: wails"
+  echo "已嘗試自動安裝，但仍未找到。"
+  echo "可手動執行：go install github.com/wailsapp/wails/v2/cmd/wails@latest"
+  echo "若已安裝，請確認 \$HOME/go/bin 或 \$(go env GOPATH)/bin 已加入 PATH。"
   exit 1
 fi
-WAILS_COMMAND=(go run "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION")
 
 cd "$FRONTEND_DIR"
 if [[ ! -d node_modules ]]; then
@@ -79,12 +104,15 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
-cd ..
+cd "$SCRIPT_DIR"
 echo "整理 Go 模組..."
 go mod tidy
 
-mkdir -p "./.codex-tmp"
-TMP_ROOT="$(mktemp -d "./.codex-tmp/integterm-dev.XXXXXX")"
+echo "建置 StoreKit 2 原生橋接..."
+"$SCRIPT_DIR/scripts/build-storekit2-bridge.sh"
+
+TMP_BASE="${TMPDIR:-/tmp}"
+TMP_ROOT="$(mktemp -d "${TMP_BASE%/}/integterm-dev.XXXXXX")"
 STAGING_DIR="$TMP_ROOT/project"
 
 sync_project_to_local() {
@@ -96,7 +124,7 @@ sync_project_to_local() {
     --exclude 'frontend/dist/' \
     --exclude 'frontend/node_modules/' \
     --exclude 'frontend/wailsjs/' \
-    ./ "$STAGING_DIR/"
+    "$SCRIPT_DIR/" "$STAGING_DIR/"
 }
 
 echo "建立本機開發鏡像：$STAGING_DIR"
@@ -105,10 +133,10 @@ sync_project_to_local
 
 if [[ -d "$FRONTEND_DIR/node_modules" ]]; then
   rm -rf "$STAGING_DIR/frontend/node_modules"
-  ln -s "../../../../frontend/node_modules" "$STAGING_DIR/frontend/node_modules"
+  ln -s "$FRONTEND_DIR/node_modules" "$STAGING_DIR/frontend/node_modules"
 fi
 rm -rf "$STAGING_DIR/frontend/wailsjs"
-ln -s "../../../../frontend/wailsjs" "$STAGING_DIR/frontend/wailsjs"
+ln -s "$FRONTEND_DIR/wailsjs" "$STAGING_DIR/frontend/wailsjs"
 
 if [[ "${INTEGTERM_DEV_PREPARE_ONLY:-0}" == "1" ]]; then
   echo "本機開發鏡像準備完成。"
@@ -125,11 +153,5 @@ echo "監看原專案並同步到本機開發鏡像..."
 SYNC_WATCHER_PID=$!
 
 echo "啟動 Wails 開發模式（本機暫存目錄）..."
-WAILS_DEV_ARGS=(dev -m -nosyncgomod -skipembedcreate)
-if (( MULTI_INSTANCE == 1 )); then
-  WAILS_DEV_ARGS+=(-appargs "--multi-instance")
-fi
-(
-  cd "$STAGING_DIR"
-  "${WAILS_COMMAND[@]}" "${WAILS_DEV_ARGS[@]}"
-)
+cd "$STAGING_DIR"
+"$WAILS_BIN" dev -m -nosyncgomod

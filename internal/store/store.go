@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/model"
+	"IntegTERM/internal/model"
 )
 
 type Store struct {
@@ -22,10 +22,7 @@ func (s *Store) BaseDir() string {
 }
 
 func (s *Store) Ensure() error {
-	if err := os.MkdirAll(s.baseDir, 0o700); err != nil {
-		return err
-	}
-	return os.Chmod(s.baseDir, 0o700)
+	return os.MkdirAll(s.baseDir, 0o755)
 }
 
 func (s *Store) LoadSites() ([]model.Site, error) {
@@ -60,6 +57,7 @@ func (s *Store) LoadConfig() (model.Config, error) {
 			WindowHeight:                 920,
 			WindowX:                      0,
 			WindowY:                      0,
+			ProUnlock:                    false,
 			RestoreTabsOnStart:           true,
 			CloseTerminalTabOnDisconnect: true,
 			ShowHiddenFiles:              false,
@@ -68,14 +66,10 @@ func (s *Store) LoadConfig() (model.Config, error) {
 			TelnetLocalEcho:              true,
 			RESTServerEnabled:            false,
 			RESTServerPort:               18080,
-			RESTServerAllowlist:          []string{"127.0.0.1"},
 			FontScale:                    "medium",
 			Language:                     "",
 			Theme:                        "neutral",
 			SiteFolders:                  []string{},
-			TransferRetryCount:           2,
-			TransferConflictStrategy:     "overwrite",
-			ForceUpdate:                  false,
 		}, nil
 	}
 	return record, err
@@ -111,7 +105,7 @@ func writeJSON(path string, value any) error {
 	tempPath := file.Name()
 	defer os.Remove(tempPath)
 
-	if err := file.Chmod(0o600); err != nil {
+	if err := file.Chmod(0o644); err != nil {
 		_ = file.Close()
 		return err
 	}
@@ -126,10 +120,7 @@ func writeJSON(path string, value any) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
+	return os.Rename(tempPath, path)
 }
 
 func sampleSites() []model.Site {

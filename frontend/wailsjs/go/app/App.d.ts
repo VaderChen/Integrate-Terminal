@@ -7,11 +7,7 @@ export function ApproveHost(arg1:model.HostTrustPrompt):Promise<void>;
 
 export function Bootstrap():Promise<model.BootstrapPayload>;
 
-export function BackupSiteLibrary():Promise<string>;
-
 export function CancelTransfer(arg1:string):Promise<Array<model.TransferItem>>;
-
-export function CheckForUpdates():Promise<model.UpdateCheckResult>;
 
 export function ClearAllTransfers():Promise<Array<model.TransferItem>>;
 
@@ -55,10 +51,6 @@ export function Disconnect(arg1:string):Promise<Array<model.Tab>>;
 
 export function DownloadDroppedPaths(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
 
-export function CompareDirectories(arg1:string,arg2:string,arg3:string):Promise<Array<model.FileComparison>>;
-
-export function SyncDirectories(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
-
 export function ExecuteLocalPath(arg1:string):Promise<void>;
 
 export function ExecuteSSHCommand(arg1:model.Site,arg2:string,arg3:number):Promise<Record<string, any>>;
@@ -69,7 +61,7 @@ export function GetConfig():Promise<model.Config>;
 
 export function GetLogs():Promise<Array<model.LogItem>>;
 
-export function GetSiteDataDirectory():Promise<string>;
+export function GetPurchaseStatus():Promise<model.PurchaseStatus>;
 
 export function GetRESTServerBaseURL():Promise<string>;
 
@@ -77,14 +69,9 @@ export function GetRESTServerPort():Promise<number>;
 
 export function GetRESTServerStatus():Promise<model.RESTServerStatus>;
 
+export function GetRESTServerToken():Promise<string>;
 
 export function GetRestAPIDocsMarkdown():Promise<string>;
-
-export function GetMCPContractMarkdown(arg1:string):Promise<string>;
-
-export function GetMCPStdioExecutable():Promise<string>;
-
-export function ExportMCPContractMarkdown(arg1:string):Promise<string>;
 
 export function GetSSHOutputBuffer(arg1:string):Promise<string>;
 
@@ -104,7 +91,9 @@ export function MoveEntriesToDirectory(arg1:string,arg2:string,arg3:Array<string
 
 export function OpenLocalPath(arg1:string):Promise<void>;
 
-export function OpenSiteDataDirectory():Promise<void>;
+export function PurchaseProUnlock():Promise<model.PurchaseStatus>;
+
+export function RefreshPurchaseStatus():Promise<model.PurchaseStatus>;
 
 export function RegisterBackgroundService(arg1:number):Promise<void>;
 
@@ -126,7 +115,7 @@ export function ResetWindowToDefaultScale():Promise<void>;
 
 export function ResizeSSHSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
-export function RestoreSiteLibraryBackup():Promise<model.SiteLibraryMutationResult|null>;
+export function RestorePurchases():Promise<model.PurchaseStatus>;
 
 export function SaveConfig(arg1:model.Config):Promise<model.Config>;
 
@@ -140,13 +129,13 @@ export function ServiceShutdown():Promise<void>;
 
 export function ServiceStartup():Promise<void>;
 
+export function SetProUnlock(arg1:boolean):Promise<model.Config>;
+
 export function SortSiteFolders():Promise<model.Config>;
 
 export function SortSitesByName():Promise<Array<model.Site>>;
 
 export function StartSSHSession(arg1:model.Site):Promise<string>;
-
-export function StartUpdate(arg1:string):Promise<model.UpdateActionResult>;
 
 export function StartTelnetSession(arg1:model.Site):Promise<string>;
 

@@ -28,7 +28,6 @@ const LOCAL_DRAG_MIME = 'application/x-integrated-term-local-paths';
 
 type Props = {
   sessionId: string;
-  active: boolean;
   onClose: () => void;
   onOpenSFTP: () => void;
   onDropLocalPaths?: (paths: string[], remotePath: string) => void;
@@ -46,7 +45,6 @@ type Props = {
 
 export function SSHConsolePanel({
   sessionId,
-  active,
   onClose,
   onOpenSFTP,
   onDropLocalPaths,
@@ -66,7 +64,6 @@ export function SSHConsolePanel({
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const lastMeasuredWidthRef = useRef<number>(0);
-  const activeRef = useRef(active);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [systemFonts, setSystemFonts] = useState<string[]>(FALLBACK_FONT_FAMILIES);
   const appShellFontSize = typeof window !== 'undefined'
@@ -79,19 +76,6 @@ export function SSHConsolePanel({
         fontSize: appShellFontSize,
       }
     : undefined;
-
-  activeRef.current = active;
-
-  const syncActiveTerminalLayout = () => {
-    if (!activeRef.current) return;
-    const term = termRef.current;
-    const fitAddon = fitAddonRef.current;
-    const container = terminalRef.current;
-    if (!term || !fitAddon || !container || container.clientWidth <= 0) return;
-    lastMeasuredWidthRef.current = container.clientWidth;
-    fitTerminal(container, fitAddon);
-    void window.go?.app?.App?.ResizeSSHSession?.(sessionId, term.cols, term.rows);
-  };
 
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
@@ -119,7 +103,6 @@ export function SSHConsolePanel({
       allowTransparency: true,
       cursorBlink: true,
       cursorStyle: 'block',
-      macOptionClickForcesSelection: true,
       fontFamily: toTerminalFontFamily(fontFamilyId),
       fontSize: FONT_SIZES[fontScale],
       fontWeight: '500',
@@ -146,7 +129,7 @@ export function SSHConsolePanel({
         && (event.metaKey || (!IS_MAC && event.ctrlKey));
       if (isClipboardPaste) {
         event.preventDefault();
-        void pasteClipboard(term);
+        void pasteClipboard(sessionId);
         return false;
       }
 
@@ -156,17 +139,14 @@ export function SSHConsolePanel({
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
     lastMeasuredWidthRef.current = terminalRef.current.clientWidth;
-    if (activeRef.current) {
-      fitTerminal(terminalRef.current, fitAddon);
-      term.focus();
-    }
+    fitTerminal(terminalRef.current, fitAddon);
+    term.focus();
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
     let disposeOutput = () => {};
     let disposeClosed = () => {};
     let disposeError = () => {};
-    let disposeClipboard = () => {};
     let disposed = false;
 
     const dataDisposable = term.onData((data) => {
@@ -174,9 +154,6 @@ export function SSHConsolePanel({
         writeLocalEcho(term, data);
       }
       void window.go?.app?.App?.WriteSSHInput?.(sessionId, data);
-    });
-    disposeClipboard = EventsOn(`ssh:clipboard:${sessionId}`, (text: string) => {
-      void ClipboardSetText(text);
     });
 
     void (async () => {
@@ -194,10 +171,8 @@ export function SSHConsolePanel({
       disposeError = EventsOn(`ssh:error:${sessionId}`, (message: string) => {
         term.write(`\r\n${t.errorPrefix} ${message}\r\n`);
       });
-      if (activeRef.current) {
-        await window.go?.app?.App?.ResizeSSHSession?.(sessionId, term.cols, term.rows);
-      }
-      if (!disposed && activeRef.current) term.focus();
+      await window.go?.app?.App?.ResizeSSHSession?.(sessionId, term.cols, term.rows);
+      if (!disposed) term.focus();
     })();
 
     const observer = new ResizeObserver(() => {
@@ -206,9 +181,6 @@ export function SSHConsolePanel({
         return;
       }
       const nextWidth = container.clientWidth;
-      if (!activeRef.current || nextWidth <= 0) {
-        return;
-      }
       if (Math.abs(nextWidth - lastMeasuredWidthRef.current) < 1) {
         return;
       }
@@ -234,7 +206,7 @@ export function SSHConsolePanel({
         return;
       }
       event.preventDefault();
-      term.paste(text);
+      void window.go?.app?.App?.WriteSSHInput?.(sessionId, text);
     };
     terminalElement.addEventListener('copy', handleCopy);
     terminalElement.addEventListener('paste', handlePaste);
@@ -248,20 +220,11 @@ export function SSHConsolePanel({
       disposeOutput();
       disposeClosed();
       disposeError();
-      disposeClipboard();
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
     };
   }, [enableLocalEcho, sessionId, t.errorPrefix, t.sshConnectionClosed]);
-
-  useEffect(() => {
-    if (!active) return;
-    const term = termRef.current;
-    if (!term) return;
-    syncActiveTerminalLayout();
-    term.focus();
-  }, [active, sessionId]);
 
   useEffect(() => {
     const term = termRef.current;
@@ -275,15 +238,17 @@ export function SSHConsolePanel({
     const term = termRef.current;
     if (!term) return;
     term.options.fontSize = FONT_SIZES[fontScale];
-    syncActiveTerminalLayout();
-  }, [active, fontScale, sessionId]);
+    fitTerminal(terminalRef.current, fitAddonRef.current);
+    void window.go?.app?.App?.ResizeSSHSession?.(sessionId, term.cols, term.rows);
+  }, [fontScale, sessionId]);
 
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     term.options.fontFamily = toTerminalFontFamily(fontFamilyId);
-    syncActiveTerminalLayout();
-  }, [active, fontFamilyId, sessionId]);
+    fitTerminal(terminalRef.current, fitAddonRef.current);
+    void window.go?.app?.App?.ResizeSSHSession?.(sessionId, term.cols, term.rows);
+  }, [fontFamilyId, sessionId]);
 
   return (
     <section className="card file-panel ssh-console-panel">
@@ -426,9 +391,7 @@ export function SSHConsolePanel({
               <button className="context-menu-item" onMouseDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (termRef.current) {
-                  void pasteClipboard(termRef.current);
-                }
+                void pasteClipboard(sessionId);
                 setContextMenu(null);
               }}>
                 {t.terminalPaste}

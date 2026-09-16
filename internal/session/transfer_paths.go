@@ -6,9 +6,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/VaderChen/Integrate-Terminal/internal/transport"
+	"IntegTERM/internal/transport"
 )
 
 func (m *Manager) uploadPathWithQueue(client transport.Client, localPath string, remotePath string, displayPath string) error {
@@ -24,10 +23,6 @@ func (m *Manager) uploadPathWithQueue(client transport.Client, localPath string,
 	}
 
 	if info.IsDir() {
-		if existing, statErr := client.Stat(remotePath); statErr == nil && !existing.IsDir {
-			m.updateTransfer(itemID, 100, 0, "failed")
-			return fmt.Errorf("remote path is a file: %s", remotePath)
-		}
 		if err := client.Mkdir(remotePath); err != nil && !os.IsExist(err) {
 			// Some servers return an error when the folder already exists.
 			if !isRemoteExistsError(err) && !remoteDirectoryExists(client, remotePath) {
@@ -64,20 +59,17 @@ func (m *Manager) uploadPathWithQueue(client transport.Client, localPath string,
 		return nil
 	}
 
-	if existing, statErr := client.Stat(remotePath); statErr == nil {
-		_, conflictStrategy := m.transferPolicy()
-		switch conflictStrategy {
-		case "skip":
-			m.updateTransfer(itemID, 100, 0, "done")
-			m.addLog(fmt.Sprintf("已略過遠端既有檔案: %s", displayPath), "done")
-			return nil
-		case "fail":
-			m.updateTransfer(itemID, 100, 0, "failed")
-			return fmt.Errorf("remote file already exists: %s", existing.Path)
+	if err := client.Upload(localPath, remotePath, func(transferred int64, total int64, speedBps int64) bool {
+		progress := 0
+		if total > 0 {
+			progress = int((transferred * 100) / total)
 		}
-	}
-
-	if err := m.uploadFileWithRetry(client, itemID, localPath, remotePath); err != nil {
+		if !m.awaitTransferActive(itemID, progress) {
+			return false
+		}
+		m.updateTransfer(itemID, progress, speedBps, "running")
+		return !m.isTransferCancelled(itemID)
+	}); err != nil {
 		if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
 			m.updateTransfer(itemID, m.transferProgress(itemID), 0, "cancelled")
 			return nil
@@ -90,39 +82,6 @@ func (m *Manager) uploadPathWithQueue(client transport.Client, localPath string,
 	m.updateTransfer(itemID, 100, 0, "done")
 	m.addLog(fmt.Sprintf("已上傳檔案: %s", displayPath), "done")
 	return nil
-}
-
-func (m *Manager) uploadFileWithRetry(client transport.Client, itemID string, localPath string, remotePath string) error {
-	retryCount, _ := m.transferPolicy()
-	maxAttempts := retryCount + 1
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		m.updateTransferAttempt(itemID, attempt, maxAttempts, "")
-		err := client.Upload(localPath, remotePath, func(transferred int64, total int64, speedBps int64) bool {
-			progress := 0
-			if total > 0 {
-				progress = int((transferred * 100) / total)
-			}
-			if !m.awaitTransferActive(itemID, progress) {
-				return false
-			}
-			m.updateTransfer(itemID, progress, speedBps, "running")
-			return !m.isTransferCancelled(itemID)
-		})
-		if err == nil {
-			return nil
-		}
-		if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
-			return err
-		}
-		lastErr = err
-		m.updateTransferAttempt(itemID, attempt, maxAttempts, err.Error())
-		if attempt < maxAttempts {
-			m.addLog(fmt.Sprintf("上傳失敗，%d 秒後重試 (%d/%d): %s", attempt, attempt, maxAttempts, filepath.Base(localPath)), "running")
-			time.Sleep(time.Duration(attempt) * time.Second)
-		}
-	}
-	return lastErr
 }
 
 func (m *Manager) downloadPathWithQueue(client transport.Client, remotePath string, localPath string, displayPath string) error {
@@ -163,25 +122,17 @@ func (m *Manager) downloadPathWithQueue(client transport.Client, remotePath stri
 		return err
 	}
 
-	if existing, statErr := os.Stat(localPath); statErr == nil {
-		_, conflictStrategy := m.transferPolicy()
-		switch conflictStrategy {
-		case "skip":
-			m.updateTransfer(itemID, 100, 0, "done")
-			m.addLog(fmt.Sprintf("已略過本機既有檔案: %s", displayPath), "done")
-			return nil
-		case "fail":
-			m.updateTransfer(itemID, 100, 0, "failed")
-			return fmt.Errorf("local path already exists: %s", localPath)
-		case "overwrite":
-			if existing.IsDir() {
-				m.updateTransfer(itemID, 100, 0, "failed")
-				return fmt.Errorf("local path is a directory: %s", localPath)
-			}
+	if err := client.Download(remotePath, localPath, func(transferred int64, total int64, speedBps int64) bool {
+		progress := 0
+		if total > 0 {
+			progress = int((transferred * 100) / total)
 		}
-	}
-
-	if err := m.downloadFileWithRetry(client, itemID, remotePath, localPath); err != nil {
+		if !m.awaitTransferActive(itemID, progress) {
+			return false
+		}
+		m.updateTransfer(itemID, progress, speedBps, "running")
+		return !m.isTransferCancelled(itemID)
+	}); err != nil {
 		if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
 			_ = os.Remove(localPath)
 			m.updateTransfer(itemID, m.transferProgress(itemID), 0, "cancelled")
@@ -195,42 +146,6 @@ func (m *Manager) downloadPathWithQueue(client transport.Client, remotePath stri
 	m.updateTransfer(itemID, 100, 0, "done")
 	m.addLog(fmt.Sprintf("已下載檔案: %s", displayPath), "done")
 	return nil
-}
-
-func (m *Manager) downloadFileWithRetry(client transport.Client, itemID string, remotePath string, localPath string) error {
-	retryCount, _ := m.transferPolicy()
-	maxAttempts := retryCount + 1
-	var lastErr error
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if attempt > 1 {
-			_ = os.Remove(localPath)
-		}
-		m.updateTransferAttempt(itemID, attempt, maxAttempts, "")
-		err := client.Download(remotePath, localPath, func(transferred int64, total int64, speedBps int64) bool {
-			progress := 0
-			if total > 0 {
-				progress = int((transferred * 100) / total)
-			}
-			if !m.awaitTransferActive(itemID, progress) {
-				return false
-			}
-			m.updateTransfer(itemID, progress, speedBps, "running")
-			return !m.isTransferCancelled(itemID)
-		})
-		if err == nil {
-			return nil
-		}
-		if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
-			return err
-		}
-		lastErr = err
-		m.updateTransferAttempt(itemID, attempt, maxAttempts, err.Error())
-		if attempt < maxAttempts {
-			m.addLog(fmt.Sprintf("下載失敗，%d 秒後重試 (%d/%d): %s", attempt, attempt, maxAttempts, filepath.Base(localPath)), "running")
-			time.Sleep(time.Duration(attempt) * time.Second)
-		}
-	}
-	return lastErr
 }
 
 func isRemoteExistsError(err error) bool {

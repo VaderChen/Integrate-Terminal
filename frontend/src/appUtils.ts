@@ -1,4 +1,4 @@
-import type { BootstrapPayload, FileEntry, FileSortState, HostTrustPrompt, Site } from './types';
+import type { BootstrapPayload, FileEntry, FileSortState, HostTrustPrompt, PurchaseStatus, Site } from './types';
 
 export const fallbackBootstrap: BootstrapPayload = {
   sites: [],
@@ -8,6 +8,7 @@ export const fallbackBootstrap: BootstrapPayload = {
     windowHeight: 920,
     windowX: 0,
     windowY: 0,
+    proUnlock: false,
     lastActiveTab: '',
     restoreTabsOnStart: true,
     closeTerminalTabOnDisconnect: true,
@@ -17,20 +18,28 @@ export const fallbackBootstrap: BootstrapPayload = {
     telnetLocalEcho: true,
     restServerEnabled: false,
     restServerPort: 18080,
-    restServerAllowlist: ['127.0.0.1'],
     fontScale: 'medium',
     language: '',
     theme: 'neutral',
     siteFolders: [],
-    transferRetryCount: 2,
-    transferConflictStrategy: 'overwrite',
-    forceUpdate: false,
   },
   defaultLocalPath: '/',
   localFiles: [],
   remoteFiles: [],
   transfers: [],
   logs: [],
+};
+
+export const fallbackPurchaseStatus: PurchaseStatus = {
+  productId: 'pro_unlock',
+  planName: 'Free',
+  source: 'config',
+  statusMessage: '目前為 Free，最多可開啟 2 個 TAB',
+  proUnlock: false,
+  canPurchase: true,
+  canRestore: true,
+  maxTabs: 2,
+  currentTabs: 0,
 };
 
 export function buildBlankSite(defaultLocalPath: string): Site {
@@ -48,8 +57,6 @@ export function buildBlankSite(defaultLocalPath: string): Site {
     localPath: defaultLocalPath,
     remotePath: '/',
     lastUsedAt: '',
-    tags: [],
-    favorite: false,
   };
 }
 
@@ -97,14 +104,6 @@ export function extractErrorMessage(error: unknown, fallback = 'Connection faile
   return fallback;
 }
 
-export function appendLocalNetworkHint(message: string, hint: string) {
-  const normalized = message.toLowerCase();
-  if (!normalized.includes('no route to host') && !normalized.includes('network is unreachable')) {
-    return message;
-  }
-  return `${message} ${hint}`;
-}
-
 export function extractHostTrustPrompt(error: unknown): HostTrustPrompt | null {
   const value = typeof error === 'string'
     ? error
@@ -126,8 +125,7 @@ export function extractHostTrustPrompt(error: unknown): HostTrustPrompt | null {
       typeof payload.hostPattern === 'string' &&
       typeof payload.keyType === 'string' &&
       typeof payload.fingerprintSHA256 === 'string' &&
-      typeof payload.authorizedKey === 'string' &&
-      (typeof payload.replacesExisting === 'undefined' || typeof payload.replacesExisting === 'boolean')
+      typeof payload.authorizedKey === 'string'
     ) {
       return payload;
     }

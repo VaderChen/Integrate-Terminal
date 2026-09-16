@@ -134,8 +134,6 @@ export function useTransferActions({
         localPath: currentTab.localPath,
         remotePath,
         lastUsedAt: '',
-        tags: [],
-        favorite: false,
       }, paths, remotePath);
       await syncTransferState();
       setErrorMessage(`SSH drag upload completed: ${paths.length} item(s) to ${remotePath}`);
@@ -190,67 +188,30 @@ export function useTransferActions({
   };
 
   useEffect(() => {
-    let disposed = false;
-    let retryCount = 0;
-    let retryTimer: number | undefined;
-    let fileDropRegistered = false;
-    let unsubscribeTransferState: (() => void) | undefined;
-
-    const registerRuntimeListeners = () => {
-      if (disposed) {
-        return;
-      }
-
-      if (!fileDropRegistered && typeof window.runtime?.OnFileDrop === 'function') {
-        OnFileDrop((_x, _y, paths) => {
-          const currentTab = activeTabRef.current;
-          if (currentTab?.mode === 'terminal' && currentTab.protocol === 'ssh') {
-            void (async () => {
-              const confirmed = await requestTerminalDropConfirm?.(paths, currentTab.remotePath);
-              if (confirmed === false) {
-                return;
-              }
-              await handleDropToTerminal(paths, currentTab.remotePath);
-            })();
+    OnFileDrop((_x, _y, paths) => {
+      const currentTab = activeTabRef.current;
+      if (currentTab?.mode === 'terminal' && currentTab.protocol === 'ssh') {
+        void (async () => {
+          const confirmed = await requestTerminalDropConfirm?.(paths, currentTab.remotePath);
+          if (confirmed === false) {
             return;
           }
-          void handleDropToRemote(paths);
-        }, true);
-        fileDropRegistered = true;
+          await handleDropToTerminal(paths, currentTab.remotePath);
+        })();
+        return;
       }
-
-      if (
-        !unsubscribeTransferState &&
-        typeof window.runtime?.EventsOnMultiple === 'function'
-      ) {
-        unsubscribeTransferState = EventsOn(
-          'transfer:state',
-          (state: { transfers?: TransferItem[]; logs?: LogItem[] }) => {
-            setTransfers(state.transfers ?? []);
-            setLogs(state.logs ?? []);
-          },
-        );
-      }
-
-      if ((!fileDropRegistered || !unsubscribeTransferState) && retryCount < 50) {
-        retryCount += 1;
-        retryTimer = window.setTimeout(registerRuntimeListeners, 100);
-      }
-    };
-
-    registerRuntimeListeners();
+      void handleDropToRemote(paths);
+    }, true);
 
     return () => {
-      disposed = true;
-      if (retryTimer !== undefined) {
-        window.clearTimeout(retryTimer);
-      }
-      unsubscribeTransferState?.();
-      if (fileDropRegistered && typeof window.runtime?.OnFileDropOff === 'function') {
-        OnFileDropOff();
-      }
+      OnFileDropOff();
     };
   }, []);
+
+  useEffect(() => EventsOn('transfer:state', (state: { transfers?: TransferItem[]; logs?: LogItem[] }) => {
+    setTransfers(state.transfers ?? []);
+    setLogs(state.logs ?? []);
+  }), []);
 
   return {
     handleClearCompletedTransfers,

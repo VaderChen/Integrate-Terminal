@@ -13,77 +13,14 @@ type configFile struct {
 	ProductVersion string `json:"productVersion"`
 }
 
-type BuildInfo struct {
-	Commit     string `json:"commit"`
-	Tag        string `json:"tag"`
-	BuildState string `json:"buildState"`
-	SourceURL  string `json:"sourceUrl"`
-}
-
-var (
-	Product    = ""
-	Build      = ""
-	Commit     = "unknown"
-	Tag        = "untagged"
-	BuildState = "unknown"
-	SourceURL  = "https://github.com/VaderChen/Integrate-Terminal"
-)
-
 func Current() string {
-	return "IntegTERM " + DisplayVersion()
-}
-
-func DisplayVersion() string {
-	productVersion := ProductVersion()
-	if buildLabel := BuildLabel(); buildLabel != "" {
-		return productVersion + " build " + buildLabel
-	}
-	return productVersion
-}
-
-// UpdateVersion returns the numeric identity used by GitHub release tags.
-// Older builds did not embed a build label, so they keep the marketing version
-// and remain eligible for a release that adds a fourth build component.
-func UpdateVersion() string {
-	productVersion := ProductVersion()
-	if buildLabel := BuildLabel(); buildLabel != "" {
-		return productVersion + "." + buildLabel
-	}
-	return productVersion
-}
-
-func BuildLabel() string {
-	return strings.TrimSpace(Build)
-}
-
-func ProductVersion() string {
-	if productVersion := strings.TrimSpace(Product); productVersion != "" {
-		return productVersion
-	}
 	var cfg configFile
 	if err := json.Unmarshal(versionJSON, &cfg); err != nil {
-		return "1.00.00"
+		return "IntegTERM 1.00.00"
 	}
 	version := strings.TrimSpace(cfg.ProductVersion)
 	if version == "" {
 		version = "1.00.00"
 	}
-	return version
-}
-
-func Metadata() BuildInfo {
-	return BuildInfo{
-		Commit:     valueOrDefault(Commit, "unknown"),
-		Tag:        valueOrDefault(Tag, "untagged"),
-		BuildState: valueOrDefault(BuildState, "unknown"),
-		SourceURL:  valueOrDefault(SourceURL, "https://github.com/VaderChen/Integrate-Terminal"),
-	}
-}
-
-func valueOrDefault(value string, fallback string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fallback
-	}
-	return value
+	return "IntegTERM " + version
 }
