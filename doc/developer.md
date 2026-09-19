@@ -85,6 +85,12 @@ wails build -clean
 - Wails production build 與 codesign 會在本機暫存目錄完成，再複製回專案目錄
 - 複製前後會移除 `._*`、`.DS_Store` 與舊 `_CodeSignature`
 
+### 安裝與重新啟動
+
+執行 `./install.sh` 或 `install.command`，會先準備新版，再自動關閉 IntegTERM、安裝並重新啟動。以 `INSTALL_TARGET_DIR` 可指定安裝目錄（預設 `/Applications`）。
+
+安裝時會暫存舊版為 `.bak`，新版啟動指令成功後才刪除；替換失敗會嘗試還原並啟動舊版。若新版啟動指令失敗，會顯示保留的備份路徑。
+
 ### 建立原始碼備份
 
 ```bash
