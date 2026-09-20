@@ -21,6 +21,7 @@ type Manager struct {
 	transfers          []model.TransferItem
 	cancelledTransfers map[string]bool
 	pausedTransfers    map[string]bool
+	transferParents    map[string]string
 	pauseAllTransfers  bool
 	logs               []model.LogItem
 	eventCtx           context.Context
@@ -36,6 +37,7 @@ func NewManager() *Manager {
 		transfers:          make([]model.TransferItem, 0),
 		cancelledTransfers: make(map[string]bool),
 		pausedTransfers:    make(map[string]bool),
+		transferParents:    make(map[string]string),
 		logs:               make([]model.LogItem, 0),
 		stateEvents:        make(chan struct{}, 1),
 	}

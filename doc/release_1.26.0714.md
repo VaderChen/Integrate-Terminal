@@ -5,7 +5,7 @@
 - Product Version：`1.26.0714`
 - 預定發布日期：`2026-07-14`
 - Bundle ID：`com.vader.integterm`
-- Team ID：`YOUR_TEAM_ID`
+- Team ID：使用發布者的 Apple Developer Team ID
 - Minimum macOS：`12.0`
 - App Category：Developer Tools
 - In-App Purchase：`pro_unlock`（Non-Consumable）
@@ -152,4 +152,3 @@ pkgutil --check-signature build/bin/IntegTERM.pkg
 - `doc/en/update_log_1.26.0714.log`
 - `doc/jp/update_log_1.26.0714.log`
 - `doc/developer.md`
-- `doc/review.md`

@@ -94,18 +94,20 @@ private func loadProProduct() async throws -> Product {
     throw BridgeError.productMissing
 }
 
-private func bridgeCall(_ work: @escaping () async -> BridgePayload) -> UnsafeMutablePointer<CChar>? {
+private func bridgeCall(timeout: DispatchTimeInterval = .seconds(600), _ work: @escaping () async -> BridgePayload) -> UnsafeMutablePointer<CChar>? {
     let semaphore = DispatchSemaphore(value: 0)
-    var payload = makePayload(unlocked: false, source: "storekit2", message: "等待 StoreKit 2 回應逾時", error: "等待 StoreKit 2 回應逾時")
+    let timeoutPayload = makePayload(unlocked: false, source: "storekit2", message: "等待 StoreKit 2 回應逾時", error: "等待 StoreKit 2 回應逾時")
+    var payload = timeoutPayload
 
     Task {
         payload = await work()
         semaphore.signal()
     }
 
-    let timeout: DispatchTime = .now() + .seconds(600)
-    if semaphore.wait(timeout: timeout) == .timedOut {
-        return encodePayload(payload)
+    if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+        // The task may still write payload after the wait expires. Only a
+        // successful wait synchronizes that write with the read below.
+        return encodePayload(timeoutPayload)
     }
     return encodePayload(payload)
 }

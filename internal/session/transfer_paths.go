@@ -1,128 +1,139 @@
 package session
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"IntegTERM/internal/model"
 	"IntegTERM/internal/transport"
 )
 
-func (m *Manager) uploadPathWithQueue(client transport.Client, localPath string, remotePath string, displayPath string) error {
+func (m *Manager) uploadPathWithQueue(client transport.Client, localPath, remotePath, displayPath string) error {
+	return m.uploadPathWithParent(client, localPath, remotePath, displayPath, "")
+}
+
+func (m *Manager) uploadPathWithParent(client transport.Client, localPath, remotePath, displayPath, parentID string) (err error) {
+	itemID := m.addChildTransfer(displayPath, "upload", parentID)
+	defer func() { m.finishPathTransfer(itemID, err) }()
+	if !m.awaitTransferActive(itemID, 0) {
+		return transport.ErrTransferCancelled
+	}
 	info, err := os.Stat(localPath)
 	if err != nil {
 		return err
 	}
-
-	itemID := m.addTransfer(displayPath, "upload")
-	if m.isTransferCancelled(itemID) {
-		m.updateTransfer(itemID, 0, 0, "cancelled")
-		return transport.ErrTransferCancelled
-	}
-
 	if info.IsDir() {
-		if err := client.Mkdir(remotePath); err != nil && !os.IsExist(err) {
-			// Some servers return an error when the folder already exists.
-			if !isRemoteExistsError(err) && !remoteDirectoryExists(client, remotePath) {
-				m.updateTransfer(itemID, 100, 0, "failed")
-				m.addLog(fmt.Sprintf("建立遠端資料夾失敗: %s", displayPath), "failed")
-				return err
-			}
+		if err := client.Mkdir(remotePath); err != nil && !remoteDirectoryExists(client, remotePath) {
+			return err
 		}
-
 		entries, err := os.ReadDir(localPath)
 		if err != nil {
-			m.updateTransfer(itemID, 100, 0, "failed")
-			m.addLog(fmt.Sprintf("讀取本機資料夾失敗: %s", displayPath), "failed")
 			return err
 		}
 		for _, entry := range entries {
+			if !m.awaitTransferActive(itemID, m.transferProgress(itemID)) {
+				return transport.ErrTransferCancelled
+			}
 			if isHiddenName(entry.Name()) {
 				continue
 			}
-			childLocalPath := filepath.Join(localPath, entry.Name())
-			childRemotePath := path.Join(remotePath, entry.Name())
-			childDisplayPath := filepath.ToSlash(filepath.Join(displayPath, entry.Name()))
-			if err := m.uploadPathWithQueue(client, childLocalPath, childRemotePath, childDisplayPath); err != nil {
-				if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
-					m.updateTransfer(itemID, m.transferProgress(itemID), 0, "cancelled")
-					return transport.ErrTransferCancelled
-				}
-				m.updateTransfer(itemID, 100, 0, "failed")
+			if err := m.uploadPathWithParent(client, filepath.Join(localPath, entry.Name()), path.Join(remotePath, entry.Name()), filepath.ToSlash(filepath.Join(displayPath, entry.Name())), itemID); err != nil {
 				return err
 			}
 		}
-		m.updateTransfer(itemID, 100, 0, "done")
-		m.addLog(fmt.Sprintf("已同步資料夾: %s", displayPath), "done")
-		return nil
-	}
-
-	if err := client.Upload(localPath, remotePath, func(transferred int64, total int64, speedBps int64) bool {
-		progress := 0
-		if total > 0 {
-			progress = int((transferred * 100) / total)
-		}
-		if !m.awaitTransferActive(itemID, progress) {
-			return false
-		}
-		m.updateTransfer(itemID, progress, speedBps, "running")
-		return !m.isTransferCancelled(itemID)
-	}); err != nil {
-		if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
-			m.updateTransfer(itemID, m.transferProgress(itemID), 0, "cancelled")
-			return nil
-		}
-		m.updateTransfer(itemID, 100, 0, "failed")
-		m.addLog(fmt.Sprintf("上傳檔案失敗: %s", displayPath), "failed")
-		return err
-	}
-
-	m.updateTransfer(itemID, 100, 0, "done")
-	m.addLog(fmt.Sprintf("已上傳檔案: %s", displayPath), "done")
-	return nil
-}
-
-func (m *Manager) downloadPathWithQueue(client transport.Client, remotePath string, localPath string, displayPath string) error {
-	itemID := m.addTransfer(displayPath, "download")
-	if m.isTransferCancelled(itemID) {
-		m.updateTransfer(itemID, 0, 0, "cancelled")
-		return transport.ErrTransferCancelled
-	}
-
-	entries, err := client.List(remotePath)
-	if err == nil {
-		if err := os.MkdirAll(localPath, 0o755); err != nil {
-			m.updateTransfer(itemID, 100, 0, "failed")
-			m.addLog(fmt.Sprintf("建立本機資料夾失敗: %s", displayPath), "failed")
+	} else {
+		if err := client.Upload(localPath, remotePath, m.pathTransferProgress(itemID)); err != nil {
 			return err
 		}
-		for _, entry := range entries {
-			childRemotePath := path.Join(remotePath, entry.Name)
-			childLocalPath := filepath.Join(localPath, entry.Name)
-			childDisplayPath := filepath.ToSlash(filepath.Join(displayPath, entry.Name))
-			if err := m.downloadPathWithQueue(client, childRemotePath, childLocalPath, childDisplayPath); err != nil {
-				if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
-					m.updateTransfer(itemID, m.transferProgress(itemID), 0, "cancelled")
-					return transport.ErrTransferCancelled
-				}
-				m.updateTransfer(itemID, 100, 0, "failed")
+	}
+	if !m.awaitTransferActive(itemID, m.transferProgress(itemID)) {
+		return transport.ErrTransferCancelled
+	}
+	m.addLog(fmt.Sprintf("已上傳: %s", displayPath), "done")
+	return nil
+}
+
+func (m *Manager) downloadPathWithQueue(client transport.Client, remotePath, localPath, displayPath string) error {
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(filepath.Dir(localPath))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return m.downloadPathWithParent(client, remotePath, root, filepath.Base(localPath), displayPath, "", nil)
+}
+
+func (m *Manager) downloadPathWithParent(client transport.Client, remotePath string, root *os.Root, relativePath, displayPath, parentID string, knownEntry *model.FileEntry) (err error) {
+	itemID := m.addChildTransfer(displayPath, "download", parentID)
+	defer func() { m.finishPathTransfer(itemID, err) }()
+	if !m.awaitTransferActive(itemID, 0) {
+		return transport.ErrTransferCancelled
+	}
+	var entry model.FileEntry
+	if knownEntry != nil {
+		entry = *knownEntry
+	} else {
+		entry, err = client.Stat(remotePath)
+		if err != nil {
+			return err
+		}
+	}
+	if entry.IsDir {
+		entries, err := client.List(remotePath)
+		if err != nil {
+			return err
+		}
+		// Validate the complete listing before creating anything from that response.
+		for _, child := range entries {
+			if err := transport.ValidateEntryName(child.Name); err != nil {
 				return err
 			}
 		}
-		m.updateTransfer(itemID, 100, 0, "done")
-		m.addLog(fmt.Sprintf("已同步資料夾: %s", displayPath), "done")
-		return nil
+		if err := root.MkdirAll(relativePath, 0o755); err != nil {
+			return err
+		}
+		for _, child := range entries {
+			if !m.awaitTransferActive(itemID, m.transferProgress(itemID)) {
+				return transport.ErrTransferCancelled
+			}
+			if err := m.downloadPathWithParent(client, path.Join(remotePath, child.Name), root, filepath.Join(relativePath, child.Name), filepath.ToSlash(filepath.Join(displayPath, child.Name)), itemID, &child); err != nil {
+				return err
+			}
+		}
+	} else {
+		if err := downloadFile(root, relativePath, func(destination io.Writer) error {
+			if !m.awaitTransferActive(itemID, 0) {
+				return transport.ErrTransferCancelled
+			}
+			if err := client.Download(remotePath, destination, m.pathTransferProgress(itemID)); err != nil {
+				return err
+			}
+			// Cancellation or pause arriving with the final bytes must be observed before
+			// replacing the user's existing file.
+			if !m.awaitTransferActive(itemID, m.transferProgress(itemID)) {
+				return transport.ErrTransferCancelled
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
-
-	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
-		m.updateTransfer(itemID, 100, 0, "failed")
-		m.addLog(fmt.Sprintf("建立本機路徑失敗: %s", displayPath), "failed")
-		return err
+	if !m.awaitTransferActive(itemID, m.transferProgress(itemID)) {
+		return transport.ErrTransferCancelled
 	}
+	m.addLog(fmt.Sprintf("已下載: %s", displayPath), "done")
+	return nil
+}
 
-	if err := client.Download(remotePath, localPath, func(transferred int64, total int64, speedBps int64) bool {
+func (m *Manager) pathTransferProgress(itemID string) func(int64, int64, int64) bool {
+	return func(transferred, total, speedBps int64) bool {
 		progress := 0
 		if total > 0 {
 			progress = int((transferred * 100) / total)
@@ -132,44 +143,43 @@ func (m *Manager) downloadPathWithQueue(client transport.Client, remotePath stri
 		}
 		m.updateTransfer(itemID, progress, speedBps, "running")
 		return !m.isTransferCancelled(itemID)
-	}); err != nil {
-		if err == transport.ErrTransferCancelled || m.isTransferCancelled(itemID) {
-			_ = os.Remove(localPath)
-			m.updateTransfer(itemID, m.transferProgress(itemID), 0, "cancelled")
-			return nil
-		}
-		m.updateTransfer(itemID, 100, 0, "failed")
-		m.addLog(fmt.Sprintf("下載檔案失敗: %s", displayPath), "failed")
-		return err
 	}
-
-	m.updateTransfer(itemID, 100, 0, "done")
-	m.addLog(fmt.Sprintf("已下載檔案: %s", displayPath), "done")
-	return nil
 }
 
-func isRemoteExistsError(err error) bool {
-	if err == nil {
-		return false
+func (m *Manager) finishPathTransfer(itemID string, err error) {
+	if errors.Is(err, transport.ErrTransferCancelled) || m.isTransferCancelled(itemID) {
+		m.updateTransfer(itemID, m.transferProgress(itemID), 0, "cancelled")
+	} else if err != nil {
+		m.updateTransfer(itemID, m.transferProgress(itemID), 0, "failed")
+		m.addLog(fmt.Sprintf("傳輸失敗: %v", err), "failed")
+	} else {
+		m.updateTransfer(itemID, 100, 0, "done")
 	}
-	message := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(message, "file exists") ||
-		strings.Contains(message, "already exists") ||
-		strings.Contains(message, "failure") ||
-		strings.Contains(message, "550")
 }
 
 func remoteDirectoryExists(client transport.Client, remotePath string) bool {
 	if strings.TrimSpace(remotePath) == "" {
 		return false
 	}
-	_, err := client.List(remotePath)
-	return err == nil
+	entry, err := client.Stat(remotePath)
+	return err == nil && entry.IsDir
 }
 
 func (m *Manager) deleteRemotePathRecursive(client transport.Client, remotePath string) error {
-	entries, err := client.List(remotePath)
-	if err == nil {
+	entry, err := client.Stat(remotePath)
+	if err != nil {
+		return err
+	}
+	if entry.IsDir {
+		entries, err := client.List(remotePath)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := transport.ValidateEntryName(entry.Name); err != nil {
+				return err
+			}
+		}
 		for _, entry := range entries {
 			childPath := path.Join(remotePath, entry.Name)
 			if entry.IsDir {

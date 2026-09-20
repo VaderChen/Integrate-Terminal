@@ -8,6 +8,8 @@ export type Locale = 'zh-TW' | 'zh-CN' | 'en' | 'ja' | 'ko';
 export type LanguageSetting = '' | Locale;
 
 export type Messages = {
+  storageLoadFailed: string;
+  storageRetry: string;
   loading: string;
   brandEyebrow: string;
   brandTitle: string;
@@ -61,6 +63,18 @@ export type Messages = {
   settingsSkillCopySuccess: string;
   settingsSkillCopyFailed: string;
   settingsSkillEmpty: string;
+  settingsMcpLocalTab: string;
+  settingsMcpNetworkTab: string;
+  settingsMcpLocalTitle: string;
+  settingsMcpLocalHint: string;
+  settingsMcpLocalVirtualRoot: string;
+  settingsMcpContractSeparationHint: string;
+  settingsMcpClientConfig: string;
+  settingsMcpCopyConfig: string;
+  settingsMcpLocalConfigHint: string;
+  settingsMcpHTTPConfigHint: string;
+  settingsMcpCopySuccess: string;
+  settingsMcpPortInvalid: string;
   settingsRestServer: string;
   settingsRestServerPort: string;
   settingsRestServerPortHint: string;

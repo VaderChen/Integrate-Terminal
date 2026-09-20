@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCopy, faDownload, faEye, faEyeSlash, faXmark } from '@fortawesome/free-solid-svg-icons';
-import type { Config, PurchaseStatus, RestServerStatus } from '../types';
+import { faXmark } from '@fortawesome/free-solid-svg-icons';
+import type { Config, PurchaseStatus } from '../types';
 import { type Locale, useI18n } from '../i18n';
+import { MCPSettingsPanel } from './MCPSettingsPanel';
 
 type SettingsSection = 'general' | 'purchase' | 'display' | 'system' | 'skill' | 'about';
 
@@ -22,7 +23,7 @@ type Props = {
   onShowTrayIconChange: (showTrayIcon: boolean) => void;
   onRememberWindowPositionChange: (rememberWindowPosition: boolean) => void;
   onTelnetLocalEchoChange: (telnetLocalEcho: boolean) => void;
-  onRESTServerEnabledChange: (restServerEnabled: boolean) => void;
+  onRESTServerEnabledChange: (restServerEnabled: boolean, restServerPort?: number) => Promise<void> | void;
   onRESTServerPortChange: (restServerPort: number) => void;
   onFontScaleChange: (scale: Config['fontScale']) => void;
   onPurchaseProUnlock: () => Promise<void>;
@@ -53,158 +54,9 @@ export function SettingsModal({
 }: Props) {
   const t = useI18n(locale);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
-  const [skillMarkdown, setSkillMarkdown] = useState('');
-  const [skillLoading, setSkillLoading] = useState(false);
-  const [skillError, setSkillError] = useState('');
-  const [skillCopyMessage, setSkillCopyMessage] = useState('');
-  const [restServerToken, setRestServerToken] = useState('');
-  const [restServerTokenVisible, setRestServerTokenVisible] = useState(false);
-  const [restServerTokenCopyMessage, setRestServerTokenCopyMessage] = useState('');
-  const [trayReminder, setTrayReminder] = useState('');
-  const [restStatus, setRestStatus] = useState<RestServerStatus | null>(null);
-  const [restPortDraft, setRestPortDraft] = useState(String(config.restServerPort));
-
-  useEffect(() => {
-    setRestPortDraft(String(config.restServerPort));
-  }, [config.restServerPort]);
-
-  useEffect(() => {
-    if (!open || activeSection !== 'skill') {
-      setRestServerToken('');
-      setRestServerTokenVisible(false);
-      setRestServerTokenCopyMessage('');
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        setSkillLoading(true);
-        setSkillError('');
-        const [markdown, status, token] = await Promise.all([
-          window.go?.app?.App?.GetRestAPIDocsMarkdown?.(),
-          window.go?.app?.App?.GetRESTServerStatus?.(),
-          window.go?.app?.App?.GetRESTServerToken?.(),
-        ]);
-        if (cancelled) {
-          return;
-        }
-        setSkillMarkdown(markdown ?? '');
-        setRestStatus(status ?? null);
-        setRestServerToken(token ?? '');
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setSkillError(error instanceof Error ? error.message : t.connectionFailed);
-      } finally {
-        if (!cancelled) {
-          setSkillLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSection, open, config.restServerEnabled, t.connectionFailed]);
-
-  useEffect(() => {
-    if (!skillCopyMessage) {
-      return;
-    }
-    const timer = window.setTimeout(() => setSkillCopyMessage(''), 2200);
-    return () => window.clearTimeout(timer);
-  }, [skillCopyMessage]);
-
-  useEffect(() => {
-    if (!restServerTokenCopyMessage) {
-      return;
-    }
-    const timer = window.setTimeout(() => setRestServerTokenCopyMessage(''), 2200);
-    return () => window.clearTimeout(timer);
-  }, [restServerTokenCopyMessage]);
-
-  useEffect(() => {
-    if (!trayReminder) {
-      return;
-    }
-    const timer = window.setTimeout(() => setTrayReminder(''), 2600);
-    return () => window.clearTimeout(timer);
-  }, [trayReminder]);
-
   if (!open) return null;
 
   const purchaseSourceLabel = resolvePurchaseSourceLabel(purchaseStatus.source, t);
-
-  const handleExportSkillMarkdown = async () => {
-    if (!skillMarkdown) {
-      return;
-    }
-
-    try {
-      await window.go?.app?.App?.ExportRestAPIDocsMarkdown?.();
-    } catch (error) {
-      setSkillError(error instanceof Error ? error.message : t.connectionFailed);
-    }
-  };
-
-  const handleCopySkillMarkdown = async () => {
-    if (!skillMarkdown) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(skillMarkdown);
-      setSkillCopyMessage(t.settingsSkillCopySuccess);
-      setSkillError('');
-    } catch {
-      setSkillCopyMessage(t.settingsSkillCopyFailed);
-    }
-  };
-
-  const handleCopyRESTServerToken = async () => {
-    if (!restServerToken) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(restServerToken);
-      setRestServerTokenCopyMessage(t.settingsRestServerTokenCopySuccess);
-      setSkillError('');
-    } catch {
-      setRestServerTokenCopyMessage(t.settingsRestServerTokenCopyFailed);
-    }
-  };
-
-  const commitRESTServerPort = async () => {
-    const parsed = Number.parseInt(restPortDraft.trim(), 10);
-    const nextPort = Number.isFinite(parsed) && parsed > 0 && parsed <= 65535 ? parsed : config.restServerPort;
-    setRestPortDraft(String(nextPort));
-    if (nextPort !== config.restServerPort) {
-      await onRESTServerPortChange(nextPort);
-    }
-    return nextPort;
-  };
-
-  const handleToggleRESTServer = async () => {
-    if (!config.restServerEnabled) {
-      const nextPort = await commitRESTServerPort();
-      if (nextPort !== config.restServerPort) {
-        await onRESTServerEnabledChange(true);
-        return;
-      }
-    }
-    await onRESTServerEnabledChange(!config.restServerEnabled);
-  };
-
-  const handleToggleTrayIcon = async () => {
-    if (config.restServerEnabled && config.showTrayIcon) {
-      setTrayReminder(t.settingsShowTrayIconRequired);
-      return;
-    }
-    await onShowTrayIconChange(!config.showTrayIcon);
-  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -450,152 +302,13 @@ export function SettingsModal({
             ) : null}
 
             {activeSection === 'skill' ? (
-              <div className="settings-section-card settings-section-stack settings-skill-card">
-                <div className="settings-section-copy">
-                  <strong>{t.settingsSkillTitle}</strong>
-                  <span>{t.settingsSkillHint}</span>
-                </div>
-                <div className="settings-section-card settings-rest-server-row">
-                  <div className="settings-section-copy">
-                    <strong>{t.settingsRestServer}</strong>
-                    <span>
-                      {restStatus?.running
-                        ? restStatus.attached
-                          ? t.settingsRestServerStatusAttached(restStatus.baseURL || `http://127.0.0.1:${config.restServerPort}`)
-                          : t.settingsRestServerStatusRunning(restStatus.baseURL || `http://127.0.0.1:${config.restServerPort}`)
-                        : t.settingsRestServerStatusStopped(config.restServerPort)}
-                    </span>
-                  </div>
-                  <div className="settings-rest-server-controls">
-                    <div className="settings-rest-port-field">
-                      <input
-                        type="number"
-                        min={1}
-                        max={65535}
-                        value={restPortDraft}
-                        disabled={config.restServerEnabled}
-                        aria-label={t.settingsRestServerPort}
-                        title={t.settingsRestServerPortHint}
-                        onChange={(event) => setRestPortDraft(event.target.value)}
-                        onBlur={() => void commitRESTServerPort()}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            void commitRESTServerPort();
-                          }
-                        }}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={config.restServerEnabled}
-                      aria-label={t.settingsRestServer}
-                      className={`ios-switch ${config.restServerEnabled ? 'active' : ''}`}
-                      onClick={() => void handleToggleRESTServer()}
-                      title={config.restServerEnabled ? t.settingsOn : t.settingsOff}
-                    >
-                      <span className="ios-switch-track" />
-                      <span className="ios-switch-thumb" />
-                    </button>
-                  </div>
-                </div>
-                <div className="settings-section-card settings-rest-token-card">
-                  <div className="settings-section-copy">
-                    <strong>{t.settingsRestServerToken}</strong>
-                    <span>{t.settingsRestServerTokenHint}</span>
-                    {restServerTokenCopyMessage ? (
-                      <span className={`settings-skill-feedback ${restServerTokenCopyMessage === t.settingsRestServerTokenCopyFailed ? 'error' : 'success'}`}>
-                        {restServerTokenCopyMessage}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="settings-rest-token-controls">
-                    <div className="settings-rest-token-field">
-                      <input
-                        type={restServerTokenVisible ? 'text' : 'password'}
-                        value={restServerToken}
-                        readOnly
-                        autoComplete="off"
-                        spellCheck={false}
-                        aria-label={t.settingsRestServerToken}
-                        placeholder={skillLoading ? t.loading : t.settingsRestServerTokenUnavailable}
-                      />
-                      <button
-                        type="button"
-                        className="settings-rest-token-visibility"
-                        onClick={() => setRestServerTokenVisible((visible) => !visible)}
-                        disabled={!restServerToken || skillLoading}
-                        aria-label={restServerTokenVisible ? t.settingsRestServerTokenHide : t.settingsRestServerTokenShow}
-                        title={restServerTokenVisible ? t.settingsRestServerTokenHide : t.settingsRestServerTokenShow}
-                      >
-                        <FontAwesomeIcon icon={restServerTokenVisible ? faEyeSlash : faEye} />
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      className="settings-rest-token-copy"
-                      onClick={() => void handleCopyRESTServerToken()}
-                      disabled={!restServerToken || skillLoading}
-                      aria-label={t.settingsRestServerTokenCopy}
-                      title={t.settingsRestServerTokenCopy}
-                    >
-                      <FontAwesomeIcon icon={faCopy} />
-                    </button>
-                  </div>
-                </div>
-                <div className="settings-section-card">
-                  <div className="settings-section-copy">
-                    <strong>{t.settingsShowTrayIcon}</strong>
-                    <span>{t.settingsShowTrayIconHint}</span>
-                    {trayReminder ? <span className="settings-inline-warning">{trayReminder}</span> : null}
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={config.showTrayIcon}
-                    aria-label={t.settingsShowTrayIcon}
-                    className={`ios-switch ${config.showTrayIcon ? 'active' : ''}`}
-                    onClick={() => void handleToggleTrayIcon()}
-                    title={config.showTrayIcon ? t.settingsOn : t.settingsOff}
-                  >
-                    <span className="ios-switch-track" />
-                    <span className="ios-switch-thumb" />
-                  </button>
-                </div>
-                <pre className="settings-skill-viewer">
-                  {skillLoading
-                    ? t.loading
-                    : skillError
-                      ? `${t.errorPrefix} ${skillError}`
-                      : skillMarkdown || t.settingsSkillEmpty}
-                </pre>
-                <div className="settings-skill-actions">
-                  <span className={`settings-skill-feedback ${skillCopyMessage === t.settingsSkillCopyFailed ? 'error' : 'success'}`}>
-                    {skillCopyMessage}
-                  </span>
-                  <button
-                    type="button"
-                    className="settings-skill-action-button"
-                    onClick={() => void handleCopySkillMarkdown()}
-                    disabled={!skillMarkdown || skillLoading}
-                    aria-label={t.settingsSkillCopy}
-                    title={t.settingsSkillCopy}
-                  >
-                    <FontAwesomeIcon icon={faCopy} />
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-skill-action-button accent"
-                    onClick={handleExportSkillMarkdown}
-                    disabled={!skillMarkdown || skillLoading}
-                    aria-label={t.settingsSkillExport}
-                    title={t.settingsSkillExport}
-                  >
-                    <FontAwesomeIcon icon={faDownload} />
-                  </button>
-                </div>
-              </div>
+              <MCPSettingsPanel
+                config={config}
+                locale={locale}
+                onRESTServerEnabledChange={onRESTServerEnabledChange}
+                onRESTServerPortChange={onRESTServerPortChange}
+                onShowTrayIconChange={onShowTrayIconChange}
+              />
             ) : null}
 
             {activeSection === 'about' ? (

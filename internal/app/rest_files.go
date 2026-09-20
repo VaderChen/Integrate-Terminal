@@ -25,7 +25,11 @@ func (a *App) handleRESTListRemote(w http.ResponseWriter, r *http.Request) {
 	}
 	tabID := r.URL.Query().Get("tabId")
 	targetPath := r.URL.Query().Get("path")
-	entries := a.ListRemote(tabID, targetPath)
+	entries, err := a.ListRemote(tabID, targetPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, fileEnvelope{Entries: entries})
 }
 
@@ -148,7 +152,7 @@ func (a *App) handleRESTSFTPDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := a.sessionManager.DeleteRemotePath(payload.TabID, payload.Path); err != nil {
+	if err := a.DeleteEntry(payload.TabID, "remote", payload.Path); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

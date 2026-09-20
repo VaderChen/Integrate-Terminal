@@ -16,6 +16,37 @@ const (
 	cwdOSCMarker       = "\x1b]9;cwd="
 )
 
+type TerminalOutputSnapshot struct {
+	Output   string `json:"output"`
+	Sequence uint64 `json:"sequence"`
+}
+
+// The sequence and the buffer are read under the same lock used when emitting
+// output, allowing subscribers to discard events already included in a snapshot.
+func (m *Manager) GetTerminalOutputSnapshot(sessionID string) TerminalOutputSnapshot {
+	m.mu.RLock()
+	ssh := m.sshSessions[sessionID]
+	telnet := m.telnetSessions[sessionID]
+	local := m.localSessions[sessionID]
+	m.mu.RUnlock()
+	if ssh != nil {
+		ssh.lock.Lock()
+		defer ssh.lock.Unlock()
+		return TerminalOutputSnapshot{string(ssh.outputBuffer), ssh.outputSequence}
+	}
+	if telnet != nil {
+		telnet.lock.Lock()
+		defer telnet.lock.Unlock()
+		return TerminalOutputSnapshot{string(telnet.outputBuffer), telnet.outputSequence}
+	}
+	if local != nil {
+		local.lock.Lock()
+		defer local.lock.Unlock()
+		return TerminalOutputSnapshot{string(local.outputBuffer), local.outputSequence}
+	}
+	return TerminalOutputSnapshot{}
+}
+
 func splitUTF8SafeChunk(pending []byte, chunk []byte) (complete []byte, rest []byte) {
 	data := append(pending, chunk...)
 	if len(data) == 0 {

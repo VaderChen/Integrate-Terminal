@@ -16,15 +16,17 @@ import (
 )
 
 type telnetTerminalSession struct {
-	id            string
-	conn          net.Conn
-	lock          sync.Mutex
-	outputBuffer  []byte
-	username      string
-	password      string
-	sentUsername  bool
-	sentPassword  bool
-	passwordTimer *time.Timer
+	id                 string
+	conn               net.Conn
+	lock               sync.Mutex
+	outputBuffer       []byte
+	outputSequence     uint64
+	username           string
+	password           string
+	sentUsername       bool
+	sentPassword       bool
+	passwordTimer      *time.Timer
+	negotiationPending []byte
 }
 
 const (
@@ -87,9 +89,10 @@ func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTermina
 				}
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, visibleChunk)
+				session.outputSequence++
 				session.maybeAutoLogin()
+				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk), session.outputSequence)
 				session.lock.Unlock()
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk))
 			}
 		}
 	afterChunk:
@@ -100,8 +103,9 @@ func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTermina
 			if len(pending) > 0 {
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, pending)
+				session.outputSequence++
+				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending), session.outputSequence)
 				session.lock.Unlock()
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending))
 			}
 			if err != io.EOF {
 				emitSessionEvent(ctx, fmt.Sprintf("ssh:error:%s", session.id), err.Error())
@@ -114,64 +118,69 @@ func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTermina
 }
 
 func (s *telnetTerminalSession) negotiate(data []byte) []byte {
-	if len(data) == 0 {
-		return nil
-	}
-
+	data = append(s.negotiationPending, data...)
+	s.negotiationPending = nil
 	var plain bytes.Buffer
-	for i := 0; i < len(data); i++ {
+	for i := 0; i < len(data); {
 		if data[i] != telnetIAC {
 			plain.WriteByte(data[i])
-			continue
-		}
-
-		if i+1 >= len(data) {
-			break
-		}
-
-		cmd := data[i+1]
-		if cmd == telnetIAC {
-			plain.WriteByte(telnetIAC)
 			i++
 			continue
 		}
-
+		if i+1 >= len(data) {
+			s.negotiationPending = append([]byte(nil), data[i:]...)
+			break
+		}
+		cmd := data[i+1]
+		if cmd == telnetIAC {
+			plain.WriteByte(telnetIAC)
+			i += 2
+			continue
+		}
 		if cmd == telnetSB {
 			end := findTelnetSubnegotiationEnd(data, i+2)
 			if end == -1 {
+				s.negotiationPending = append([]byte(nil), data[i:]...)
 				break
 			}
-			s.handleSubnegotiation(data[i+2 : end])
-			i = end + 1
+			payload := bytes.ReplaceAll(data[i+2:end], []byte{telnetIAC, telnetIAC}, []byte{telnetIAC})
+			s.handleSubnegotiation(payload)
+			i = end + 2
 			continue
 		}
-
+		if cmd != telnetDO && cmd != telnetWILL && cmd != telnetDONT && cmd != telnetWONT {
+			i += 2
+			continue
+		}
 		if i+2 >= len(data) {
+			s.negotiationPending = append([]byte(nil), data[i:]...)
 			break
 		}
-
 		opt := data[i+2]
 		switch cmd {
 		case telnetDO:
+			reply := byte(telnetWONT)
 			if telnetClientOptionAllowed(opt) {
-				_, _ = s.conn.Write([]byte{telnetIAC, telnetWILL, opt})
-			} else {
-				_, _ = s.conn.Write([]byte{telnetIAC, telnetWONT, opt})
+				reply = telnetWILL
 			}
+			_, _ = s.conn.Write([]byte{telnetIAC, reply, opt})
 		case telnetWILL:
+			reply := byte(telnetDONT)
 			if telnetServerOptionAllowed(opt) {
-				_, _ = s.conn.Write([]byte{telnetIAC, telnetDO, opt})
-			} else {
-				_, _ = s.conn.Write([]byte{telnetIAC, telnetDONT, opt})
+				reply = telnetDO
 			}
+			_, _ = s.conn.Write([]byte{telnetIAC, reply, opt})
 		case telnetDONT:
 			_, _ = s.conn.Write([]byte{telnetIAC, telnetWONT, opt})
 		case telnetWONT:
 			_, _ = s.conn.Write([]byte{telnetIAC, telnetDONT, opt})
 		}
-		i += 2
+		i += 3
 	}
-
+	// A peer must not grow an unfinished subnegotiation without limit.
+	if len(s.negotiationPending) > 64*1024 {
+		s.negotiationPending = nil
+	}
 	return plain.Bytes()
 }
 
@@ -325,8 +334,13 @@ func (s *telnetTerminalSession) handleSubnegotiation(data []byte) {
 
 func findTelnetSubnegotiationEnd(data []byte, start int) int {
 	for i := start; i+1 < len(data); i++ {
-		if data[i] == telnetIAC && data[i+1] == telnetSE {
-			return i
+		if data[i] == telnetIAC {
+			if data[i+1] == telnetSE {
+				return i
+			}
+			if data[i+1] == telnetIAC {
+				i++
+			}
 		}
 	}
 	return -1

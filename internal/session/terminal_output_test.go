@@ -2,9 +2,55 @@ package session
 
 import (
 	"bytes"
+	"io"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
+
+type singleByteReader struct{ remaining int }
+
+func (r *singleByteReader) Read(p []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	r.remaining--
+	p[0] = 'x'
+	runtime.Gosched()
+	return 1, nil
+}
+
+func TestTerminalSnapshotIsConsistentDuringConcurrentSSHOutput(t *testing.T) {
+	m := NewManager()
+	session := &sshTerminalSession{id: "snapshot-session"}
+	m.mu.Lock()
+	m.sshSessions[session.id] = session
+	m.mu.Unlock()
+	var readers sync.WaitGroup
+	for range 2 {
+		readers.Add(1)
+		go func() { defer readers.Done(); m.streamSSHOutput(nil, session, &singleByteReader{remaining: 1000}) }()
+	}
+	done := make(chan struct{})
+	go func() { readers.Wait(); close(done) }()
+	for {
+		snapshot := m.GetTerminalOutputSnapshot(session.id)
+		if len(snapshot.Output) != int(snapshot.Sequence) {
+			t.Fatalf("snapshot buffer and sequence differ: len=%d seq=%d", len(snapshot.Output), snapshot.Sequence)
+		}
+		select {
+		case <-done:
+			final := m.GetTerminalOutputSnapshot(session.id)
+			if final.Sequence != 2000 || len(final.Output) != 2000 {
+				t.Fatalf("output missing: len=%d seq=%d", len(final.Output), final.Sequence)
+			}
+			return
+		default:
+			runtime.Gosched()
+		}
+	}
+}
 
 func TestStripTerminalSignals_RemovesOSCAndCapturesCwd(t *testing.T) {
 	visible, pending, cwds := stripTerminalSignals(nil, []byte("hello\x1b]9;cwd=/srv/app\a\x1b]10;rgb:eeee/eeee/ecec\a world"))

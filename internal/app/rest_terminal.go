@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"IntegTERM/internal/model"
 )
@@ -21,7 +22,8 @@ func (a *App) handleRESTSSHExecute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	result, err := a.ExecuteSSHCommand(payload.Site, payload.Command, payload.TimeoutSeconds)
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(sshCommandTimeout(payload.TimeoutSeconds) + 5*time.Second))
+	result, err := a.executeSSHCommand(r.Context(), payload.Site, payload.Command, payload.TimeoutSeconds)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -44,9 +46,11 @@ func (a *App) handleRESTTerminalOutput(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "sessionId is required")
 		return
 	}
+	snapshot := a.GetTerminalOutputSnapshot(sessionID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"sessionId": sessionID,
-		"output":    a.GetSSHOutputBuffer(sessionID),
+		"output":    snapshot.Output,
+		"sequence":  snapshot.Sequence,
 	})
 }
 

@@ -1,12 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type React from 'react';
 import { EventsOn, OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime';
 import { basename, extractErrorMessage } from '../appUtils';
+import { isPathInside, sameConnection } from '../filePanelState';
 import type { LogItem, Tab, TransferItem } from '../types';
 
 type Params = {
   t: { connectionFailed: string };
   activeTabRef: React.MutableRefObject<Tab | null>;
+  tabsRef: React.MutableRefObject<Tab[]>;
+  canAcceptFileDrop: () => boolean;
   setTransfers: React.Dispatch<React.SetStateAction<TransferItem[]>>;
   setLogs: React.Dispatch<React.SetStateAction<LogItem[]>>;
   setErrorMessage: React.Dispatch<React.SetStateAction<string>>;
@@ -18,6 +21,8 @@ type Params = {
 export function useTransferActions({
   t,
   activeTabRef,
+  tabsRef,
+  canAcceptFileDrop,
   setTransfers,
   setLogs,
   setErrorMessage,
@@ -25,6 +30,9 @@ export function useTransferActions({
   onTerminalUploadStateChange,
   requestTerminalDropConfirm,
 }: Params) {
+  const callbacks = useRef({ onTerminalUploadStateChange, requestTerminalDropConfirm, canAcceptFileDrop });
+  callbacks.current = { onTerminalUploadStateChange, requestTerminalDropConfirm, canAcceptFileDrop };
+  const liveTab = (tab: Tab) => tabsRef.current.find(current => sameConnection(current, tab));
   const syncTransferState = async () => {
     const [queue, nextLogs] = await Promise.all([
       window.go?.app?.App?.GetTransfers?.(),
@@ -70,15 +78,13 @@ export function useTransferActions({
     });
   };
 
-  const handleDropToRemote = async (paths: string[]) => {
-    const currentTab = activeTabRef.current;
-    if (!currentTab) return;
-    await handleDropToRemoteDirectory(paths, currentTab.remotePath);
+  const handleDropToRemote = async (tab: Tab, paths: string[]) => {
+    await handleDropToRemoteDirectory(tab, paths, tab.remotePath);
   };
 
-  const handleDropToRemoteDirectory = async (paths: string[], remoteBase: string) => {
-    const currentTab = activeTabRef.current;
-    if (!currentTab) return;
+  const handleDropToRemoteDirectory = async (currentTab: Tab, paths: string[], remoteBase: string) => {
+    if (!liveTab(currentTab)?.connected || currentTab.mode !== 'file' || !paths.length) return;
+    if (remoteBase !== currentTab.remotePath && !isPathInside(remoteBase, currentTab.remotePath)) return;
 
     const optimisticItems: TransferItem[] = paths.map((path, index) => ({
       id: `pending-${Date.now()}-${index}`,
@@ -93,18 +99,17 @@ export function useTransferActions({
 
     try {
       await window.go?.app?.App?.UploadDroppedPaths?.(currentTab.id, paths, remoteBase);
+      setErrorMessage('');
       await refreshPanelsForPaths(currentTab, currentTab.localPath, currentTab.remotePath);
       await syncTransferState();
-      setErrorMessage('');
     } catch (error) {
       await syncTransferState();
       setErrorMessage(extractErrorMessage(error, t.connectionFailed));
     }
   };
 
-  const handleDropToTerminal = async (paths: string[], remotePathOverride?: string) => {
-    const currentTab = activeTabRef.current;
-    if (!currentTab || currentTab.mode !== 'terminal' || currentTab.protocol !== 'ssh') return;
+  const handleDropToTerminal = async (currentTab: Tab, paths: string[], remotePathOverride?: string) => {
+    if (!liveTab(currentTab)?.connected || currentTab.mode !== 'terminal' || currentTab.protocol !== 'ssh') return;
     const remotePath = remotePathOverride?.trim() || currentTab.remotePath;
 
     const optimisticItems: TransferItem[] = paths.map((path, index) => ({
@@ -117,7 +122,7 @@ export function useTransferActions({
     }));
 
     setTransfers((current) => [...optimisticItems, ...current]);
-    onTerminalUploadStateChange?.(true);
+    callbacks.current.onTerminalUploadStateChange?.(true);
 
     try {
       await window.go?.app?.App?.UploadDroppedPathsToSite?.({
@@ -143,9 +148,9 @@ export function useTransferActions({
     }
   };
 
-  const handleDownloadToLocalBase = async (paths: string[], localBase: string) => {
-    const currentTab = activeTabRef.current;
-    if (!currentTab) return;
+  const handleDownloadToLocalBase = async (currentTab: Tab, paths: string[], localBase: string) => {
+    if (!liveTab(currentTab)?.connected || currentTab.mode !== 'file' || !paths.length) return;
+    if (paths.some(path => !isPathInside(path, currentTab.remotePath))) return;
 
     const optimisticItems: TransferItem[] = paths.map((entryPath, index) => ({
       id: `pending-download-${Date.now()}-${index}`,
@@ -160,47 +165,45 @@ export function useTransferActions({
 
     try {
       await window.go?.app?.App?.DownloadDroppedPaths?.(currentTab.id, paths, localBase);
+      setErrorMessage('');
       await refreshPanelsForPaths(currentTab, currentTab.localPath, currentTab.remotePath);
       await syncTransferState();
-      setErrorMessage('');
     } catch (error) {
       await syncTransferState();
       setErrorMessage(extractErrorMessage(error, t.connectionFailed));
     }
   };
 
-  const handleDropToLocal = async (paths: string[]) => {
-    const currentTab = activeTabRef.current;
-    if (!currentTab) return;
-    await handleDownloadToLocalBase(paths, currentTab.localPath);
+  const handleDropToLocal = async (tab: Tab, paths: string[]) => {
+    await handleDownloadToLocalBase(tab, paths, tab.localPath);
   };
 
-  const handleDropToLocalDirectory = async (paths: string[], localBase: string) => {
-    await handleDownloadToLocalBase(paths, localBase);
+  const handleDropToLocalDirectory = async (tab: Tab, paths: string[], localBase: string) => {
+    await handleDownloadToLocalBase(tab, paths, localBase);
   };
 
-  const handleDownloadEntryTo = async (remotePath: string) => {
+  const handleDownloadEntryTo = async (tab: Tab, remotePath: string) => {
     const targetDirectory = await window.go?.app?.App?.SelectDirectory?.();
     if (!targetDirectory) {
       return;
     }
-    await handleDownloadToLocalBase([remotePath], targetDirectory);
+    await handleDownloadToLocalBase(tab, [remotePath], targetDirectory);
   };
 
   useEffect(() => {
     OnFileDrop((_x, _y, paths) => {
-      const currentTab = activeTabRef.current;
+      const currentTab = activeTabRef.current ? { ...activeTabRef.current } : null;
       if (currentTab?.mode === 'terminal' && currentTab.protocol === 'ssh') {
         void (async () => {
-          const confirmed = await requestTerminalDropConfirm?.(paths, currentTab.remotePath);
+          const confirmed = await callbacks.current.requestTerminalDropConfirm?.(paths, currentTab.remotePath);
           if (confirmed === false) {
             return;
           }
-          await handleDropToTerminal(paths, currentTab.remotePath);
+          await handleDropToTerminal(currentTab, paths, currentTab.remotePath);
         })();
         return;
       }
-      void handleDropToRemote(paths);
+      if (currentTab?.mode === 'file' && callbacks.current.canAcceptFileDrop()) void handleDropToRemote(currentTab, paths);
     }, true);
 
     return () => {

@@ -89,6 +89,9 @@ func (c *SFTPClient) List(remotePath string) ([]model.FileEntry, error) {
 
 	items := make([]model.FileEntry, 0, len(entries))
 	for _, entry := range entries {
+		if err := ValidateEntryName(entry.Name()); err != nil {
+			return nil, err
+		}
 		items = append(items, model.FileEntry{
 			Name:     entry.Name(),
 			Path:     path.Join(remotePath, entry.Name()),
@@ -107,6 +110,19 @@ func (c *SFTPClient) List(remotePath string) ([]model.FileEntry, error) {
 	})
 
 	return items, nil
+}
+
+func (c *SFTPClient) Stat(remotePath string) (model.FileEntry, error) {
+	if c.sftpClient == nil {
+		return model.FileEntry{}, fmt.Errorf("sftp client not connected")
+	}
+	// Directory symlinks must not turn a delete into a traversal of the target.
+	// A regular-file symlink can still be opened for downloading its contents.
+	info, err := c.sftpClient.Lstat(remotePath)
+	if err != nil {
+		return model.FileEntry{}, err
+	}
+	return model.FileEntry{Name: info.Name(), Path: remotePath, Size: info.Size(), Modified: info.ModTime().Format("2006-01-02 15:04"), IsDir: info.IsDir(), Side: "remote"}, nil
 }
 
 func (c *SFTPClient) CurrentDir() (string, error) {
@@ -140,13 +156,21 @@ func (c *SFTPClient) Upload(localPath, remotePath string, progress func(transfer
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
-
-	_, err = io.Copy(dst, newProgressReader(src, info.Size(), progress))
-	return err
+	transferred, copyErr := io.Copy(dst, newProgressReader(src, info.Size(), progress))
+	closeErr := dst.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if transferred != info.Size() {
+		return fmt.Errorf("SFTP upload size mismatch: got %d, expected %d", transferred, info.Size())
+	}
+	return nil
 }
 
-func (c *SFTPClient) Download(remotePath, localPath string, progress func(transferred int64, total int64, speedBps int64) bool) error {
+func (c *SFTPClient) Download(remotePath string, destination io.Writer, progress func(transferred int64, total int64, speedBps int64) bool) error {
 	if c.sftpClient == nil {
 		return fmt.Errorf("sftp client not connected")
 	}
@@ -155,21 +179,24 @@ func (c *SFTPClient) Download(remotePath, localPath string, progress func(transf
 	if err != nil {
 		return err
 	}
-	defer src.Close()
 
 	info, err := src.Stat()
 	if err != nil {
+		_ = src.Close()
 		return err
 	}
-
-	dst, err := os.Create(localPath)
-	if err != nil {
-		return err
+	transferred, copyErr := io.Copy(newProgressWriter(destination, info.Size(), progress), src)
+	closeErr := src.Close()
+	if copyErr != nil {
+		return copyErr
 	}
-	defer dst.Close()
-
-	_, err = io.Copy(newProgressWriter(dst, info.Size(), progress), src)
-	return err
+	if closeErr != nil {
+		return closeErr
+	}
+	if transferred != info.Size() {
+		return fmt.Errorf("SFTP download size mismatch: got %d, expected %d", transferred, info.Size())
+	}
+	return nil
 }
 
 func (c *SFTPClient) Mkdir(remotePath string) error {

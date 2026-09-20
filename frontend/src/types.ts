@@ -90,6 +90,7 @@ export type RestServerStatus = {
   enabled: boolean;
   running: boolean;
   baseURL: string;
+  mcpURL?: string;
   port: number;
   attached: boolean;
 };
@@ -107,6 +108,7 @@ export type PurchaseStatus = {
 };
 
 export type BootstrapPayload = {
+  storageError?: string;
   sites: Site[];
   tabs: Tab[];
   config: Config;

@@ -6,10 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="IntegTERM"
 APP_PATH="$SCRIPT_DIR/build/bin/$APP_NAME.app"
 DIST_DIR="${DIST_DIR:-$SCRIPT_DIR/dist}"
-STAGING_DIR="$DIST_DIR/dmg-root"
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
-DMG_PATH="$DIST_DIR/$APP_NAME-$VERSION.dmg"
-VOLUME_NAME="$APP_NAME $VERSION"
+STAGING_DIR=""
+
+cleanup_staging() {
+  if [[ -n "$STAGING_DIR" && -d "$STAGING_DIR" ]]; then
+    rm -rf "$STAGING_DIR"
+  fi
+}
+trap cleanup_staging EXIT
 
 if ! command -v hdiutil >/dev/null 2>&1; then
   echo "缺少必要指令: hdiutil"
@@ -29,22 +33,27 @@ if [[ ! -d "$APP_PATH" ]]; then
   "$SCRIPT_DIR/build.sh"
 fi
 
-rm -rf "$STAGING_DIR"
-mkdir -p "$STAGING_DIR"
-mkdir -p "$DIST_DIR"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
+DMG_PATH="$DIST_DIR/$APP_NAME-$VERSION.dmg"
+VOLUME_NAME="$APP_NAME $VERSION"
 
-cp -R "$APP_PATH" "$STAGING_DIR/"
-ln -s /Applications "$STAGING_DIR/Applications"
-rm -f "$DMG_PATH"
+mkdir -p "$DIST_DIR"
+STAGING_DIR="$(mktemp -d "$DIST_DIR/.dmg-staging.XXXXXX")"
+DMG_ROOT="$STAGING_DIR/$APP_NAME-root"
+mkdir -p "$DMG_ROOT"
+
+cp -R "$APP_PATH" "$DMG_ROOT/"
+ln -s /Applications "$DMG_ROOT/Applications"
+STAGED_DMG="$STAGING_DIR/$APP_NAME.dmg"
 
 echo "建立 DMG：$DMG_PATH"
 hdiutil create \
   -volname "$VOLUME_NAME" \
-  -srcfolder "$STAGING_DIR" \
+  -srcfolder "$DMG_ROOT" \
   -ov \
   -format UDZO \
-  "$DMG_PATH"
+  "$STAGED_DMG"
 
-rm -rf "$STAGING_DIR"
+mv -f "$STAGED_DMG" "$DMG_PATH"
 
 echo "完成：$DMG_PATH"

@@ -12,12 +12,17 @@ func (a *App) handleRESTTabs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	writeJSON(w, http.StatusOK, tabEnvelope{Tabs: a.GetTabs()})
+	tabs, err := a.GetTabs()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, tabEnvelope{Tabs: tabs})
 }
 
 func (a *App) handleRESTCreateFileTab(w http.ResponseWriter, r *http.Request) {
 	a.handleRESTTabCreateWithSite(w, r, func(site model.Site) ([]model.Tab, error) {
-		tabs, err := a.CreateTab(site)
+		tabs, err := a.createTabLocked(site)
 		if err != nil {
 			return tabs, err
 		}
@@ -27,7 +32,7 @@ func (a *App) handleRESTCreateFileTab(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleRESTCreateSSHTab(w http.ResponseWriter, r *http.Request) {
 	a.handleRESTTabCreateWithSite(w, r, func(site model.Site) ([]model.Tab, error) {
-		tabs, err := a.CreateSSHTab(site)
+		tabs, err := a.createSSHTabLocked(site)
 		if err != nil {
 			return tabs, err
 		}
@@ -37,7 +42,7 @@ func (a *App) handleRESTCreateSSHTab(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleRESTCreateTelnetTab(w http.ResponseWriter, r *http.Request) {
 	a.handleRESTTabCreateWithSite(w, r, func(site model.Site) ([]model.Tab, error) {
-		tabs, err := a.CreateTelnetTab(site)
+		tabs, err := a.createTelnetTabLocked(site)
 		if err != nil {
 			return tabs, err
 		}
@@ -57,6 +62,8 @@ func (a *App) handleRESTTabCreateWithSite(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	a.stateMu.Lock()
+	defer a.stateMu.Unlock()
 	tabs, err := create(payload.Site)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -77,7 +84,9 @@ func (a *App) handleRESTCreateLocalTab(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	tabs, err := a.CreateLocalTerminalTab(payload.Cwd)
+	a.stateMu.Lock()
+	defer a.stateMu.Unlock()
+	tabs, err := a.createLocalTerminalTabLocked(payload.Cwd)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

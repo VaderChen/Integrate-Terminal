@@ -10,7 +10,12 @@ import (
 func (a *App) handleRESTSites(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, siteEnvelope{Sites: a.GetSites()})
+		sites, err := a.GetSites()
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, siteEnvelope{Sites: sites})
 	case http.MethodPost:
 		var site model.Site
 		if err := decodeJSON(r, &site); err != nil {

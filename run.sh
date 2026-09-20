@@ -40,6 +40,13 @@ if [[ -f "$HOME/.zshrc" ]]; then
   source "$HOME/.zshrc"
 fi
 
+# Match the production toolchain and retain macOS 12 compatibility.
+unset GOROOT
+export GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' "$SCRIPT_DIR/go.mod")"
+# Applies to Wails' bindings helper and dev builds as well as the final binary.
+# Go also remaps CGO C/Objective-C source paths when trimpath is enabled.
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
+
 find_wails() {
   if command -v wails >/dev/null 2>&1; then
     command -v wails
@@ -120,6 +127,7 @@ sync_project_to_local() {
     --exclude '.git/' \
     --exclude '.DS_Store' \
     --exclude '._*' \
+    --exclude '*.bak' \
     --exclude 'build/bin/' \
     --exclude 'frontend/dist/' \
     --exclude 'frontend/node_modules/' \

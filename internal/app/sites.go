@@ -8,24 +8,26 @@ import (
 	"time"
 
 	"IntegTERM/internal/model"
+	"IntegTERM/internal/store"
 )
 
 func (a *App) reloadSitesFromStoreLocked() error {
-	sites, err := a.store.LoadSites()
-	if err != nil {
-		return err
-	}
-	a.sites = normalizeLoadedSites(sites)
-
-	if cfg, loadErr := a.store.LoadConfig(); loadErr == nil {
-		a.config = cfg
-	}
-	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
-	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
-	return nil
+	return a.store.WithTransaction(func(tx *store.Transaction) error {
+		sites, err := tx.LoadSites()
+		if err != nil {
+			return err
+		}
+		cfg, err := tx.LoadConfig()
+		if err != nil {
+			return err
+		}
+		a.sites = normalizeLoadedSites(sites)
+		a.config.SiteFolders = sanitizeSiteFolders(cfg.SiteFolders, a.sites)
+		return nil
+	})
 }
 
-func (a *App) SaveSite(site model.Site) ([]model.Site, error) {
+func (a *App) saveSiteLocked(site model.Site) ([]model.Site, error) {
 	site.Folder = normalizeSiteFolder(site.Folder)
 	if strings.TrimSpace(site.Host) == "" {
 		return a.sites, fmt.Errorf("host is required")
@@ -64,13 +66,10 @@ func (a *App) SaveSite(site model.Site) ([]model.Site, error) {
 		a.sites = append(a.sites, site)
 	}
 
-	if err := a.store.SaveSites(a.sites); err != nil {
-		return enrichSites(a.sites), err
-	}
-	return enrichSites(a.sites), a.store.SaveConfig(a.config)
+	return enrichSites(a.sites), nil
 }
 
-func (a *App) DeleteSite(id string) ([]model.Site, error) {
+func (a *App) deleteSiteLocked(id string) ([]model.Site, error) {
 	filtered := make([]model.Site, 0, len(a.sites))
 	for _, site := range a.sites {
 		if site.ID != id {
@@ -78,10 +77,10 @@ func (a *App) DeleteSite(id string) ([]model.Site, error) {
 		}
 	}
 	a.sites = filtered
-	return enrichSites(a.sites), a.store.SaveSites(a.sites)
+	return enrichSites(a.sites), nil
 }
 
-func (a *App) SortSitesByName() ([]model.Site, error) {
+func (a *App) sortSitesByNameLocked() ([]model.Site, error) {
 	sort.SliceStable(a.sites, func(i, j int) bool {
 		left := strings.ToLower(strings.TrimSpace(a.sites[i].Name))
 		right := strings.ToLower(strings.TrimSpace(a.sites[j].Name))
@@ -94,27 +93,27 @@ func (a *App) SortSitesByName() ([]model.Site, error) {
 		return left < right
 	})
 
-	return enrichSites(a.sites), a.store.SaveSites(a.sites)
+	return enrichSites(a.sites), nil
 }
 
-func (a *App) CreateSiteFolder(name string) (model.Config, error) {
+func (a *App) createSiteFolderLocked(name string) (model.Config, error) {
 	folder := normalizeSiteFolder(name)
 	if folder == "" {
 		return a.config, fmt.Errorf("folder name is required")
 	}
 	a.config.SiteFolders = upsertSiteFolder(a.config.SiteFolders, folder)
-	return a.config, a.store.SaveConfig(a.config)
+	return a.config, nil
 }
 
-func (a *App) SortSiteFolders() (model.Config, error) {
+func (a *App) sortSiteFoldersLocked() (model.Config, error) {
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	sort.SliceStable(a.config.SiteFolders, func(i, j int) bool {
 		return strings.ToLower(a.config.SiteFolders[i]) < strings.ToLower(a.config.SiteFolders[j])
 	})
-	return a.config, a.store.SaveConfig(a.config)
+	return a.config, nil
 }
 
-func (a *App) RenameSiteFolder(name string, nextName string) (model.SiteLibraryMutationResult, error) {
+func (a *App) renameSiteFolderLocked(name string, nextName string) (model.SiteLibraryMutationResult, error) {
 	folder := normalizeSiteFolder(name)
 	renamedFolder := normalizeSiteFolder(nextName)
 	result := model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}
@@ -147,16 +146,10 @@ func (a *App) RenameSiteFolder(name string, nextName string) (model.SiteLibraryM
 	}
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 
-	if err := a.store.SaveSites(a.sites); err != nil {
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
-	}
-	if err := a.store.SaveConfig(a.config); err != nil {
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
-	}
 	return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, nil
 }
 
-func (a *App) ReorderSiteFolders(folderNames []string) (model.Config, error) {
+func (a *App) reorderSiteFoldersLocked(folderNames []string) (model.Config, error) {
 	currentFolders := sanitizeSiteFolders(a.config.SiteFolders, a.sites)
 	if len(folderNames) != len(currentFolders) {
 		return a.config, fmt.Errorf("site folder reorder length mismatch")
@@ -184,10 +177,10 @@ func (a *App) ReorderSiteFolders(folderNames []string) (model.Config, error) {
 	}
 
 	a.config.SiteFolders = reordered
-	return a.config, a.store.SaveConfig(a.config)
+	return a.config, nil
 }
 
-func (a *App) DeleteSiteFolder(name string) (model.SiteLibraryMutationResult, error) {
+func (a *App) deleteSiteFolderLocked(name string) (model.SiteLibraryMutationResult, error) {
 	folder := normalizeSiteFolder(name)
 	result := model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}
 	if folder == "" {
@@ -209,12 +202,6 @@ func (a *App) DeleteSiteFolder(name string) (model.SiteLibraryMutationResult, er
 		}
 	}
 
-	if err := a.store.SaveSites(a.sites); err != nil {
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
-	}
-	if err := a.store.SaveConfig(a.config); err != nil {
-		return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, err
-	}
 	return model.SiteLibraryMutationResult{Sites: enrichSites(a.sites), Config: a.config}, nil
 }
 
@@ -298,7 +285,7 @@ func sanitizeSiteFolders(folders []string, sites []model.Site) []string {
 	return sanitized
 }
 
-func (a *App) ReorderSites(siteIDs []string) ([]model.Site, error) {
+func (a *App) reorderSitesLocked(siteIDs []string) ([]model.Site, error) {
 	if len(siteIDs) != len(a.sites) {
 		return a.sites, fmt.Errorf("site reorder length mismatch")
 	}
@@ -323,5 +310,5 @@ func (a *App) ReorderSites(siteIDs []string) ([]model.Site, error) {
 	}
 
 	a.sites = reordered
-	return a.sites, a.store.SaveSites(a.sites)
+	return a.sites, nil
 }

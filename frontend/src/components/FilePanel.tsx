@@ -3,12 +3,15 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCaretDown, faCaretUp, faFileLines, faFolder, faReply, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import type { FileEntry, FileSortKey, FileSortState } from '../types';
 import { type Locale, useI18n } from '../i18n';
+import { isActionableEntry, resolveFileDrag, type PanelLocation } from '../filePanelState';
 
 export type FileContextMenuAction = 'mkdir' | 'delete' | 'refresh';
 const LOCAL_DRAG_MIME = 'application/x-integrated-term-local-paths';
 const REMOTE_DRAG_MIME = 'application/x-integrated-term-remote-paths';
 
 export type FileContextMenuRequest = {
+  tabId: string;
+  basePath: string;
   x: number;
   y: number;
   entry?: FileEntry;
@@ -18,6 +21,7 @@ export type FileContextMenuRequest = {
 };
 
 export type PathContextMenuRequest = {
+  tabId: string;
   x: number;
   y: number;
   side: 'local' | 'remote';
@@ -25,6 +29,8 @@ export type PathContextMenuRequest = {
 };
 
 type Props = {
+  location: PanelLocation | null;
+  disabled?: boolean;
   title: string;
   path: string;
   entries: FileEntry[];
@@ -45,6 +51,8 @@ type Props = {
 };
 
 export function FilePanel({
+  location,
+  disabled = false,
   title,
   path,
   entries,
@@ -72,7 +80,7 @@ export function FilePanel({
   const [pathDraft, setPathDraft] = useState(path);
   const dropTargetStyle: CSSProperties | undefined =
     side === 'remote' ? ({ '--wails-drop-target': 'drop' } as CSSProperties) : undefined;
-  const entryPathSet = useMemo(() => new Set(entries.map((entry) => entry.path)), [entries]);
+  const entryPathSet = useMemo(() => new Set(entries.filter(isActionableEntry).map((entry) => entry.path)), [entries]);
 
   useEffect(() => {
     setSelectedPaths((current) => current.filter((path) => entryPathSet.has(path)));
@@ -83,12 +91,22 @@ export function FilePanel({
     setPathDraft(path);
   }, [path]);
 
+  useEffect(() => {
+    setSelectedPaths([]);
+    setAnchorPath('');
+    setDraggingPaths([]);
+  }, [location?.id, path, side]);
+
+  const draggedPaths = (transfer: DataTransfer, mime: string, sourceSide: 'local' | 'remote') =>
+    location ? resolveFileDrag(transfer.getData(mime), location, sourceSide) : null;
+
   const handleRowClick = (event: ReactMouseEvent<HTMLDivElement>, entry: FileEntry, index: number) => {
+    if (disabled || !isActionableEntry(entry)) return;
     if (event.shiftKey) {
       const anchorIndex = entries.findIndex((item) => item.path === anchorPath);
       const rangeStart = anchorIndex >= 0 ? Math.min(anchorIndex, index) : index;
       const rangeEnd = anchorIndex >= 0 ? Math.max(anchorIndex, index) : index;
-      const range = entries.slice(rangeStart, rangeEnd + 1).map((item) => item.path);
+      const range = entries.slice(rangeStart, rangeEnd + 1).filter(isActionableEntry).map((item) => item.path);
       setSelectedPaths(range);
       setAnchorPath(entry.path);
       return;
@@ -116,6 +134,7 @@ export function FilePanel({
       className={`card file-panel ${side === 'remote' ? 'drop-panel' : ''}`}
       style={dropTargetStyle}
       onDragOver={(event) => {
+        if (disabled || !location) return;
         const hasLocalDrag = !!event.dataTransfer.types.includes(LOCAL_DRAG_MIME);
         const hasRemoteDrag = !!event.dataTransfer.types.includes(REMOTE_DRAG_MIME);
         const allowExternalDrop = side === 'remote';
@@ -125,19 +144,21 @@ export function FilePanel({
         }
       }}
       onDrop={async (event) => {
+        if (disabled || !location) return;
         event.preventDefault();
         const paths =
           side === 'remote'
-            ? resolveInternalDraggedPaths(event.dataTransfer, LOCAL_DRAG_MIME) ?? (await resolveDroppedPaths(event.dataTransfer))
-            : resolveInternalDraggedPaths(event.dataTransfer, REMOTE_DRAG_MIME) ?? [];
+            ? draggedPaths(event.dataTransfer, LOCAL_DRAG_MIME, 'local') ?? (await resolveDroppedPaths(event.dataTransfer))
+            : draggedPaths(event.dataTransfer, REMOTE_DRAG_MIME, 'remote') ?? [];
         if (paths.length > 0) {
           onDropFiles?.(paths);
         }
       }}
       onContextMenu={(event) => {
+        if (disabled || !location) return;
         event.preventDefault();
         event.stopPropagation();
-        onContextMenuRequest?.({ x: event.clientX, y: event.clientY, side });
+        onContextMenuRequest?.({ tabId: location.id, basePath: path, x: event.clientX, y: event.clientY, side });
       }}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest('.file-row, .file-table-head, .sort-button, .ghost')) {
@@ -156,9 +177,10 @@ export function FilePanel({
               onClick={onPickPath}
               title={path}
               onContextMenu={(event) => {
+                if (disabled || !location) return;
                 event.preventDefault();
                 event.stopPropagation();
-                onPathContextMenuRequest?.({ x: event.clientX, y: event.clientY, side, path });
+                onPathContextMenuRequest?.({ tabId: location.id, x: event.clientX, y: event.clientY, side, path });
               }}
             >
               {path}
@@ -170,9 +192,10 @@ export function FilePanel({
               onChange={(event) => setPathDraft(event.target.value)}
               onBlur={() => setPathDraft(path)}
               onContextMenu={(event) => {
+                if (disabled || !location) return;
                 event.preventDefault();
                 event.stopPropagation();
-                onPathContextMenuRequest?.({ x: event.clientX, y: event.clientY, side, path });
+                onPathContextMenuRequest?.({ tabId: location.id, x: event.clientX, y: event.clientY, side, path });
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -231,22 +254,22 @@ export function FilePanel({
             key={entry.path}
             className={`file-row ${entry.isDir ? 'clickable-row' : ''} ${selectedPaths.includes(entry.path) ? 'selected' : ''} ${dragOverDirectoryPath === entry.path ? 'drag-target' : ''}`}
             aria-selected={selectedPaths.includes(entry.path)}
-            draggable={entry.name !== '..'}
+            draggable={!disabled && isActionableEntry(entry)}
             onClick={(event) => handleRowClick(event, entry, index)}
             onDragStart={(event) => {
-              if (entry.name === '..') {
+              if (disabled || !location || !isActionableEntry(entry)) {
                 event.preventDefault();
                 return;
               }
 
-              const dragPaths = selectedPaths.includes(entry.path) ? selectedPaths : [entry.path];
-              if (!selectedPaths.includes(entry.path)) {
+              const dragPaths = (selectedPaths.includes(entry.path) ? selectedPaths : [entry.path]).filter(value => entryPathSet.has(value));
+              if (isActionableEntry(entry) && !selectedPaths.includes(entry.path)) {
                 setSelectedPaths([entry.path]);
                 setAnchorPath(entry.path);
               }
               setDraggingPaths(dragPaths);
               event.dataTransfer.effectAllowed = 'copyMove';
-              event.dataTransfer.setData(side === 'local' ? LOCAL_DRAG_MIME : REMOTE_DRAG_MIME, JSON.stringify(dragPaths));
+              event.dataTransfer.setData(side === 'local' ? LOCAL_DRAG_MIME : REMOTE_DRAG_MIME, JSON.stringify({ tabId: location.id, basePath: path, side, paths: dragPaths }));
               event.dataTransfer.setData('text/plain', dragPaths.join('\n'));
             }}
             onDragEnd={() => {
@@ -254,12 +277,13 @@ export function FilePanel({
               setDragOverDirectoryPath('');
             }}
             onDragOver={(event) => {
+              if (disabled || !location) return;
               const moveMimeType = side === 'local' ? LOCAL_DRAG_MIME : REMOTE_DRAG_MIME;
               const crossMimeType = side === 'local' ? REMOTE_DRAG_MIME : LOCAL_DRAG_MIME;
-              const internalMovePaths = resolveInternalDraggedPaths(event.dataTransfer, moveMimeType);
-              const crossPaths = resolveInternalDraggedPaths(event.dataTransfer, crossMimeType);
+              const internalMovePaths = draggedPaths(event.dataTransfer, moveMimeType, side) ?? draggingPaths;
+              const crossPaths = draggedPaths(event.dataTransfer, crossMimeType, side === 'local' ? 'remote' : 'local');
               const validPaths = internalMovePaths?.filter((dragPath) => !isInvalidDirectoryMove(side, dragPath, entry.path)) ?? [];
-              const hasCrossDrop = (crossPaths?.length ?? 0) > 0 || (side === 'remote' && event.dataTransfer.types.includes('Files'));
+              const hasCrossDrop = event.dataTransfer.types.includes(crossMimeType) || (crossPaths?.length ?? 0) > 0 || (side === 'remote' && event.dataTransfer.types.includes('Files'));
               if (!entry.isDir || entry.name === '..') {
                 return;
               }
@@ -284,6 +308,7 @@ export function FilePanel({
               setDragOverDirectoryPath('');
             }}
             onDrop={async (event) => {
+              if (disabled || !location) return;
               if (!entry.isDir || entry.name === '..') {
                 return;
               }
@@ -293,9 +318,9 @@ export function FilePanel({
 
               const moveMimeType = side === 'local' ? LOCAL_DRAG_MIME : REMOTE_DRAG_MIME;
               const crossMimeType = side === 'local' ? REMOTE_DRAG_MIME : LOCAL_DRAG_MIME;
-              const internalMovePaths = resolveInternalDraggedPaths(event.dataTransfer, moveMimeType);
+              const internalMovePaths = draggedPaths(event.dataTransfer, moveMimeType, side);
               const crossPaths =
-                resolveInternalDraggedPaths(event.dataTransfer, crossMimeType) ??
+                draggedPaths(event.dataTransfer, crossMimeType, side === 'local' ? 'remote' : 'local') ??
                 (side === 'remote' ? await resolveDroppedPaths(event.dataTransfer) : []);
 
               if (internalMovePaths?.length && onMoveEntriesToDirectory) {
@@ -313,25 +338,28 @@ export function FilePanel({
               }
             }}
             onContextMenu={(event) => {
+              if (disabled || !location) return;
               event.preventDefault();
               event.stopPropagation();
-              if (!selectedPaths.includes(entry.path)) {
+              if (isActionableEntry(entry) && !selectedPaths.includes(entry.path)) {
                 setSelectedPaths([entry.path]);
                 setAnchorPath(entry.path);
               }
               onContextMenuRequest?.({
+                tabId: location.id,
+                basePath: path,
                 x: event.clientX,
                 y: event.clientY,
                 entry,
                 side,
-                selectedPaths: selectedPaths.includes(entry.path) ? selectedPaths : [entry.path],
+                selectedPaths: (selectedPaths.includes(entry.path) ? selectedPaths : [entry.path]).filter(value => entryPathSet.has(value)),
                 selectedEntries: (selectedPaths.includes(entry.path) ? selectedPaths : [entry.path])
                   .map((selectedPath) => entries.find((candidate) => candidate.path === selectedPath))
-                  .filter((candidate): candidate is FileEntry => Boolean(candidate)),
+                  .filter((candidate): candidate is FileEntry => Boolean(candidate) && isActionableEntry(candidate!)),
               });
             }}
             onDoubleClick={() => {
-              if (entry.isDir) {
+              if (!disabled && entry.isDir) {
                 onOpenDirectory?.({ ...entry, side });
               }
             }}
@@ -392,20 +420,6 @@ async function resolveDroppedPaths(dataTransfer: DataTransfer) {
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
 
   return Array.from(new Set(itemPaths));
-}
-
-function resolveInternalDraggedPaths(dataTransfer: DataTransfer, mimeType: string) {
-  const serialized = dataTransfer.getData(mimeType);
-  if (!serialized) return null;
-
-  try {
-    const parsed = JSON.parse(serialized);
-    if (!Array.isArray(parsed)) return null;
-    const paths = parsed.filter((value): value is string => typeof value === 'string' && value.length > 0);
-    return Array.from(new Set(paths));
-  } catch {
-    return null;
-  }
 }
 
 function isInvalidDirectoryMove(side: 'local' | 'remote', sourcePath: string, targetDirectory: string) {

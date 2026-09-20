@@ -1,8 +1,14 @@
 package app
 
-import wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+import (
+	"IntegTERM/internal/model"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+)
 
-func (a *App) ResetWindowToDefaultScale() error {
+func (a *App) resetWindowToDefaultScaleLocked() error {
+	if a.storageInitErr != nil {
+		return a.storageInitErr
+	}
 	if a.ctx == nil {
 		return nil
 	}
@@ -32,5 +38,12 @@ func (a *App) ResetWindowToDefaultScale() error {
 	a.config.WindowHeight = defaultHeight
 	a.config.WindowX = 0
 	a.config.WindowY = 0
-	return a.store.SaveConfig(a.config)
+	_, err = a.store.UpdateConfig(func(cfg *model.Config) error {
+		cfg.WindowWidth = defaultWidth
+		cfg.WindowHeight = defaultHeight
+		cfg.WindowX = 0
+		cfg.WindowY = 0
+		return nil
+	})
+	return err
 }

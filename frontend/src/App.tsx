@@ -9,6 +9,7 @@ import { FilePanel } from './components/FilePanel';
 import type { FileContextMenuRequest } from './components/FilePanel';
 import { useConnectionActions } from './hooks/useConnectionActions';
 import { useFileActions } from './hooks/useFileActions';
+import { useFilePanels } from './hooks/useFilePanels';
 import { useSettingsActions } from './hooks/useSettingsActions';
 import { useSiteLibraryActions } from './hooks/useSiteLibraryActions';
 import { usePurchaseActions } from './hooks/usePurchaseActions';
@@ -20,7 +21,7 @@ import { SiteList } from './components/SiteList';
 import { TabBar } from './components/TabBar';
 import { TransferPanel } from './components/TransferPanel';
 import { getMessages, resolveLocale } from './i18n';
-import type { Config, FileEntry, FileSortState, LogItem, PurchaseStatus, Site, Tab, TransferItem } from './types';
+import type { Config, FileSortState, LogItem, PurchaseStatus, Site, Tab, TransferItem } from './types';
 
 const plainTextInputProps = {
   autoCapitalize: 'none' as const,
@@ -33,8 +34,6 @@ export default function App() {
   const [sites, setSites] = useState<Site[]>([]);
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState('');
-  const [localFiles, setLocalFiles] = useState<FileEntry[]>([]);
-  const [remoteFiles, setRemoteFiles] = useState<FileEntry[]>([]);
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [defaultLocalPath, setDefaultLocalPath] = useState(fallbackBootstrap.defaultLocalPath);
@@ -47,6 +46,8 @@ export default function App() {
   const [remoteSort, setRemoteSort] = useState<FileSortState>({ key: 'name', direction: 'asc' });
   const [formExpanded, setFormExpanded] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [storageError, setStorageError] = useState('');
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<FileContextMenuRequest | null>(null);
   const [pathContextMenu, setPathContextMenu] = useState<PathContextMenuState | null>(null);
@@ -105,12 +106,11 @@ export default function App() {
           siteFolders: payload.config?.siteFolders ?? [],
         };
         const nextDefaultLocalPath = payload.defaultLocalPath || fallbackBootstrap.defaultLocalPath;
+        setStorageError(payload.storageError ?? '');
         setSites(payload.sites);
         setTabs(payload.tabs);
         setConfig(nextConfig);
         setDefaultLocalPath(nextDefaultLocalPath);
-        setLocalFiles(payload.localFiles);
-        setRemoteFiles(payload.remoteFiles);
         setTransfers(payload.transfers);
         setLogs(payload.logs);
         setActiveTabId(getPreferredVisibleTabId(payload.tabs, nextConfig.lastActiveTab));
@@ -130,7 +130,7 @@ export default function App() {
         })();
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(extractErrorMessage(error, t.connectionFailed));
+          setStorageError(extractErrorMessage(error, t.connectionFailed));
           setLoading(false);
         }
       }
@@ -141,7 +141,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bootstrapAttempt]);
 
   const visibleTabs = useMemo(() => tabs.filter((tab) => !tab.hidden), [tabs]);
   const activeTab = useMemo(
@@ -153,13 +153,10 @@ export default function App() {
   const localPanelCollapsed = activeTab ? (collapsedPanelsByTabId[activeTab.id] ?? true) : true;
   const localPanelHiddenForActiveTab = activeTab?.mode === 'terminal';
   const isLocalPanelCollapsed = localPanelCollapsed || localPanelHiddenForActiveTab;
-  useEffect(() => {
-    activeTabRef.current = activeTab;
-  }, [activeTab]);
-
-  useEffect(() => {
-    tabsRef.current = tabs;
-  }, [tabs]);
+  activeTabRef.current = activeTab;
+  tabsRef.current = tabs;
+  const { localFiles, remoteFiles, localPanelReady, remotePanelReady, invalidatePanels, refreshPanels, refreshPanelsForPaths } =
+    useFilePanels(activeTab, activeTabRef, setErrorMessage);
 
   useEffect(() => {
     setCollapsedPanelsByTabId((current) => {
@@ -230,61 +227,19 @@ export default function App() {
   }, []);
 
   const visibleLocalFiles = useMemo(
-    () => sortEntries(withParentEntry(localFiles, activeTab?.localPath ?? '', 'local'), localSort),
-    [activeTab?.localPath, localFiles, localSort],
+    () => localPanelReady ? sortEntries(withParentEntry(localFiles, activeTab?.localPath ?? '', 'local'), localSort) : [],
+    [activeTab?.localPath, localFiles, localSort, localPanelReady],
   );
 
   const visibleRemoteFiles = useMemo(
-    () => sortEntries(withParentEntry(remoteFiles, activeTab?.remotePath ?? '', 'remote'), remoteSort),
-    [activeTab?.remotePath, remoteFiles, remoteSort],
+    () => remotePanelReady ? sortEntries(withParentEntry(remoteFiles, activeTab?.remotePath ?? '', 'remote'), remoteSort) : [],
+    [activeTab?.remotePath, remoteFiles, remoteSort, remotePanelReady],
   );
 
-  const refreshPanels = async (tab: Tab | null) => {
-    setContextMenu(null);
-    setPathContextMenu(null);
-    if (!tab) {
-      setLocalFiles([]);
-      setRemoteFiles([]);
-      return;
-    }
-    if (tab.mode === 'terminal') {
-      setLocalFiles([]);
-      setRemoteFiles([]);
-      return;
-    }
-
-    const [local, remote, queue, nextLogs] = await Promise.all([
-      window.go?.app?.App?.ListLocal?.(tab.id, tab.localPath),
-      window.go?.app?.App?.ListRemote?.(tab.id, tab.remotePath),
-      window.go?.app?.App?.GetTransfers?.(),
-      window.go?.app?.App?.GetLogs?.(),
-    ]);
-
-    setLocalFiles(local ?? []);
-    setRemoteFiles(remote ?? []);
-    setTransfers(queue ?? []);
-    setLogs(nextLogs ?? []);
-  };
-
-  const refreshPanelsForPaths = async (tab: Tab, nextLocalPath: string, nextRemotePath: string) => {
-    setContextMenu(null);
-    setPathContextMenu(null);
-    const [local, remote, queue, nextLogs] = await Promise.all([
-      window.go?.app?.App?.ListLocal?.(tab.id, nextLocalPath),
-      window.go?.app?.App?.ListRemote?.(tab.id, nextRemotePath),
-      window.go?.app?.App?.GetTransfers?.(),
-      window.go?.app?.App?.GetLogs?.(),
-    ]);
-
-    setLocalFiles(local ?? []);
-    setRemoteFiles(remote ?? []);
-    setTransfers(queue ?? []);
-    setLogs(nextLogs ?? []);
-  };
-
   useEffect(() => {
-    void refreshPanels(activeTab);
-  }, [activeTabId]);
+    setContextMenu(null);
+    setPathContextMenu(null);
+  }, [activeTab?.id, activeTab?.localPath, activeTab?.remotePath]);
 
 
   const {
@@ -349,40 +304,14 @@ export default function App() {
       return;
     }
 
-    try {
-      const nextTabs = await window.go?.app?.App?.UpdateTabPaths?.(currentTab.id, selectedPath, currentTab.remotePath);
-      if (nextTabs) {
-        setTabs(nextTabs);
-        const persistedTab = nextTabs.find((tab: Tab) => tab.id === currentTab.id);
-        if (persistedTab) {
-          await refreshPanelsForPaths(persistedTab, persistedTab.localPath, persistedTab.remotePath);
-        }
-      }
-      setErrorMessage('');
-    } catch (error) {
-      setErrorMessage(extractErrorMessage(error, t.connectionFailed));
-    }
+    await handleNavigatePaths(currentTab, selectedPath, currentTab.remotePath);
   };
 
   const handleSubmitRemotePath = async (nextRemotePath: string) => {
     const currentTab = activeTabRef.current;
     const trimmedPath = nextRemotePath.trim();
     if (!currentTab || currentTab.mode === 'terminal' || !trimmedPath) return;
-
-    try {
-      const nextTabs = await window.go?.app?.App?.UpdateTabPaths?.(currentTab.id, currentTab.localPath, trimmedPath);
-      if (nextTabs) {
-        const persistedTab = nextTabs.find((tab: Tab) => tab.id === currentTab.id);
-        if (persistedTab) {
-          await refreshPanelsForPaths(persistedTab, persistedTab.localPath, persistedTab.remotePath);
-        }
-        setTabs(nextTabs);
-      }
-      setErrorMessage('');
-    } catch (error) {
-      setErrorMessage(extractErrorMessage(error, t.connectionFailed));
-      await refreshPanels(currentTab);
-    }
+    await handleNavigatePaths(currentTab, currentTab.localPath, trimmedPath);
   };
 
   const handleOpenSite = async (site: Site) => {
@@ -419,6 +348,7 @@ export default function App() {
   });
 
   const handlePathContextMenu = (request: PathContextMenuState) => {
+    if (request.tabId !== activeTabRef.current?.id || !(request.side === 'local' ? localPanelReady : remotePanelReady)) return;
     setContextMenu(null);
     setPathContextMenu(request);
   };
@@ -430,7 +360,7 @@ export default function App() {
       if (pathContextMenu.side === 'local') {
         await window.go?.app?.App?.OpenLocalPath?.(pathContextMenu.path);
       } else {
-        const currentTab = activeTabRef.current;
+        const currentTab = tabsRef.current.find(tab => tab.id === pathContextMenu.tabId);
         if (!currentTab || currentTab.mode === 'terminal') return;
         await handleOpenSSHFromFileTab({ ...currentTab, remotePath: pathContextMenu.path });
       }
@@ -497,6 +427,8 @@ export default function App() {
   } = useTransferActions({
     t: { connectionFailed: t.connectionFailed },
     activeTabRef,
+    tabsRef,
+    canAcceptFileDrop: () => remotePanelReady,
     setTransfers,
     setLogs,
     setErrorMessage,
@@ -512,6 +444,7 @@ export default function App() {
     },
     requestTerminalDropConfirm: (paths, remotePath) =>
       new Promise<boolean>((resolve) => {
+        terminalUploadConfirmResolverRef.current?.(false);
         terminalUploadConfirmResolverRef.current = resolve;
         setTerminalUploadConfirmDialog({ paths, remotePath });
       }),
@@ -530,6 +463,7 @@ export default function App() {
   };
 
   const {
+    handleNavigatePaths,
     handleOpenDirectory,
     handleFileContextMenu,
     handleOpenEntry,
@@ -550,6 +484,7 @@ export default function App() {
     },
     activeTab,
     activeTabRef,
+    tabsRef,
     contextMenu,
     actionDialog,
     directoryName,
@@ -560,6 +495,7 @@ export default function App() {
     setDirectoryName,
     setRenameValue,
     setErrorMessage,
+    invalidatePanels,
     refreshPanels,
     refreshPanelsForPaths,
   });
@@ -705,6 +641,15 @@ export default function App() {
         </section>
 
           <section className="workspace-body">
+          {storageError ? (
+            <div className="error-banner" role="alert">
+              <span>{t.storageLoadFailed}<br />{storageError}</span>
+              <button type="button" className="ghost" disabled={loading} onClick={() => {
+                setLoading(true);
+                setBootstrapAttempt(attempt => attempt + 1);
+              }}>{t.storageRetry}</button>
+            </div>
+          ) : null}
           {errorMessage ? (
             <div className={`error-banner ${isSuccessBanner ? 'success-banner' : ''}`}>
               <span>{bannerMessage}</span>
@@ -737,6 +682,9 @@ export default function App() {
             <section className={`panels ${isLocalPanelCollapsed ? 'local-panel-collapsed' : ''}`}>
               {isLocalPanelCollapsed ? null : (
                 <FilePanel
+                  key={`${activeTab?.id}:local`}
+                  location={activeTab}
+                  disabled={!localPanelReady}
                   locale={locale}
                   title={t.localFiles}
                   path={activeTab?.localPath ?? defaultLocalPath}
@@ -745,15 +693,15 @@ export default function App() {
                   sortState={localSort}
                   onSort={(key) => toggleSort('local', key)}
                   onRefresh={() => void handleRefreshCurrentPanel()}
-                  onDropFiles={handleDropToLocal}
+                  onDropFiles={(paths) => { if (activeTab) void handleDropToLocal(activeTab, paths); }}
                   onDropFilesToDirectory={(paths, targetDirectory) => {
-                    void handleDropToLocalDirectory(paths, targetDirectory);
+                    if (activeTab) void handleDropToLocalDirectory(activeTab, paths, targetDirectory);
                   }}
                   onMoveEntriesToDirectory={(paths, targetDirectory) => {
-                    void handleMoveEntriesToDirectory('local', paths, targetDirectory);
+                    if (activeTab) void handleMoveEntriesToDirectory(activeTab, 'local', paths, targetDirectory);
                   }}
                   onInvalidMoveToDirectory={handleInvalidMoveTarget}
-                  onOpenDirectory={handleOpenDirectory}
+                  onOpenDirectory={(entry) => { if (activeTab) void handleOpenDirectory(activeTab, entry); }}
                   onPickPath={() => void handlePickLocalPath()}
                   onContextMenuRequest={handleFileContextMenu}
                   onPathContextMenuRequest={handlePathContextMenu}
@@ -765,15 +713,17 @@ export default function App() {
                   sessionId={activeTab.sessionId}
                   canOpenSFTP={activeTab.protocol === 'ssh'}
                   onDropLocalPaths={(paths, remotePath) => {
+                    const uploadTab = { ...activeTab };
                     void (async () => {
                       const confirmed = await new Promise<boolean>((resolve) => {
+                        terminalUploadConfirmResolverRef.current?.(false);
                         terminalUploadConfirmResolverRef.current = resolve;
                         setTerminalUploadConfirmDialog({ paths, remotePath: remotePath || activeTab.remotePath });
                       });
                       if (!confirmed) {
                         return;
                       }
-                      await handleDropToTerminal(paths, remotePath || activeTab.remotePath);
+                      await handleDropToTerminal(uploadTab, paths, remotePath || uploadTab.remotePath);
                     })();
                   }}
                   enableLocalEcho={activeTab.protocol === 'telnet' && config.telnetLocalEcho}
@@ -819,6 +769,9 @@ export default function App() {
                 />
               ) : (
                 <FilePanel
+                  key={`${activeTab?.id}:remote`}
+                  location={activeTab}
+                  disabled={!remotePanelReady || !activeTab?.connected}
                   locale={locale}
                   title={t.remoteFiles}
                   path={activeTab?.remotePath ?? '/'}
@@ -827,15 +780,15 @@ export default function App() {
                   sortState={remoteSort}
                   onSort={(key) => toggleSort('remote', key)}
                   onRefresh={() => void handleRefreshCurrentPanel()}
-                  onDropFiles={handleDropToRemote}
+                  onDropFiles={(paths) => { if (activeTab) void handleDropToRemote(activeTab, paths); }}
                   onDropFilesToDirectory={(paths, targetDirectory) => {
-                    void handleDropToRemoteDirectory(paths, targetDirectory);
+                    if (activeTab) void handleDropToRemoteDirectory(activeTab, paths, targetDirectory);
                   }}
                   onMoveEntriesToDirectory={(paths, targetDirectory) => {
-                    void handleMoveEntriesToDirectory('remote', paths, targetDirectory);
+                    if (activeTab) void handleMoveEntriesToDirectory(activeTab, 'remote', paths, targetDirectory);
                   }}
                   onInvalidMoveToDirectory={handleInvalidMoveTarget}
-                  onOpenDirectory={handleOpenDirectory}
+                  onOpenDirectory={(entry) => { if (activeTab) void handleOpenDirectory(activeTab, entry); }}
                   onSubmitPath={(path) => void handleSubmitRemotePath(path)}
                   onContextMenuRequest={handleFileContextMenu}
                   onPathContextMenuRequest={handlePathContextMenu}
@@ -874,7 +827,8 @@ export default function App() {
           onDownloadEntryTo={() => {
             if (!contextMenu?.entry) return;
             setContextMenu(null);
-            void handleDownloadEntryTo(contextMenu.entry.path);
+            const tab = tabsRef.current.find(item => item.id === contextMenu.tabId);
+            if (tab && tab.remotePath === contextMenu.basePath) void handleDownloadEntryTo({ ...tab }, contextMenu.entry.path);
           }}
           onRefresh={() => void handleRefreshCurrentPanel()}
         />

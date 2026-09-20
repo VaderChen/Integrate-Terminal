@@ -54,6 +54,9 @@ func (a *App) CreateDirectory(tabID string, side string, basePath string, name s
 }
 
 func (a *App) DeleteEntry(tabID string, side string, targetPath string) error {
+	if err := a.validateDeleteTarget(tabID, side, targetPath); err != nil {
+		return err
+	}
 	a.markTabActivity(tabID)
 	switch side {
 	case "local":
@@ -71,6 +74,11 @@ func (a *App) DeleteEntry(tabID string, side string, targetPath string) error {
 }
 
 func (a *App) DeleteEntries(tabID string, side string, targetPaths []string) error {
+	for _, target := range targetPaths {
+		if err := a.validateDeleteTarget(tabID, side, target); err != nil {
+			return err
+		}
+	}
 	for _, targetPath := range collapseNestedDeleteTargets(side, targetPaths) {
 		if err := a.DeleteEntry(tabID, side, targetPath); err != nil {
 			return err
@@ -128,7 +136,7 @@ func deleteTargetContains(side string, parent string, child string) bool {
 		prefix := strings.TrimSuffix(path.Clean(parent), "/") + "/"
 		return strings.HasPrefix(path.Clean(child), prefix)
 	}
-	prefix := filepath.Clean(parent) + string(os.PathSeparator)
+	prefix := strings.TrimSuffix(filepath.Clean(parent), string(os.PathSeparator)) + string(os.PathSeparator)
 	return strings.HasPrefix(filepath.Clean(child), prefix)
 }
 
@@ -256,11 +264,12 @@ func (a *App) ExecuteLocalPath(targetPath string) error {
 }
 
 func (a *App) SelectPPKFile() (string, error) {
-	if a.ctx == nil {
+	ctx := a.appContext()
+	if ctx == nil {
 		return "", nil
 	}
 
-	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+	return wailsruntime.OpenFileDialog(ctx, wailsruntime.OpenDialogOptions{
 		Title: "選擇 PPK 金鑰檔",
 		Filters: []wailsruntime.FileFilter{
 			{
@@ -272,11 +281,12 @@ func (a *App) SelectPPKFile() (string, error) {
 }
 
 func (a *App) SelectDirectory() (string, error) {
-	if a.ctx == nil {
+	ctx := a.appContext()
+	if ctx == nil {
 		return "", nil
 	}
 
-	return wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
+	return wailsruntime.OpenDirectoryDialog(ctx, wailsruntime.OpenDialogOptions{
 		Title: "選擇下載目錄",
 	})
 }

@@ -16,12 +16,13 @@ import (
 )
 
 type sshTerminalSession struct {
-	id           string
-	client       *ssh.Client
-	session      *ssh.Session
-	stdin        io.WriteCloser
-	lock         sync.Mutex
-	outputBuffer []byte
+	id             string
+	client         *ssh.Client
+	session        *ssh.Session
+	stdin          io.WriteCloser
+	lock           sync.Mutex
+	outputBuffer   []byte
+	outputSequence uint64
 }
 
 const sshOutputBufferLimit = 128 * 1024
@@ -147,8 +148,9 @@ func (m *Manager) streamSSHOutput(ctx context.Context, session *sshTerminalSessi
 				}
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, visibleChunk)
+				session.outputSequence++
+				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk), session.outputSequence)
 				session.lock.Unlock()
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk))
 			}
 		}
 	afterChunk:
@@ -159,8 +161,9 @@ func (m *Manager) streamSSHOutput(ctx context.Context, session *sshTerminalSessi
 			if len(pending) > 0 {
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, pending)
+				session.outputSequence++
+				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending), session.outputSequence)
 				session.lock.Unlock()
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending))
 			}
 			if err != io.EOF {
 				emitSessionEvent(ctx, fmt.Sprintf("ssh:error:%s", session.id), err.Error())

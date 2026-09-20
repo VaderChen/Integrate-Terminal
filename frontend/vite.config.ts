@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   build: {
+    // Keep the WebView compatible with the macOS 12 deployment target.
+    target: 'safari15',
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {

@@ -2,12 +2,12 @@
 
 ## 專案定位
 
-IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH、SFTP、FTP、Telnet 與 Local Terminal 操作。同時，專案也內建一組本機 `Restful API Server`，目標是提供 AI / 自動化整合使用。
+IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH、SFTP、FTP、Telnet 與 Local Terminal 操作。AI 與自動化工具可透過 MCP 或本機 REST API 使用連線與檔案功能。
 
 目前開發準則：
 
 - Wails App GUI：提供本地使用者操作。
-- Restful API：提供 AI / automation 使用。
+- MCP 與 REST API：提供 AI / automation 使用。
 - 兩者可以共用底層功能，但不應混成同一層語意。
 
 ## 技術組成
@@ -23,15 +23,17 @@ IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH
 ## 主要目錄
 
 - `main.go`
-  - 應用入口；支援預設 GUI 模式與 `serve` 背景服務模式。
+  - 應用入口；支援預設 GUI、`serve` 背景服務與 `mcp` stdio 模式。
 - `internal/app/`
-  - 應用協調層、Wails bind 與 Restful API Server。
+  - 應用協調層、Wails bind、MCP 與 REST API Server。
 - `internal/session/`
   - 連線、終端、傳輸佇列與 log 管理；已依 client、transfer operation、transfer state、tab factory 等責任拆檔。
 - `internal/transport/`
   - SFTP / FTP client 抽象與實作。
 - `internal/store/`
-  - `sites.json`、`tabs.json`、`config.json` 的本地持久化。
+  - `sites.json`、`tabs.json`、`config.json` 的本地持久化與憑證引用。
+- `internal/credentials/`
+  - 透過 Security.framework 存取 macOS Keychain；一般測試使用記憶體 provider。
 - `frontend/`
   - 桌面 GUI 前端；語系、終端工具與站台操作已拆成獨立模組與 hooks。
 - `internal/purchase/`
@@ -46,6 +48,8 @@ IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH
   - 專案文件與更新紀錄。
 
 ## 本機開發
+
+需要可自動下載 toolchain 的 Go、Node.js 22.12 以上，以及 Xcode Command Line Tools。建置、開發與測試腳本依 `go.mod` 固定使用 Go 1.26.8，不受全域 GOTOOLCHAIN 設定影響；Go 1.27 已不支援 macOS 12。前端使用 Vite 7，輸出目標固定為 Safari 15，以保留 macOS 12 WebView 相容性。
 
 ### 啟動前端與 Wails 開發模式
 
@@ -117,7 +121,9 @@ wails build -clean
 
 目前會保留：
 
-- `cert/`
+- 本機 `cert/` 與 `data/`（存在時）
+
+備份檔供本機還原使用，請自行妥善保管；公開原始碼套件與本機備份應分別製作。
 
 ### 啟動背景服務模式
 
@@ -141,29 +147,41 @@ go run . serve
 - `GetPurchaseStatus()` 在首屏顯示後背景查詢；查詢期間先使用本地 fallback 狀態。
 - Bootstrap 或後續查詢失敗時，不應讓整個 GUI 永久停留在 loading 畫面。
 
+### 已儲存連線的憑證
+
+`sites.json`／`tabs.json` 以隨機的 `credentialRef` 引用密碼與 PPK 密語。macOS 使用 file-based Keychain，本機 ad-hoc 與沙盒版使用相同的憑證來源。系統依應用程式的存取權限處理授權；簽章身分改變時，可能重新要求使用者確認。
+
+憑證寫入與回讀驗證成功後才提交 JSON。啟動時必須成功讀取設定、站台和分頁才可寫回；GUI 提供重新讀取，REST sites/tabs 在資料暫時不可用時回傳 503。Keychain 需要解鎖時，可完成解鎖後重試。
+
+引用不依賴資料目錄路徑。密碼更新建立新的引用，既有 Keychain 項目保留供備份還原使用。搬到另一台 Mac 時，需同時處理 Keychain 資料或重新輸入憑證。
+
+原生 provider 詳見 [`internal/credentials/README.md`](../internal/credentials/README.md)。一般回歸測試不操作真實 Keychain；其中列出的 opt-in 整合測試只建立並刪除自己的 UUID 假憑證。
+
 ### 驗證
 
-前端：
+完整回歸檢查：
+
+```bash
+./scripts/test.sh
+```
+
+此指令會實際執行所有 Go 測試（包含 race detector）、`go vet`、封裝失敗回復測試、沙盒 preflight 純資料測試、Swift ThreadSanitizer 測試、前端行為測試與 TypeScript 檢查。它會把 StoreKit bridge 複製至暫存目錄，透過 linker rpath 載入，結束後移除；封裝測試使用模擬指令，不操作真實 Keychain 或簽章憑證，Swift 測試也不呼叫真實購買。
+
+前端正式建置與依賴漏洞掃描：
 
 ```bash
 cd frontend
 npm run build
+npm audit
 ```
 
-後端：
+Go 漏洞掃描：
 
 ```bash
-go test -exec /usr/bin/true ./...
-go test -race ./internal/session ./internal/store
-go vet ./...
+GOTOOLCHAIN=go1.26.8 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
 
-說明：
-
-- `go test -exec /usr/bin/true ./...` 用於確認所有 package 與測試均可編譯。
-- `internal/session` 與 `internal/store` 可直接執行並進行 race 測試。
-- 若要實際執行 `internal/app` 測試，需先 `go test -c`，再用 `install_name_tool -add_rpath "$PWD/internal/purchase/native"` 加入 StoreKit bridge rpath。
-- `build.sh` / `run.sh` 已內建應用程式所需的動態庫處理。
+`go test -exec /usr/bin/true` 只會確認測試可以編譯，不能當作測試通過。`build.sh` / `run.sh` 已內建應用程式所需的動態庫處理。
 
 ## 授權與內購
 
@@ -200,7 +218,21 @@ go vet ./...
 - 以 `AppStore.sync()` 進行還原購買
 - Go 層只吃 JSON 結果，不直接處理 Apple 原生交易物件
 
-## Restful API Server
+## MCP 與 REST API
+
+MCP 提供本機 stdio 與 Streamable HTTP 兩種傳輸；REST API、StoreKit、GUI 與封裝流程使用各自的入口。
+
+- 設定頁 `MCP > 本機` 顯示目前執行檔的絕對路徑，MCP client 使用 `command` 與 `args: ["mcp"]`；不開啟 GUI 或 tray，不必啟用 HTTP。
+- stdio 先完成協定啟動與工具探索，首次查詢站台時才載入保存狀態。Keychain 使用禁止互動的存取方式，資料鎖等待上限 2 秒；需要授權或資料忙碌時明確回報，RAM 操作仍可使用。桌面版保留原有授權流程。
+- 本機 stdio 提供 RAM workspace 與已儲存站台的 VFS。先呼叫 `vfs_workspace_info`，再以 `vfs_list` 探索；根資源 URI 為 `integterm-vfs://workspace/mcp`。
+- 設定頁 `MCP > HTTP` 使用既有 REST 啟停與埠設定，Streamable HTTP endpoint 為 `http://127.0.0.1:<port>/mcp`；此模式另提供既有 REST 操作對應的 MCP tools。
+- HTTP 與 REST 共用 Bearer 驗證、loopback listener 及嚴格 Origin 檢查。stdio 與 HTTP 不共用同一個 RAM workspace；同一個 HTTP server 的 clients 則共用它的 workspace。
+- Markdown 預覽、匯出與 MCP client 設定範例只含 `<YOUR_API_TOKEN>`，真 Token 僅在專屬顯示／複製操作提供。
+- RAM 上限 32 MiB／4096 節點；chunk 暫存另外限 32 MiB／64 筆，路徑最多 4096 bytes／64 層，遠端掛載最多 64 個。遠端寫入先傳至暫存檔再提交；SFTP 覆寫需要 POSIX rename extension，不支援時保留原檔並回報錯誤。
+- `update_config` 會替換完整設定，須先呼叫 `get_config`，修改後帶回全部欄位。
+- MCP 依賴 [官方 Go SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.8.0)，HTTP 與 stdio 單一 JSON 訊息均有大小上限。
+
+### Restful API Server
 
 ### 用途
 
@@ -232,11 +264,11 @@ Restful API Server 主要給 AI / automation 使用，不是桌面 GUI 的替代
 
 ### 設定頁 Token 與文件操作
 
-`設定 > AI Skill` 會提供目前 API Token，供本機使用者建立 REST request：
+`設定 > MCP > HTTP` 會提供目前 API Token，供本機使用者建立 REST request：
 
 - Token 預設遮罩，需主動按下眼睛圖示才會顯示。
 - Token 可透過小型複製圖示寫入剪貼簿。
-- 關閉設定視窗或切離 AI Skill 頁面後，前端會清除 Token 顯示狀態。
+- 關閉設定視窗或切離 MCP HTTP 頁面後，前端會清除 Token 顯示狀態。
 - Markdown 複製與匯出使用小型圖示按鈕，並保留 tooltip 與 accessibility label。
 - Token 仍只由既有 Wails bind `GetRESTServerToken()` 提供，不新增免驗證 HTTP 端點。
 
@@ -324,10 +356,10 @@ GET /api/operations/{id}
 - Local Terminal 快捷鍵
 - 語言切換是否立即生效
 - 檔案列表拖拉到目標資料夾
-- `AI Skill` 頁面與 Markdown 輸出 / 複製
-- AI Skill Token 預設遮罩，顯示、隱藏與複製操作正常
+- `MCP` 頁面與 Markdown 輸出 / 複製
+- MCP HTTP Token 預設遮罩，顯示、隱藏與複製操作正常
 - 關閉並重新開啟設定視窗後，Token 會恢復遮罩
-- API 文件中的 Bearer token 與 curl 範例可正常使用
+- API 文件與設定範例僅含 `<YOUR_API_TOKEN>`；填入專屬複製按鈕取得的 Token 後可正常使用
 - 大檔案上下載會立即回 `202`，operation 可查到最終狀態
 - `開啟主視窗`
 - `結束背景服務`

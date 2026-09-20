@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"IntegTERM/internal/model"
@@ -10,56 +11,74 @@ import (
 )
 
 func (a *App) SaveConfig(config model.Config) (model.Config, error) {
-	previousConfig := a.config
-	a.config = config
-	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
-	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
-	if a.config.RESTServerEnabled {
-		a.config.ShowTrayIcon = true
+	a.stateMu.Lock()
+	saved, err := a.saveConfigChangesLocked(config)
+	a.stateMu.Unlock()
+	if err != nil {
+		return saved, err
 	}
-	if !a.config.RememberWindowPosition {
-		a.config.WindowWidth = 0
-		a.config.WindowHeight = 0
-		a.config.WindowX = 0
-		a.config.WindowY = 0
-	}
-	if !a.config.RestoreTabsOnStart {
-		a.config.LastActiveTab = ""
-		if err := a.store.SaveTabs([]model.Tab{}); err != nil {
-			return a.config, err
-		}
-	}
+	return a.ReloadRuntimeConfig()
+}
 
-	if a.allowRESTAttach {
-		if err := a.store.SaveConfig(a.config); err != nil {
-			a.config = previousConfig
-			return a.config, err
-		}
-		if shouldRunBackgroundService(a.config) {
-			if err := a.ensureBackgroundService(); err != nil {
-				a.config = previousConfig
-				_ = a.store.SaveConfig(previousConfig)
-				return a.config, err
+func (a *App) saveConfigChangesLocked(config model.Config) (model.Config, error) {
+	previous := cloneConfig(a.config)
+	if a.storageInitErr != nil {
+		return previous, a.storageInitErr
+	}
+	// General preferences cannot grant/revoke a StoreKit entitlement.
+	config.ProUnlock = previous.ProUnlock
+	saved, err := a.store.UpdateConfig(func(latest *model.Config) error {
+		before, requested, target := reflect.ValueOf(previous), reflect.ValueOf(config), reflect.ValueOf(latest).Elem()
+		for i := 0; i < target.NumField(); i++ {
+			if target.Type().Field(i).Name == "ProUnlock" || target.Type().Field(i).Name == "SiteFolders" {
+				continue
+			}
+			if !reflect.DeepEqual(before.Field(i).Interface(), requested.Field(i).Interface()) {
+				target.Field(i).Set(requested.Field(i))
 			}
 		}
-		a.syncAttachedRESTState()
-	} else {
-		if err := a.applyRESTServerConfig(); err != nil {
-			a.config = previousConfig
-			_ = a.applyRESTServerConfig()
-			return a.config, err
+		latest.SiteFolders = sanitizeSiteFolders(latest.SiteFolders, nil)
+		latest.RESTServerPort = sanitizeRESTServerPort(latest.RESTServerPort)
+		latest.ProUnlock = false
+		if latest.RESTServerEnabled {
+			latest.ShowTrayIcon = true
 		}
-		if err := a.store.SaveConfig(a.config); err != nil {
-			return a.config, err
+		if !latest.RememberWindowPosition {
+			latest.WindowWidth = 0
+			latest.WindowHeight = 0
+			latest.WindowX = 0
+			latest.WindowY = 0
+		}
+		if !latest.RestoreTabsOnStart {
+			latest.LastActiveTab = ""
+		}
+		return nil
+	})
+	if err != nil {
+		return previous, err
+	}
+	a.config = saved
+	a.config.ProUnlock = a.verifiedProUnlock
+	if !a.config.RestoreTabsOnStart {
+		if err := a.store.SaveTabs([]model.Tab{}); err != nil {
+			return cloneConfig(a.config), err
 		}
 	}
-	if a.config.RestoreTabsOnStart {
-		return a.config, a.persistTabs()
+	if a.allowRESTAttach && a.config.RestoreTabsOnStart {
+		if err := a.persistTabs(); err != nil {
+			return cloneConfig(a.config), err
+		}
 	}
-	return a.config, nil
+	return cloneConfig(a.config), nil
 }
 
 func (a *App) persistTabs() error {
+	if a.storageInitErr != nil {
+		return a.storageInitErr
+	}
+	if !a.allowRESTAttach {
+		return nil
+	}
 	if !a.config.RestoreTabsOnStart {
 		return a.store.SaveTabs([]model.Tab{})
 	}
@@ -72,18 +91,22 @@ func (a *App) persistTabs() error {
 }
 
 func (a *App) SetProUnlock(enabled bool) (model.Config, error) {
-	a.config.ProUnlock = enabled
-	return a.config, a.store.SaveConfig(a.config)
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return cloneConfig(a.config), fmt.Errorf("Pro entitlement can only be changed by verified purchase results")
 }
 
 func (a *App) currentTabLimit() int {
-	if a.config.ProUnlock {
+	if a.verifiedProUnlock {
 		return 0
 	}
 	return freePlanTabLimit
 }
 
 func (a *App) ensureTabCreationAllowed() error {
+	if a.storageInitErr != nil {
+		return a.storageInitErr
+	}
 	limit := a.currentTabLimit()
 	if limit == 0 {
 		return nil
@@ -94,7 +117,15 @@ func (a *App) ensureTabCreationAllowed() error {
 	return fmt.Errorf("目前未解鎖 Pro，最多只能開啟 %d 個 TAB", limit)
 }
 
+func (a *App) appContext() context.Context {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.ctx
+}
+
 func (a *App) purchaseContext() context.Context {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
 	if a.ctx != nil {
 		return a.ctx
 	}
@@ -102,19 +133,16 @@ func (a *App) purchaseContext() context.Context {
 }
 
 func (a *App) applyPurchaseState(state purchase.State) error {
+	a.verifiedProUnlock = state.ProUnlock
 	a.config.ProUnlock = state.ProUnlock
-	return a.store.SaveConfig(a.config)
+	return nil
 }
 
 func (a *App) mergePurchaseStatus(state purchase.State, sourceErr error) model.PurchaseStatus {
-	proUnlock := a.config.ProUnlock || state.ProUnlock
-	planName := strings.TrimSpace(state.PlanName)
-	if planName == "" {
-		if proUnlock {
-			planName = "Pro"
-		} else {
-			planName = "Free"
-		}
+	proUnlock := a.verifiedProUnlock
+	planName := "Free"
+	if proUnlock {
+		planName = "Pro"
 	}
 
 	statusMessage := strings.TrimSpace(state.StatusMessage)

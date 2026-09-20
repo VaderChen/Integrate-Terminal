@@ -2729,3 +2729,60 @@ select {
   background: rgba(84, 72, 49, 0.28);
   border-radius: 999px;
 }
+
+
+.settings-mcp-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-mcp-tab {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface-soft-2);
+  color: var(--app-muted);
+}
+
+.settings-mcp-tab.active {
+  background: color-mix(in srgb, var(--app-primary) 12%, var(--app-surface-soft-2));
+  border-color: var(--app-primary);
+  color: var(--app-primary);
+}
+
+.settings-mcp-separation-hint {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-mcp-endpoint-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.settings-mcp-config {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-skill-details summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.settings-skill-details .settings-skill-actions {
+  margin-top: 10px;
+}

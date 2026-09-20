@@ -53,15 +53,11 @@ func migrateLegacyDataDir(targetDir string) {
 		return
 	}
 
-	if _, err := os.Stat(targetDir); err == nil {
-		return
-	}
-
 	if _, err := os.Stat(legacyDir); err != nil {
 		return
 	}
 
-	_ = os.MkdirAll(targetDir, 0o755)
+	_ = os.MkdirAll(targetDir, 0o700)
 	for _, name := range []string{"sites.json", "tabs.json", "config.json"} {
 		sourcePath := filepath.Join(legacyDir, name)
 		destPath := filepath.Join(targetDir, name)
@@ -77,7 +73,7 @@ func migrateLegacyDataDir(targetDir string) {
 		if err != nil {
 			continue
 		}
-		_ = os.WriteFile(destPath, data, 0o644)
+		_ = os.WriteFile(destPath, data, 0o600)
 	}
 }
 

@@ -2,9 +2,20 @@ package transport
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"time"
 )
+
+// ValidateEntryName rejects server-controlled paths before they are joined to a
+// local or remote parent. Both separators are rejected on every platform.
+func ValidateEntryName(name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") {
+		return fmt.Errorf("invalid remote entry name: %q", name)
+	}
+	return nil
+}
 
 func isHiddenName(name string) bool {
 	return len(name) > 0 && name[0] == '.'

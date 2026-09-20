@@ -31,11 +31,12 @@ func (m *Manager) Connect(tab model.Tab) (string, error) {
 	}
 
 	m.mu.Lock()
-	if existing, ok := m.clients[tab.ID]; ok {
-		_ = existing.Close()
-	}
+	existing := m.clients[tab.ID]
 	m.clients[tab.ID] = client
 	m.mu.Unlock()
+	if existing != nil {
+		_ = existing.Close()
+	}
 
 	currentDir, err := client.CurrentDir()
 	if err != nil || currentDir == "" {
@@ -68,7 +69,7 @@ func (m *Manager) ListRemote(tabID string, remotePath string) ([]model.FileEntry
 	client, ok := m.clients[tabID]
 	m.mu.RUnlock()
 	if !ok {
-		return []model.FileEntry{}, nil
+		return nil, fmt.Errorf("tab not connected")
 	}
 	return client.List(remotePath)
 }

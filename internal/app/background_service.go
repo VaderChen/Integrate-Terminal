@@ -19,9 +19,10 @@ func (a *App) ReloadConfig() model.Config {
 	cfg, err := a.store.LoadConfig()
 	if err == nil {
 		a.config = cfg
+		a.config.ProUnlock = a.verifiedProUnlock
 		a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
 	}
-	return a.config
+	return cloneConfig(a.config)
 }
 
 func (a *App) ConnectionCounts() (background int, foreground int) {
@@ -40,10 +41,10 @@ func (a *App) ConnectionCounts() (background int, foreground int) {
 	return background, foreground
 }
 
-func (a *App) ensureBackgroundService() error {
+func (a *App) ensureBackgroundService(config model.Config) error {
 	if a.backgroundServiceRunning() {
-		if a.config.RESTServerEnabled {
-			baseURL := fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(a.config.RESTServerPort))
+		if config.RESTServerEnabled {
+			baseURL := fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(config.RESTServerPort))
 			for range 15 {
 				if detectExistingRESTServer(baseURL) {
 					return nil
@@ -54,7 +55,7 @@ func (a *App) ensureBackgroundService() error {
 		return nil
 	}
 
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(a.config.RESTServerPort))
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(config.RESTServerPort))
 	executablePath, err := os.Executable()
 	if err != nil {
 		return err
@@ -66,7 +67,7 @@ func (a *App) ensureBackgroundService() error {
 		return err
 	}
 
-	if !a.config.RESTServerEnabled {
+	if !config.RESTServerEnabled {
 		for range 15 {
 			if a.backgroundServiceRunning() {
 				return nil
@@ -126,7 +127,7 @@ func (a *App) UnregisterBackgroundService() error {
 	return os.Remove(a.backgroundServicePIDPath())
 }
 
-func (a *App) syncAttachedRESTState() {
+func (a *App) syncAttachedRESTState(config model.Config, allowAttach bool) {
 	a.restServerMu.Lock()
 	defer a.restServerMu.Unlock()
 
@@ -134,11 +135,11 @@ func (a *App) syncAttachedRESTState() {
 	a.restAttached = false
 	a.restServerURL = ""
 
-	if !a.allowRESTAttach || !a.config.RESTServerEnabled {
+	if !allowAttach || !config.RESTServerEnabled {
 		return
 	}
 
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(a.config.RESTServerPort))
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(config.RESTServerPort))
 	if detectExistingRESTServer(baseURL) {
 		a.restAttached = true
 		a.restServerURL = baseURL
@@ -146,26 +147,27 @@ func (a *App) syncAttachedRESTState() {
 }
 
 func (a *App) ReloadRuntimeConfig() (model.Config, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
+	// Never hold stateMu while Shutdown drains requests that also need it.
+	a.runtimeConfigMu.Lock()
+	defer a.runtimeConfigMu.Unlock()
 	cfg, err := a.store.LoadConfig()
 	if err != nil {
-		return a.config, err
+		return a.GetConfig(), err
 	}
-
-	previousConfig := a.config
+	a.stateMu.Lock()
+	cfg.ProUnlock = a.verifiedProUnlock
+	cfg.RESTServerPort = sanitizeRESTServerPort(cfg.RESTServerPort)
 	a.config = cfg
-	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
-
-	if a.allowRESTAttach {
-		a.syncAttachedRESTState()
-		return a.config, nil
+	allowAttach := a.allowRESTAttach
+	a.stateMu.Unlock()
+	if allowAttach {
+		if shouldRunBackgroundService(cfg) {
+			if err := a.ensureBackgroundService(cfg); err != nil {
+				return cloneConfig(cfg), err
+			}
+		}
+		a.syncAttachedRESTState(cfg, allowAttach)
+		return cloneConfig(cfg), nil
 	}
-
-	if err := a.applyRESTServerConfig(); err != nil {
-		a.config = previousConfig
-		_ = a.applyRESTServerConfig()
-		return a.config, err
-	}
-	return a.config, nil
+	return cloneConfig(cfg), a.applyRESTServerConfig(cfg, allowAttach)
 }

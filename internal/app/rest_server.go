@@ -12,13 +12,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"IntegTERM/internal/crashlog"
 	"IntegTERM/internal/model"
+	"IntegTERM/internal/store"
 )
 
 const defaultRESTServerPort = 18080
@@ -69,53 +72,60 @@ func sanitizeRESTServerPort(port int) int {
 }
 
 func loadOrCreateRESTToken(baseDir string) string {
-	tokenPath := filepath.Join(baseDir, restTokenFilename)
-	if data, err := os.ReadFile(tokenPath); err == nil {
-		if token := strings.TrimSpace(string(data)); token != "" {
-			return token
+	token := ""
+	err := store.New(baseDir).WithTransaction(func(_ *store.Transaction) error {
+		tokenPath := filepath.Join(baseDir, restTokenFilename)
+		if data, err := os.ReadFile(tokenPath); err == nil {
+			if token = strings.TrimSpace(string(data)); token != "" {
+				return nil
+			}
 		}
-	}
-
-	buffer := make([]byte, 32)
-	if _, err := rand.Read(buffer); err != nil {
-		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
-	}
-	token := hex.EncodeToString(buffer)
-	if err := os.MkdirAll(baseDir, 0o755); err == nil {
-		_ = os.WriteFile(tokenPath, []byte(token+"\n"), 0o600)
-	}
+		buffer := make([]byte, 32)
+		if _, err := rand.Read(buffer); err != nil {
+			return err
+		}
+		token = hex.EncodeToString(buffer)
+		return os.WriteFile(tokenPath, []byte(token+"\n"), 0o600)
+	})
+	if err != nil {
+		return ""
+	} // Failure must not create divergent/predictable tokens.
 	return token
 }
 
-func (a *App) applyRESTServerConfig() error {
+func (a *App) applyRESTServerConfig(config model.Config, allowAttach bool) error {
+	port := sanitizeRESTServerPort(config.RESTServerPort)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	a.restServerMu.Lock()
+	if config.RESTServerEnabled && a.restServer != nil && a.restServerURL == baseURL {
+		a.restServerMu.Unlock()
+		return nil
+	}
+	previous := a.detachRESTServerLocked()
+	a.restServerMu.Unlock()
+	if err := shutdownRESTServer(previous); err != nil {
+		return err
+	}
+	if !config.RESTServerEnabled {
+		return nil
+	}
 	a.restServerMu.Lock()
 	defer a.restServerMu.Unlock()
-
-	a.config.RESTServerPort = sanitizeRESTServerPort(a.config.RESTServerPort)
-	if !a.config.RESTServerEnabled {
-		return a.stopRESTServerLocked()
-	}
-	return a.startRESTServerLocked()
+	return a.startRESTServerLocked(port, allowAttach)
 }
 
 func (a *App) applyRESTServerShutdown() error {
+	a.runtimeConfigMu.Lock()
+	defer a.runtimeConfigMu.Unlock()
 	a.restServerMu.Lock()
-	defer a.restServerMu.Unlock()
-	return a.stopRESTServerLocked()
+	previous := a.detachRESTServerLocked()
+	a.restServerMu.Unlock()
+	return shutdownRESTServer(previous)
 }
 
-func (a *App) startRESTServerLocked() error {
-	port := sanitizeRESTServerPort(a.config.RESTServerPort)
+func (a *App) startRESTServerLocked(port int, allowAttach bool) error {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	if a.restServer != nil {
-		if a.restServerURL == baseURL {
-			return nil
-		}
-		if err := a.stopRESTServerLocked(); err != nil {
-			return err
-		}
-	}
-	if a.allowRESTAttach {
+	if allowAttach {
 		if attached := detectExistingRESTServer(baseURL); attached {
 			a.restServer = nil
 			a.restServerURL = baseURL
@@ -148,9 +158,11 @@ func (a *App) startRESTServerLocked() error {
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			a.restServerMu.Lock()
-			a.restServer = nil
-			a.restServerURL = ""
-			a.restAttached = false
+			if a.restServer == server {
+				a.restServer = nil
+				a.restServerURL = ""
+				a.restAttached = false
+			}
 			a.restServerMu.Unlock()
 		}
 	}()
@@ -158,32 +170,34 @@ func (a *App) startRESTServerLocked() error {
 	return nil
 }
 
-func (a *App) stopRESTServerLocked() error {
-	if a.restAttached {
-		a.restAttached = false
-		a.restServerURL = ""
-		a.restServer = nil
-		return nil
-	}
-	if a.restServer == nil {
-		a.restServerURL = ""
-		a.restAttached = false
-		return nil
-	}
+func (a *App) detachRESTServerLocked() *http.Server {
 	server := a.restServer
 	a.restServer = nil
 	a.restServerURL = ""
 	a.restAttached = false
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	return server.Shutdown(ctx)
+	return server
 }
 
-func (a *App) GetRESTServerStatus() model.RESTServerStatus {
+func shutdownRESTServer(server *http.Server) error {
+	if server == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		// Ensure timed-out requests cannot leave an untracked old service alive.
+		_ = server.Close()
+		return err
+	}
+	return nil
+}
+
+func (a *App) getRESTServerStatusLocked() model.RESTServerStatus {
 	a.restServerMu.Lock()
 	defer a.restServerMu.Unlock()
 	return model.RESTServerStatus{
 		Enabled:  a.config.RESTServerEnabled,
+		MCPURL:   fmt.Sprintf("http://127.0.0.1:%d/mcp", sanitizeRESTServerPort(a.config.RESTServerPort)),
 		Running:  a.restServer != nil || a.restAttached,
 		BaseURL:  a.restServerURL,
 		Port:     sanitizeRESTServerPort(a.config.RESTServerPort),
@@ -218,6 +232,14 @@ func detectExistingRESTServer(baseURL string) bool {
 
 func (a *App) restMux() http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("/mcp", a.newMCPHTTPHandler())
+	mux.Handle("/", a.restRoutesMux())
+	return a.withRESTSecurity(mux)
+}
+
+// Internal MCP dispatch uses the same REST handlers after its transport is authorized.
+func (a *App) restRoutesMux() http.Handler {
+	mux := http.NewServeMux()
 	mux.HandleFunc("/api/docs.md", a.handleRESTDocsMarkdown)
 	mux.HandleFunc("/api/status", a.handleRESTStatus)
 	mux.HandleFunc("/api/sites", a.handleRESTSites)
@@ -247,7 +269,7 @@ func (a *App) restMux() http.Handler {
 	mux.HandleFunc("/api/transfers", a.handleRESTTransfers)
 	mux.HandleFunc("/api/logs", a.handleRESTLogs)
 	mux.HandleFunc("/api/config", a.handleRESTConfig)
-	return a.withRESTSecurity(mux)
+	return mux
 }
 
 func (a *App) withRESTSecurity(next http.Handler) http.Handler {
@@ -267,7 +289,7 @@ func (a *App) withRESTSecurity(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-IntegTERM-Token")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-IntegTERM-Token, MCP-Protocol-Version, MCP-Session-Id, MCP-Method, MCP-Params")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -278,22 +300,7 @@ func (a *App) withRESTSecurity(next http.Handler) http.Handler {
 			return
 		}
 
-		if isRESTStatePath(r.URL.Path) {
-			needsWriteLock := r.Method != http.MethodGet || strings.HasPrefix(r.URL.Path, "/api/sites")
-			if !needsWriteLock {
-				a.stateMu.RLock()
-				defer a.stateMu.RUnlock()
-			} else {
-				a.stateMu.Lock()
-				defer a.stateMu.Unlock()
-				if strings.HasPrefix(r.URL.Path, "/api/sites") {
-					if err := a.reloadSitesFromStoreLocked(); err != nil {
-						writeError(w, http.StatusInternalServerError, "reload sites: "+err.Error())
-						return
-					}
-				}
-			}
-		}
+		w.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -310,18 +317,20 @@ func (a *App) isAuthorizedRESTRequest(r *http.Request) bool {
 }
 
 func isAllowedRESTOrigin(origin string) bool {
-	return strings.HasPrefix(origin, "http://127.0.0.1:") ||
-		strings.HasPrefix(origin, "http://localhost:") ||
-		origin == "http://127.0.0.1" ||
-		origin == "http://localhost"
-}
-
-func isRESTStatePath(requestPath string) bool {
-	return requestPath == "/api/status" ||
-		requestPath == "/api/docs.md" ||
-		strings.HasPrefix(requestPath, "/api/sites") ||
-		strings.HasPrefix(requestPath, "/api/tabs") ||
-		requestPath == "/api/config"
+	value, err := url.Parse(origin)
+	if err != nil || value.Scheme != "http" || value.User != nil || value.Path != "" || value.RawQuery != "" || value.Fragment != "" {
+		return false
+	}
+	switch value.Hostname() {
+	case "localhost", "127.0.0.1", "::1":
+	default:
+		return false
+	}
+	if port := value.Port(); port != "" {
+		number, err := strconv.Atoi(port)
+		return err == nil && number > 0 && number <= 65535
+	}
+	return true
 }
 
 func mustOpenCrashLogWriter() *os.File {

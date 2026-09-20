@@ -13,3 +13,17 @@ frontend/node_modules/
 *.zip
 *.log
 
+
+# Local configuration and generated artifacts
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.ppk
+*.provisionprofile
+*.mobileprovision
+*.exe
+doc/*.csv

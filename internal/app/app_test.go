@@ -61,7 +61,8 @@ func TestEnsureTabCreationAllowed_FreePlanAtLimit(t *testing.T) {
 
 func TestEnsureTabCreationAllowed_ProUnlockUnlimited(t *testing.T) {
 	instance := &App{
-		config: model.Config{ProUnlock: true},
+		verifiedProUnlock: true,
+		config:            model.Config{ProUnlock: true},
 		tabs: []model.Tab{
 			{ID: "tab-1"},
 			{ID: "tab-2"},
@@ -74,7 +75,7 @@ func TestEnsureTabCreationAllowed_ProUnlockUnlimited(t *testing.T) {
 	}
 }
 
-func TestMergePurchaseStatusPrefersUnlockedConfig(t *testing.T) {
+func TestMergePurchaseStatusRejectsUnverifiedConfig(t *testing.T) {
 	instance := &App{
 		config: model.Config{ProUnlock: true},
 		tabs: []model.Tab{
@@ -92,10 +93,10 @@ func TestMergePurchaseStatusPrefersUnlockedConfig(t *testing.T) {
 		CanPurchase: true,
 		CanRestore:  true,
 	}, nil)
-	if !status.ProUnlock {
-		t.Fatal("expected purchase status to remain unlocked when config is unlocked")
+	if status.ProUnlock {
+		t.Fatal("an editable config must not unlock Pro")
 	}
-	if status.MaxTabs != 0 {
-		t.Fatalf("expected unlimited tabs for unlocked state, got %d", status.MaxTabs)
+	if status.MaxTabs != freePlanTabLimit {
+		t.Fatalf("expected free limit, got %d", status.MaxTabs)
 	}
 }

@@ -49,12 +49,12 @@ export function FileActionContextMenu({
       <button className="context-menu-item" onMouseDown={(event) => handleMenuAction(event, onCreateDirectory)}>
         {t.newFolder}
       </button>
-      {request.entry ? (
+      {request.entry && request.entry.name !== '..' && request.entry.name !== '.' ? (
         <button className="context-menu-item" onMouseDown={(event) => handleMenuAction(event, onRenameEntry)}>
           {t.renameItem}
         </button>
       ) : null}
-      {request.entry ? (
+      {request.entry && request.entry.name !== '..' && request.entry.name !== '.' ? (
         <button className="context-menu-item danger" onMouseDown={(event) => handleMenuAction(event, onDeleteEntry)}>
           {t.deleteItem}
         </button>

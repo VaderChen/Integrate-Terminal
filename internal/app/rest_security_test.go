@@ -9,7 +9,6 @@ import (
 
 	"IntegTERM/internal/model"
 	"IntegTERM/internal/session"
-	"IntegTERM/internal/store"
 )
 
 func TestRESTSecurityRequiresToken(t *testing.T) {
@@ -34,7 +33,7 @@ func TestRESTSecurityRequiresToken(t *testing.T) {
 }
 
 func TestServiceShutdownDoesNotOverwriteSitesSavedByUI(t *testing.T) {
-	sharedStore := store.New(t.TempDir())
+	sharedStore := newAppTestStore(t.TempDir())
 	staleSites := []model.Site{{ID: "old", Name: "Old", Host: "old.example.com"}}
 	latestSites := []model.Site{{ID: "new", Name: "New", Host: "new.example.com"}}
 	if err := sharedStore.SaveSites(staleSites); err != nil {
@@ -57,7 +56,7 @@ func TestServiceShutdownDoesNotOverwriteSitesSavedByUI(t *testing.T) {
 }
 
 func TestReloadSitesFromStoreUsesLatestUIState(t *testing.T) {
-	sharedStore := store.New(t.TempDir())
+	sharedStore := newAppTestStore(t.TempDir())
 	latestSites := []model.Site{{ID: "new", Name: "New", Host: "new.example.com"}}
 	if err := sharedStore.SaveSites(latestSites); err != nil {
 		t.Fatalf("save latest sites: %v", err)

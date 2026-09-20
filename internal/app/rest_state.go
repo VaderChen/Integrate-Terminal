@@ -24,30 +24,38 @@ func (a *App) handleRESTLogs(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleRESTConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, configEnvelope{Config: a.config})
+		writeJSON(w, http.StatusOK, configEnvelope{Config: a.GetConfig()})
 	case http.MethodPut:
 		var payload configEnvelope
 		if err := decodeJSON(r, &payload); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		config, err := a.SaveConfig(payload.Config)
+		a.stateMu.Lock()
+		config, err := a.saveConfigChangesLocked(payload.Config)
+		a.stateMu.Unlock()
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, configEnvelope{Config: config})
+		// Shutdown must run outside the handler it is waiting to drain.
+		go func() {
+			if _, err := a.ReloadRuntimeConfig(); err != nil {
+				a.sessionManager.AppendLog("更新 REST 設定失敗: "+err.Error(), "failed")
+			}
+		}()
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-func (a *App) GetRESTServerPort() int {
+func (a *App) getRESTServerPortLocked() int {
 	return sanitizeRESTServerPort(a.config.RESTServerPort)
 }
 
-func (a *App) GetRESTServerBaseURL() string {
-	status := a.GetRESTServerStatus()
+func (a *App) getRESTServerBaseURLLocked() string {
+	status := a.getRESTServerStatusLocked()
 	if status.BaseURL != "" {
 		return status.BaseURL
 	}

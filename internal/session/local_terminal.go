@@ -15,13 +15,14 @@ import (
 )
 
 type localTerminalSession struct {
-	id           string
-	cmd          *exec.Cmd
-	ptyFile      *os.File
-	lock         sync.Mutex
-	outputBuffer []byte
-	started      bool
-	startupBytes []byte
+	id             string
+	cmd            *exec.Cmd
+	ptyFile        *os.File
+	lock           sync.Mutex
+	outputBuffer   []byte
+	outputSequence uint64
+	started        bool
+	startupBytes   []byte
 }
 
 func (m *Manager) StartLocalSession(ctx context.Context, cwd string) (string, error) {
@@ -88,12 +89,12 @@ func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalS
 						continue
 					}
 				}
-				session.outputBuffer = appendTerminalOutput(session.outputBuffer, visibleChunk)
-				session.lock.Unlock()
-				if len(visibleChunk) == 0 {
-					continue
+				if len(visibleChunk) > 0 {
+					session.outputBuffer = appendTerminalOutput(session.outputBuffer, visibleChunk)
+					session.outputSequence++
+					emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk), session.outputSequence)
 				}
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk))
+				session.lock.Unlock()
 			}
 		}
 		if err != nil {
@@ -103,8 +104,9 @@ func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalS
 			if len(pending) > 0 {
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, pending)
+				session.outputSequence++
+				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending), session.outputSequence)
 				session.lock.Unlock()
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending))
 			}
 			if err != io.EOF {
 				emitSessionEvent(ctx, fmt.Sprintf("ssh:error:%s", session.id), err.Error())

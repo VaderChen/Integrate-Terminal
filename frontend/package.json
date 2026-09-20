@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test tests/*.test.cjs",
     "build": "tsc && vite build",
     "preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.2.0",
@@ -20,8 +24,8 @@
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^7.3.6"
   }
 }

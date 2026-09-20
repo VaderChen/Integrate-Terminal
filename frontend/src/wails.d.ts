@@ -52,6 +52,7 @@ declare global {
           ClearLogs: () => Promise<import('./types').LogItem[]>;
           StartSSHSession: (site: import('./types').Site) => Promise<string>;
           StartTelnetSession: (site: import('./types').Site) => Promise<string>;
+          GetTerminalOutputSnapshot: (sessionID: string) => Promise<import('./components/terminalOutput').TerminalOutputSnapshot>;
           GetSSHOutputBuffer: (sessionID: string) => Promise<string>;
           ListSystemFonts: () => Promise<string[]>;
           WriteSSHInput: (sessionID: string, data: string) => Promise<void>;
@@ -59,6 +60,7 @@ declare global {
           CloseSSHSession: (sessionID: string) => Promise<void>;
           ResetWindowToDefaultScale: () => Promise<void>;
           GetRestAPIDocsMarkdown: () => Promise<string>;
+          GetMCPStdioExecutable: () => Promise<string>;
           ExportRestAPIDocsMarkdown: () => Promise<string>;
           GetRESTServerStatus: () => Promise<import('./types').RestServerStatus>;
           GetRESTServerToken: () => Promise<string>;

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -21,7 +22,7 @@ func (m *Manager) UploadPaths(tabID string, localPaths []string, remoteBase stri
 	for _, localPath := range localPaths {
 		displayPath := filepath.Base(localPath)
 		if err := m.uploadPathWithQueue(client, localPath, path.Join(remoteBase, displayPath), displayPath); err != nil {
-			if err == transport.ErrTransferCancelled {
+			if errors.Is(err, transport.ErrTransferCancelled) {
 				continue
 			}
 			m.addLog(fmt.Sprintf("拖曳上傳失敗: %s", displayPath), "failed")
@@ -68,7 +69,7 @@ func (m *Manager) UploadPathsWithSite(site model.Site, localPaths []string, remo
 		targetPath := path.Join(resolvedRemoteBase, displayPath)
 		m.addLog(fmt.Sprintf("SSH 拖曳上傳目標檔案: %s", targetPath), "running")
 		if err := m.uploadPathWithQueue(client, localPath, targetPath, displayPath); err != nil {
-			if err == transport.ErrTransferCancelled {
+			if errors.Is(err, transport.ErrTransferCancelled) {
 				continue
 			}
 			m.addLog(fmt.Sprintf("拖曳上傳失敗: %s -> %s (%v)", displayPath, targetPath, err), "failed")
@@ -107,8 +108,11 @@ func (m *Manager) DownloadPaths(tabID string, remotePaths []string, localBase st
 
 	for _, remotePath := range remotePaths {
 		displayPath := path.Base(remotePath)
+		if err := transport.ValidateEntryName(displayPath); err != nil {
+			return err
+		}
 		if err := m.downloadPathWithQueue(client, remotePath, filepath.Join(localBase, displayPath), displayPath); err != nil {
-			if err == transport.ErrTransferCancelled {
+			if errors.Is(err, transport.ErrTransferCancelled) {
 				continue
 			}
 			m.addLog(fmt.Sprintf("拖曳下載失敗: %s", displayPath), "failed")

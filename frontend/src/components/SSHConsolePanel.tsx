@@ -6,6 +6,8 @@ import { ClipboardSetText, EventsOn } from '../../wailsjs/runtime/runtime';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { type Locale, useI18n } from '../i18n';
+import { decodeFileDrag } from '../filePanelState';
+import { attachTerminalOutput } from './terminalOutput';
 import {
   FALLBACK_FONT_FAMILIES,
   FONT_SIZES,
@@ -129,7 +131,7 @@ export function SSHConsolePanel({
         && (event.metaKey || (!IS_MAC && event.ctrlKey));
       if (isClipboardPaste) {
         event.preventDefault();
-        void pasteClipboard(sessionId);
+        void pasteClipboard(term);
         return false;
       }
 
@@ -156,24 +158,26 @@ export function SSHConsolePanel({
       void window.go?.app?.App?.WriteSSHInput?.(sessionId, data);
     });
 
-    void (async () => {
-      const backlog = await window.go?.app?.App?.GetSSHOutputBuffer?.(sessionId);
+    const output = attachTerminalOutput({
+      subscribe: listener => EventsOn(`ssh:output:${sessionId}`, listener),
+      readSnapshot: async () => await window.go?.app?.App?.GetTerminalOutputSnapshot?.(sessionId) ?? { output: '', sequence: 0 },
+      write: (data, replay) => term.write(replay ? sanitizeTerminalReplay(data) : data),
+    });
+    disposeOutput = output.dispose;
+    disposeClosed = EventsOn(`ssh:closed:${sessionId}`, () => {
+      void output.ready.then(() => { if (!disposed) term.write(`\r\n${t.sshConnectionClosed}\r\n`); }).catch(() => {});
+    });
+    disposeError = EventsOn(`ssh:error:${sessionId}`, (message: string) => {
+      if (!disposed) term.write(`\r\n${t.errorPrefix} ${message}\r\n`);
+    });
+    void output.ready.then(async () => {
       if (disposed) return;
-      if (backlog) {
-        term.write(sanitizeTerminalReplay(backlog));
-      }
-      disposeOutput = EventsOn(`ssh:output:${sessionId}`, (data: string) => {
-        term.write(data);
-      });
-      disposeClosed = EventsOn(`ssh:closed:${sessionId}`, () => {
-        term.write(`\r\n${t.sshConnectionClosed}\r\n`);
-      });
-      disposeError = EventsOn(`ssh:error:${sessionId}`, (message: string) => {
-        term.write(`\r\n${t.errorPrefix} ${message}\r\n`);
-      });
       await window.go?.app?.App?.ResizeSSHSession?.(sessionId, term.cols, term.rows);
       if (!disposed) term.focus();
-    })();
+    }).catch((error) => {
+      output.dispose();
+      if (!disposed) term.write(`\r\n${t.errorPrefix} ${String(error)}\r\n`);
+    });
 
     const observer = new ResizeObserver(() => {
       const container = terminalRef.current;
@@ -206,7 +210,8 @@ export function SSHConsolePanel({
         return;
       }
       event.preventDefault();
-      void window.go?.app?.App?.WriteSSHInput?.(sessionId, text);
+      event.stopPropagation();
+      term.paste(text);
     };
     terminalElement.addEventListener('copy', handleCopy);
     terminalElement.addEventListener('paste', handlePaste);
@@ -356,13 +361,9 @@ export function SSHConsolePanel({
             if (!payload) {
               return;
             }
-            try {
-              const paths = JSON.parse(payload) as string[];
-              if (Array.isArray(paths) && paths.length > 0) {
-                onDropLocalPaths?.(paths, getCurrentPromptPath(termRef.current));
-              }
-            } catch {
-              return;
+            const dragged = decodeFileDrag(payload);
+            if (dragged?.side === 'local') {
+              onDropLocalPaths?.(dragged.paths, getCurrentPromptPath(termRef.current));
             }
           }}
           onMouseDown={() => {
@@ -391,7 +392,7 @@ export function SSHConsolePanel({
               <button className="context-menu-item" onMouseDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                void pasteClipboard(sessionId);
+                void pasteClipboard(termRef.current);
                 setContextMenu(null);
               }}>
                 {t.terminalPaste}

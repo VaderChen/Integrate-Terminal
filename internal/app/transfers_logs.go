@@ -1,30 +1,40 @@
 package app
 
-import "IntegTERM/internal/model"
+import (
+	"IntegTERM/internal/model"
+	"fmt"
+)
 
 func (a *App) ListLocal(tabID string, path string) []model.FileEntry {
 	if path == "" {
 		path = defaultLocalPath()
 	}
 	a.markTabActivity(tabID)
-	return filterHiddenEntries(a.sessionManager.SampleLocalFiles(path), a.config.ShowHiddenFiles)
+	a.stateMu.RLock()
+	showHidden := a.config.ShowHiddenFiles
+	a.stateMu.RUnlock()
+	return filterHiddenEntries(a.sessionManager.SampleLocalFiles(path), showHidden)
 }
 
-func (a *App) ListRemote(tabID string, path string) []model.FileEntry {
+func (a *App) ListRemote(tabID string, path string) ([]model.FileEntry, error) {
 	a.markTabActivity(tabID)
+	a.stateMu.RLock()
 	for _, tab := range a.tabs {
 		if tab.ID == tabID && tab.Mode == "terminal" {
-			return []model.FileEntry{}
+			a.stateMu.RUnlock()
+			return nil, fmt.Errorf("tab is not a file connection: %s", tabID)
 		}
 	}
+	showHidden := a.config.ShowHiddenFiles
+	a.stateMu.RUnlock()
 	if path == "" {
 		path = "/"
 	}
 	entries, err := a.sessionManager.ListRemote(tabID, path)
 	if err != nil {
-		return []model.FileEntry{}
+		return nil, err
 	}
-	return filterHiddenEntries(entries, a.config.ShowHiddenFiles)
+	return filterHiddenEntries(entries, showHidden), nil
 }
 
 func (a *App) GetTransfers() []model.TransferItem {

@@ -8,11 +8,11 @@ import (
 	"IntegTERM/internal/session"
 )
 
-func (a *App) GetTabs() []model.Tab {
+func (a *App) getTabsLocked() []model.Tab {
 	return a.tabs
 }
 
-func (a *App) CreateTab(site model.Site) ([]model.Tab, error) {
+func (a *App) createTabLocked(site model.Site) ([]model.Tab, error) {
 	if err := a.ensureTabCreationAllowed(); err != nil {
 		return a.tabs, err
 	}
@@ -31,7 +31,7 @@ func (a *App) CreateTab(site model.Site) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) CreateSSHTab(site model.Site) ([]model.Tab, error) {
+func (a *App) createSSHTabLocked(site model.Site) ([]model.Tab, error) {
 	if err := a.ensureTabCreationAllowed(); err != nil {
 		return a.tabs, err
 	}
@@ -47,7 +47,7 @@ func (a *App) CreateSSHTab(site model.Site) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) CreateTelnetTab(site model.Site) ([]model.Tab, error) {
+func (a *App) createTelnetTabLocked(site model.Site) ([]model.Tab, error) {
 	if err := a.ensureTabCreationAllowed(); err != nil {
 		return a.tabs, err
 	}
@@ -63,7 +63,7 @@ func (a *App) CreateTelnetTab(site model.Site) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) CreateLocalTerminalTab(cwd string) ([]model.Tab, error) {
+func (a *App) createLocalTerminalTabLocked(cwd string) ([]model.Tab, error) {
 	if err := a.ensureTabCreationAllowed(); err != nil {
 		return a.tabs, err
 	}
@@ -79,7 +79,7 @@ func (a *App) CreateLocalTerminalTab(cwd string) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) CloseTab(tabID string) ([]model.Tab, error) {
+func (a *App) closeTabLocked(tabID string) ([]model.Tab, error) {
 	for _, tab := range a.tabs {
 		if tab.ID == tabID {
 			if tab.Mode == "terminal" && tab.SessionID != "" {
@@ -106,7 +106,7 @@ func (a *App) CloseTab(tabID string) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) Connect(tabID string) ([]model.Tab, error) {
+func (a *App) connectLocked(tabID string) ([]model.Tab, error) {
 	for i := range a.tabs {
 		if a.tabs[i].ID == tabID {
 			remotePath, err := a.sessionManager.Connect(a.tabs[i])
@@ -124,7 +124,7 @@ func (a *App) Connect(tabID string) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) Disconnect(tabID string) ([]model.Tab, error) {
+func (a *App) disconnectLocked(tabID string) ([]model.Tab, error) {
 	if err := a.sessionManager.Disconnect(tabID); err != nil {
 		return a.tabs, err
 	}
@@ -138,7 +138,7 @@ func (a *App) Disconnect(tabID string) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) UpdateTabPaths(tabID string, localPath string, remotePath string) ([]model.Tab, error) {
+func (a *App) updateTabPathsLocked(tabID string, localPath string, remotePath string) ([]model.Tab, error) {
 	for i := range a.tabs {
 		if a.tabs[i].ID != tabID {
 			continue
@@ -156,7 +156,7 @@ func (a *App) UpdateTabPaths(tabID string, localPath string, remotePath string) 
 	return a.tabs, fmt.Errorf("tab not found: %s", tabID)
 }
 
-func (a *App) ReorderTabs(tabIDs []string) ([]model.Tab, error) {
+func (a *App) reorderTabsLocked(tabIDs []string) ([]model.Tab, error) {
 	visible := visibleTabs(a.tabs)
 	if len(tabIDs) == len(visible) && len(visible) != len(a.tabs) {
 		tabByID := make(map[string]model.Tab, len(visible))

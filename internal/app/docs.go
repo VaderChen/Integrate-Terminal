@@ -9,7 +9,8 @@ import (
 )
 
 func (a *App) ExportRestAPIDocsMarkdown() (string, error) {
-	if a.ctx == nil {
+	ctx := a.appContext()
+	if ctx == nil {
 		return "", fmt.Errorf("desktop context is not available")
 	}
 
@@ -18,9 +19,9 @@ func (a *App) ExportRestAPIDocsMarkdown() (string, error) {
 		return "", err
 	}
 
-	targetPath, err := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{
+	targetPath, err := wailsruntime.SaveFileDialog(ctx, wailsruntime.SaveDialogOptions{
 		Title:           "匯出 Markdown 文件",
-		DefaultFilename: "integterm-skill.md",
+		DefaultFilename: "integterm-mcp.md",
 		Filters: []wailsruntime.FileFilter{
 			{
 				DisplayName: "Markdown File",
@@ -39,9 +40,12 @@ func (a *App) ExportRestAPIDocsMarkdown() (string, error) {
 		targetPath += ".md"
 	}
 
-	if err := os.WriteFile(targetPath, []byte(markdown), 0o644); err != nil {
+	if err := os.WriteFile(targetPath, []byte(markdown), 0o600); err != nil {
 		return "", err
 	}
 
+	if err := os.Chmod(targetPath, 0o600); err != nil {
+		return "", err
+	}
 	return targetPath, nil
 }

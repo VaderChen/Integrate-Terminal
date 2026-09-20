@@ -195,6 +195,7 @@ export namespace model {
 	    }
 	}
 	export class BootstrapPayload {
+	    storageError?: string;
 	    sites: Site[];
 	    tabs: Tab[];
 	    config: Config;
@@ -210,6 +211,7 @@ export namespace model {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.storageError = source["storageError"];
 	        this.sites = this.convertValues(source["sites"], Site);
 	        this.tabs = this.convertValues(source["tabs"], Tab);
 	        this.config = this.convertValues(source["config"], Config);
@@ -292,6 +294,7 @@ export namespace model {
 	    }
 	}
 	export class RESTServerStatus {
+	    mcpURL: string;
 	    enabled: boolean;
 	    running: boolean;
 	    baseURL: string;
@@ -304,6 +307,7 @@ export namespace model {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mcpURL = source["mcpURL"];
 	        this.enabled = source["enabled"];
 	        this.running = source["running"];
 	        this.baseURL = source["baseURL"];
@@ -345,6 +349,25 @@ export namespace model {
 		}
 	}
 	
+
+}
+
+export namespace session {
+
+	export class TerminalOutputSnapshot {
+	    output: string;
+	    sequence: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TerminalOutputSnapshot(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.output = source["output"];
+	        this.sequence = source["sequence"];
+	    }
+	}
 
 }
 

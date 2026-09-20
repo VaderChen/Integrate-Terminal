@@ -19,13 +19,20 @@ SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 TARGET_ARCH="$(uname -m)"
 TARGET_TRIPLE="${TARGET_ARCH}-apple-macos12.0"
 
+# Relative input and stable source mappings keep the builder's home/volume out
+# of Swift runtime locations, debug metadata and imported Clang source paths.
+cd "$PROJECT_DIR"
 xcrun --sdk macosx swiftc \
   -parse-as-library \
   -emit-library \
   -module-name IntegTERMStoreKit2Bridge \
+  -gnone \
+  -file-compilation-dir . \
+  -file-prefix-map "$PROJECT_DIR=/IntegTERM" \
+  -Xcc "-ffile-prefix-map=$PROJECT_DIR=/IntegTERM" \
   -target "$TARGET_TRIPLE" \
   -sdk "$SDK_PATH" \
   -o "$OUTPUT_LIB" \
-  "$SOURCE_FILE"
+  "internal/purchase/swift/StoreKit2Bridge.swift"
 
 install_name_tool -id "@rpath/libintegtermstorekit2.dylib" "$OUTPUT_LIB"

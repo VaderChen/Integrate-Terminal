@@ -118,6 +118,10 @@ export function GetLogs() {
   return window['go']['app']['App']['GetLogs']();
 }
 
+export function GetMCPStdioExecutable() {
+  return window['go']['app']['App']['GetMCPStdioExecutable']();
+}
+
 export function GetPurchaseStatus() {
   return window['go']['app']['App']['GetPurchaseStatus']();
 }
@@ -154,6 +158,10 @@ export function GetTabs() {
   return window['go']['app']['App']['GetTabs']();
 }
 
+export function GetTerminalOutputSnapshot(arg1) {
+  return window['go']['app']['App']['GetTerminalOutputSnapshot'](arg1);
+}
+
 export function GetTransfers() {
   return window['go']['app']['App']['GetTransfers']();
 }
@@ -168,6 +176,10 @@ export function ListRemote(arg1, arg2) {
 
 export function ListSystemFonts() {
   return window['go']['app']['App']['ListSystemFonts']();
+}
+
+export function MCPStartup() {
+  return window['go']['app']['App']['MCPStartup']();
 }
 
 export function MoveEntriesToDirectory(arg1, arg2, arg3, arg4) {
@@ -228,6 +240,10 @@ export function ResizeSSHSession(arg1, arg2, arg3) {
 
 export function RestorePurchases() {
   return window['go']['app']['App']['RestorePurchases']();
+}
+
+export function RunMCPStdio(arg1) {
+  return window['go']['app']['App']['RunMCPStdio'](arg1);
 }
 
 export function SaveConfig(arg1) {

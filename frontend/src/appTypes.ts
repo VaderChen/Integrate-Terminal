@@ -1,10 +1,10 @@
-import type { HostTrustPrompt, Site, FileEntry } from './types';
+import type { HostTrustPrompt, Site, FileEntry, Tab } from './types';
 import type { FontFamilyId as TerminalFontFamilyId, FontScale as TerminalFontScale } from './components/SSHConsolePanel';
 
-export type ActionDialogState =
+export type ActionDialogState = { tab: Tab; basePath: string } & (
   | { mode: 'mkdir'; side: 'local' | 'remote' }
   | { mode: 'rename'; side: 'local' | 'remote'; entry: FileEntry }
-  | { mode: 'delete'; side: 'local' | 'remote'; entry: FileEntry; entries: FileEntry[] };
+  | { mode: 'delete'; side: 'local' | 'remote'; entry: FileEntry; entries: FileEntry[] });
 
 export type ConnectDialogState = {
   site: Site;
@@ -23,6 +23,7 @@ export type TerminalPreferences = {
 };
 
 export type PathContextMenuState = {
+  tabId: string;
   x: number;
   y: number;
   side: 'local' | 'remote';

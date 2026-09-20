@@ -91,6 +91,7 @@ type SiteLibraryMutationResult struct {
 }
 
 type BootstrapPayload struct {
+	StorageError     string         `json:"storageError,omitempty"`
 	Sites            []Site         `json:"sites"`
 	Tabs             []Tab          `json:"tabs"`
 	Config           Config         `json:"config"`
@@ -102,6 +103,7 @@ type BootstrapPayload struct {
 }
 
 type RESTServerStatus struct {
+	MCPURL   string `json:"mcpURL"`
 	Enabled  bool   `json:"enabled"`
 	Running  bool   `json:"running"`
 	BaseURL  string `json:"baseURL"`

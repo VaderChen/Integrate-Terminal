@@ -1,23 +1,21 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"IntegTERM/internal/model"
+	"IntegTERM/internal/session"
 	"IntegTERM/internal/sshutil"
-
-	"golang.org/x/crypto/ssh"
 )
 
 func (a *App) StartSSHSession(site model.Site) (string, error) {
-	return a.sessionManager.StartSSHSession(a.ctx, site)
+	return a.sessionManager.StartSSHSession(a.appContext(), site)
 }
 
 func (a *App) StartTelnetSession(site model.Site) (string, error) {
-	return a.sessionManager.StartTelnetSession(a.ctx, site)
+	return a.sessionManager.StartTelnetSession(a.appContext(), site)
 }
 
 func (a *App) ApproveHost(prompt model.HostTrustPrompt) error {
@@ -29,7 +27,7 @@ func (a *App) WriteSSHInput(sessionID string, data string) error {
 	return a.sessionManager.WriteSSHInput(sessionID, data)
 }
 
-func (a *App) CloseIdleHiddenConnections(idleLimit time.Duration) int {
+func (a *App) closeIdleHiddenConnectionsLocked(idleLimit time.Duration) int {
 	if idleLimit <= 0 {
 		return 0
 	}
@@ -59,7 +57,7 @@ func (a *App) CloseIdleHiddenConnections(idleLimit time.Duration) int {
 			title = tab.Title
 		}
 		a.sessionManager.AppendLog(fmt.Sprintf("%s 閒置超過 %d 分鐘，已自動關閉背景連線", title, int(idleLimit/time.Minute)), "done")
-		if _, err := a.CloseTab(tabID); err == nil {
+		if _, err := a.closeTabLocked(tabID); err == nil {
 			closedCount++
 		}
 	}
@@ -67,7 +65,7 @@ func (a *App) CloseIdleHiddenConnections(idleLimit time.Duration) int {
 	return closedCount
 }
 
-func (a *App) ClearBackgroundConnections() int {
+func (a *App) clearBackgroundConnectionsLocked() int {
 	backgroundTabIDs := make([]string, 0)
 	for _, tab := range a.tabs {
 		if tab.Hidden && tab.Connected {
@@ -83,7 +81,7 @@ func (a *App) ClearBackgroundConnections() int {
 			title = tab.Title
 		}
 		a.sessionManager.AppendLog(fmt.Sprintf("%s 已手動清除背景連線", title), "done")
-		if _, err := a.CloseTab(tabID); err == nil {
+		if _, err := a.closeTabLocked(tabID); err == nil {
 			closedCount++
 		}
 	}
@@ -96,11 +94,16 @@ func (a *App) markTabActivity(tabID string) {
 		return
 	}
 	a.activityMu.Lock()
+	if a.lastActivity == nil {
+		a.lastActivity = make(map[string]time.Time)
+	}
 	a.lastActivity[tabID] = time.Now()
 	a.activityMu.Unlock()
 }
 
 func (a *App) markSessionActivity(sessionID string) {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
 	if strings.TrimSpace(sessionID) == "" {
 		return
 	}
@@ -140,6 +143,10 @@ func (a *App) GetSSHOutputBuffer(sessionID string) string {
 	return a.sessionManager.GetSSHOutputBuffer(sessionID)
 }
 
+func (a *App) GetTerminalOutputSnapshot(sessionID string) session.TerminalOutputSnapshot {
+	return a.sessionManager.GetTerminalOutputSnapshot(sessionID)
+}
+
 func (a *App) ListSystemFonts() []string {
 	fonts, err := listSystemFonts()
 	if err != nil || len(fonts) == 0 {
@@ -154,82 +161,4 @@ func (a *App) ResizeSSHSession(sessionID string, cols uint16, rows uint16) error
 
 func (a *App) CloseSSHSession(sessionID string) error {
 	return a.sessionManager.CloseSSHSession(sessionID)
-}
-
-func (a *App) ExecuteSSHCommand(site model.Site, command string, timeoutSeconds int) (map[string]any, error) {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return nil, fmt.Errorf("command is required")
-	}
-	if strings.TrimSpace(site.Host) == "" {
-		return nil, fmt.Errorf("host is required")
-	}
-	if strings.TrimSpace(site.Username) == "" {
-		return nil, fmt.Errorf("username is required")
-	}
-
-	authMethods := make([]ssh.AuthMethod, 0, 2)
-	if site.Password != "" {
-		authMethods = append(authMethods, ssh.Password(site.Password))
-	}
-	if site.PPKPath != "" {
-		signer, err := sshutil.SignerFromPPK(site.PPKPath, site.PPKPassphrase)
-		if err != nil {
-			return nil, fmt.Errorf("load ppk: %w", err)
-		}
-		authMethods = append(authMethods, ssh.PublicKeys(signer))
-	}
-	if len(authMethods) == 0 {
-		return nil, fmt.Errorf("missing ssh auth method")
-	}
-
-	hostKeyCallback, err := sshutil.KnownHostsCallback()
-	if err != nil {
-		return nil, err
-	}
-
-	timeout := 10 * time.Second
-	if timeoutSeconds > 0 {
-		timeout = time.Duration(timeoutSeconds) * time.Second
-	}
-
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", site.Host, site.Port), &ssh.ClientConfig{
-		User:            site.Username,
-		Auth:            authMethods,
-		HostKeyCallback: hostKeyCallback,
-		Timeout:         timeout,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer client.Close()
-
-	session, err := client.NewSession()
-	if err != nil {
-		return nil, err
-	}
-	defer session.Close()
-
-	var stdoutBuilder strings.Builder
-	var stderrBuilder strings.Builder
-	session.Stdout = &stdoutBuilder
-	session.Stderr = &stderrBuilder
-
-	runErr := session.Run(command)
-	exitCode := 0
-	if runErr != nil {
-		var exitErr *ssh.ExitError
-		if errors.As(runErr, &exitErr) {
-			exitCode = exitErr.ExitStatus()
-		} else {
-			return nil, runErr
-		}
-	}
-
-	return map[string]any{
-		"stdout":   stdoutBuilder.String(),
-		"stderr":   stderrBuilder.String(),
-		"exitCode": exitCode,
-		"ok":       exitCode == 0,
-	}, nil
 }

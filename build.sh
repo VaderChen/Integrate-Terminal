@@ -27,6 +27,14 @@ if [[ -f "$HOME/.zshrc" ]]; then
   source "$HOME/.zshrc"
 fi
 
+# Go 1.26 is the last release supporting the macOS 12 deployment target.
+# Do not inherit a newer global GOTOOLCHAIN from the user's shell.
+unset GOROOT
+export GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' "$SCRIPT_DIR/go.mod")"
+# Applies to Wails' bindings helper and dev builds as well as the final binary.
+# Go also remaps CGO C/Objective-C source paths when trimpath is enabled.
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
+
 APP_MARKETING_VERSION="1.$(date +%y).$(date +%m%d)"
 APP_BUILD_LABEL="$(date +%H%M)"
 APP_DISPLAY_VERSION="$APP_MARKETING_VERSION build $APP_BUILD_LABEL"
@@ -206,6 +214,7 @@ rsync -a \
   --exclude '.git/' \
   --exclude '.DS_Store' \
   --exclude '._*' \
+  --exclude '*.bak' \
   --exclude 'build/bin/' \
   --exclude 'frontend/node_modules/.cache/' \
   "$SCRIPT_DIR/" "$STAGING_DIR/"
@@ -219,7 +228,7 @@ echo "開始於本機暫存目錄打包 Wails 應用程式（production / App St
   export CGO_CFLAGS="-mmacosx-version-min=12.0"
   export CGO_LDFLAGS="-mmacosx-version-min=12.0"
   export DYLD_LIBRARY_PATH="$STAGING_DIR/internal/purchase/native${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
-  "$WAILS_BIN" build -clean -s
+  "$WAILS_BIN" build -clean -s -trimpath
 )
 
 if [[ ! -d "$STAGING_APP_PATH" ]]; then

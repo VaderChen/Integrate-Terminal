@@ -50,8 +50,8 @@ export function useSettingsActions({ config, setConfig, activeTabRef, refreshPan
     await saveConfig({ ...config, telnetLocalEcho });
   };
 
-  const handleRESTServerEnabledChange = async (restServerEnabled: boolean) => {
-    await saveConfig({ ...config, restServerEnabled });
+  const handleRESTServerEnabledChange = async (restServerEnabled: boolean, restServerPort = config.restServerPort) => {
+    await saveConfig({ ...config, restServerEnabled, restServerPort });
   };
 
   const handleRESTServerPortChange = async (restServerPort: number) => {

@@ -14,7 +14,10 @@ func (a *App) StatRemoteEntry(tabID string, targetPath string) (map[string]any, 
 
 	parentPath := path.Dir(targetPath)
 	targetName := path.Base(targetPath)
-	entries := a.ListRemote(tabID, parentPath)
+	entries, err := a.ListRemote(tabID, parentPath)
+	if err != nil {
+		return nil, err
+	}
 	for _, entry := range entries {
 		if entry.Name == targetName {
 			return map[string]any{
