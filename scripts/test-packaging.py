@@ -50,16 +50,30 @@ contents.mkdir(parents=True)
 (contents / "Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": "1.2.3"}))
 ''')
         build.chmod(0o755)
+        self.env["TEST_DMG_PATHS"] = str(self.root / "dmg-paths.json")
+        self.env["TEST_DMG_DIST"] = str(self.root / "dist")
         self.tool("hdiutil", '''
-import os, sys
+import json, os, sys
 from pathlib import Path
 args = sys.argv[1:]
 root = Path(args[args.index("-srcfolder") + 1])
 assert (root / "IntegTERM.app/Contents/Info.plist").is_file()
 assert (root / "Applications").is_symlink()
+Path(os.environ["TEST_DMG_PATHS"]).write_text(json.dumps({"source": str(root), "output": args[-1]}))
+if os.environ.get("TEST_HDI_REJECT_DIST_SOURCE"):
+    assert Path(os.environ["TEST_DMG_DIST"]) not in root.parents
 if os.environ.get("TEST_HDI_FAIL"):
     sys.exit(1)
 Path(args[-1]).write_text("new image")
+''')
+        self.tool("ditto", '''
+import os, subprocess, sys
+from pathlib import Path
+source, destination = map(Path, sys.argv[-2:])
+if source.is_file() and os.environ.get("TEST_DMG_PUBLISH_FAIL"):
+    destination.write_text("partial destination copy")
+    sys.exit(1)
+subprocess.run(["/usr/bin/ditto", *sys.argv[1:]], check=True)
 ''')
         return script
 
@@ -80,6 +94,31 @@ Path(args[-1]).write_text("new image")
         self.assertNotEqual(self.run_script(script).returncode, 0)
         self.assertEqual(old.read_text(), "previous image")
         self.assertEqual(list(dist.glob(".dmg-staging.*")), [])
+
+    def test_dmg_builds_outside_destination_and_cleans_local_staging(self):
+        script = self.setup_dmg()
+        self.env["TEST_HDI_REJECT_DIST_SOURCE"] = "1"
+        result = self.run_script(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        paths = json.loads((self.root / "dmg-paths.json").read_text())
+        self.assertFalse(Path(paths["source"]).parent.exists())
+        self.assertFalse(Path(paths["output"]).exists())
+        self.assertEqual((self.root / "dist/IntegTERM-1.2.3.dmg").read_text(), "new image")
+        self.assertEqual(list((self.root / "dist").glob(".dmg-publish.*")), [])
+
+    def test_failed_destination_copy_keeps_previous_image_and_cleans_partial(self):
+        script = self.setup_dmg()
+        dist = self.root / "dist"
+        dist.mkdir()
+        old = dist / "IntegTERM-1.2.3.dmg"
+        old.write_text("previous image")
+        self.env["TEST_DMG_PUBLISH_FAIL"] = "1"
+        result = self.run_script(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(old.read_text(), "previous image")
+        self.assertEqual(list(dist.glob(".dmg-publish.*")), [])
+        paths = json.loads((self.root / "dmg-paths.json").read_text())
+        self.assertFalse(Path(paths["source"]).parent.exists())
 
     def setup_appstore(self, import_assets=True):
         import datetime as dt
