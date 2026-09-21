@@ -4,18 +4,13 @@ import (
 	"errors"
 	"time"
 
-	"IntegTERM/internal/credentials"
 	"IntegTERM/internal/session"
 	"IntegTERM/internal/store"
 )
 
-// NewMCP constructs a headless process without touching user data or Keychain.
-// Its first remote-site operation loads state with noninteractive credentials
-// and a bounded lock wait, so an unattended client never waits for an OS dialog.
+// NewMCP 延後載入站台 JSON 檔案；檔案鎖等待有上限。
 func NewMCP() *App {
-	return newMCPWithStore(store.NewWithCredentialsAndLockTimeout(
-		resolveAppDataDir(), credentials.NewNonInteractive(), 2*time.Second,
-	))
+	return newMCPWithStore(store.NewWithLockTimeout(resolveAppDataDir(), 2*time.Second))
 }
 
 func newMCPWithStore(data *store.Store) *App {
@@ -28,7 +23,7 @@ func newMCPWithStore(data *store.Store) *App {
 }
 
 // MCPStartup leaves persisted state unloaded until site discovery is requested.
-// initialize/tools-list and RAM operations do not depend on saved credentials.
+// initialize/tools-list and RAM operations do not depend on saved files.
 func (a *App) MCPStartup() {
 	a.stateMu.Lock()
 	defer a.stateMu.Unlock()

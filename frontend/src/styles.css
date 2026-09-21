@@ -1467,7 +1467,28 @@ select {
 }
 
 .settings-skill-card {
-  gap: 14px;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.settings-skill-card .settings-section-card {
+  min-width: 0;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.settings-skill-card .settings-section-copy {
+  min-width: 0;
+  gap: 4px;
+  line-height: 1.45;
+}
+
+.settings-skill-card .settings-skill-action-button {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
 }
 
 .settings-skill-note {
@@ -2733,12 +2754,13 @@ select {
 
 .settings-mcp-tabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .settings-mcp-tab {
   flex: 1;
-  padding: 10px 14px;
+  min-height: 34px;
+  padding: 6px 12px;
   border: 1px solid var(--app-border);
   border-radius: 10px;
   background: var(--app-surface-soft-2);
@@ -2751,38 +2773,190 @@ select {
   color: var(--app-primary);
 }
 
-.settings-mcp-separation-hint {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
 .settings-mcp-endpoint-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px 12px;
   font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-mcp-endpoint-row code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-mcp-config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-mcp-config-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .settings-mcp-config {
   margin: 0;
-  padding: 14px;
+  padding: 10px 12px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--app-surface);
   color: var(--app-text);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.settings-skill-details summary {
-  cursor: pointer;
-  margin-bottom: 12px;
+.settings-skill-card .settings-rest-server-row,
+.settings-skill-card .settings-rest-token-card {
+  flex-wrap: wrap;
 }
 
-.settings-skill-details .settings-skill-actions {
-  margin-top: 10px;
+.settings-skill-card .settings-rest-token-controls {
+  flex-basis: 100%;
+  min-width: 0;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.settings-skill-card .settings-rest-token-field input {
+  min-height: 34px;
+  padding: 0 36px 0 10px;
+}
+
+.settings-skill-card .settings-rest-token-visibility {
+  right: 4px;
+  width: 28px;
+  height: 28px;
+}
+
+.settings-skill-card .settings-rest-token-copy {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.settings-mcp-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-mcp-docs-action {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.info-bubble-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 13px;
+  cursor: help;
+}
+
+.info-bubble-trigger:hover,
+.info-bubble-trigger:focus-visible,
+.info-bubble-close:hover,
+.info-bubble-close:focus-visible {
+  background: var(--app-surface-soft-2);
+  color: var(--app-primary);
+}
+
+.info-bubble-trigger:focus-visible,
+.info-bubble-close:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+.info-bubble-link {
+  width: auto;
+  height: 28px;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.info-bubble {
+  position: fixed;
+  z-index: 100;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 10px;
+  background: var(--app-surface-strong);
+  color: var(--app-text);
+  box-shadow: 0 8px 24px var(--app-shadow-strong);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.info-bubble p {
+  margin: 0;
+}
+
+.info-bubble p + p {
+  margin-top: 8px;
+}
+
+.info-bubble-document {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(640px, calc(100vw - 24px));
+  max-width: none;
+}
+
+.info-bubble-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.info-bubble-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-muted);
+}
+
+.info-bubble-document .settings-skill-viewer {
+  min-height: 0;
+  max-height: 50vh;
+  padding: 12px;
+}
+
+.info-bubble-document .settings-skill-action-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
 }

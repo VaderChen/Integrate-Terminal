@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   build: {
-    // Keep the WebView compatible with the macOS 12 deployment target.
+    // 保留較保守的 JavaScript 輸出目標，涵蓋 macOS 13 以上的 WebView。
     target: 'safari15',
     outDir: 'dist',
     emptyOutDir: true,

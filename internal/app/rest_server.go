@@ -93,56 +93,87 @@ func loadOrCreateRESTToken(baseDir string) string {
 	return token
 }
 
-func (a *App) applyRESTServerConfig(config model.Config, allowAttach bool) error {
-	port := sanitizeRESTServerPort(config.RESTServerPort)
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	a.restServerMu.Lock()
-	if config.RESTServerEnabled && a.restServer != nil && a.restServerURL == baseURL {
-		a.restServerMu.Unlock()
-		return nil
+type restServerChange struct {
+	listener  net.Listener
+	baseURL   string
+	unchanged bool
+}
+
+func (change *restServerChange) close() {
+	if change.listener != nil {
+		_ = change.listener.Close()
 	}
-	previous := a.detachRESTServerLocked()
+}
+
+// 先保留新埠；設定寫入失敗時只需關閉這個 listener，原服務完全不受影響。
+func (a *App) prepareRESTServerConfig(config model.Config, allowAttach bool) (*restServerChange, error) {
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", sanitizeRESTServerPort(config.RESTServerPort))
+	a.restServerMu.Lock()
+	unchanged := config.RESTServerEnabled && (a.restServer != nil || a.restAttached) && a.restServerURL == baseURL
 	a.restServerMu.Unlock()
-	if err := shutdownRESTServer(previous); err != nil {
+	change := &restServerChange{baseURL: baseURL, unchanged: unchanged}
+	if unchanged || !config.RESTServerEnabled {
+		return change, nil
+	}
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", sanitizeRESTServerPort(config.RESTServerPort)))
+	if err != nil {
+		if allowAttach && detectExistingRESTServer(baseURL) {
+			return change, nil
+		}
+		return nil, err
+	}
+	if allowAttach {
+		// GUI 只檢查可用性，實際 listener 由背景服務持有。
+		_ = listener.Close()
+	} else {
+		change.listener = listener
+	}
+	return change, nil
+}
+
+func (a *App) commitRESTServerConfig(change *restServerChange) {
+	if change.unchanged {
+		return
+	}
+	a.restServerMu.Lock()
+	previous := a.detachRESTServerLocked()
+	if change.listener != nil {
+		a.serveRESTListenerLocked(change.listener, change.baseURL)
+		change.listener = nil
+	}
+	a.restServerMu.Unlock()
+	// 舊請求可能正在更新設定，不能在 runtimeConfigMu 內等待它們結束。
+	go func() {
+		if err := shutdownRESTServer(previous); err != nil {
+			a.sessionManager.AppendLog("關閉舊 REST 服務失敗: "+err.Error(), "failed")
+		}
+	}()
+}
+
+func (a *App) applyRESTServerConfig(config model.Config, allowAttach bool) error {
+	change, err := a.prepareRESTServerConfig(config, allowAttach)
+	if err != nil {
 		return err
 	}
-	if !config.RESTServerEnabled {
-		return nil
+	defer change.close()
+	if allowAttach {
+		a.syncAttachedRESTState(config, allowAttach)
+	} else {
+		a.commitRESTServerConfig(change)
 	}
-	a.restServerMu.Lock()
-	defer a.restServerMu.Unlock()
-	return a.startRESTServerLocked(port, allowAttach)
+	return nil
 }
 
 func (a *App) applyRESTServerShutdown() error {
 	a.runtimeConfigMu.Lock()
-	defer a.runtimeConfigMu.Unlock()
 	a.restServerMu.Lock()
 	previous := a.detachRESTServerLocked()
 	a.restServerMu.Unlock()
+	a.runtimeConfigMu.Unlock()
 	return shutdownRESTServer(previous)
 }
 
-func (a *App) startRESTServerLocked(port int, allowAttach bool) error {
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	if allowAttach {
-		if attached := detectExistingRESTServer(baseURL); attached {
-			a.restServer = nil
-			a.restServerURL = baseURL
-			a.restAttached = true
-			return nil
-		}
-		a.restServer = nil
-		a.restServerURL = ""
-		a.restAttached = false
-		return nil
-	}
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-	if err != nil {
-		return err
-	}
-
+func (a *App) serveRESTListenerLocked(listener net.Listener, baseURL string) {
 	server := &http.Server{
 		Handler:      a.restMux(),
 		ErrorLog:     log.New(mustOpenCrashLogWriter(), "rest-server: ", log.LstdFlags|log.Lshortfile),
@@ -167,7 +198,6 @@ func (a *App) startRESTServerLocked(port int, allowAttach bool) error {
 		}
 	}()
 
-	return nil
 }
 
 func (a *App) detachRESTServerLocked() *http.Server {

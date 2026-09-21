@@ -1,7 +1,7 @@
 import type { Messages } from '../i18n';
 
 export const zhTWMessages: Messages = {
-    storageLoadFailed: '無法讀取已儲存的連線，原資料已保留。若 macOS 鑰匙圈已鎖定，請先解鎖後重試。',
+    storageLoadFailed: '無法讀取已儲存的連線，原資料已保留。請確認資料檔案可讀寫後重試。',
     storageRetry: '重新讀取',
     loading: '正在載入工作區...',
     brandEyebrow: 'integrated Term',

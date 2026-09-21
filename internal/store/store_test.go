@@ -12,7 +12,7 @@ import (
 
 func TestWriteJSONAtomically(t *testing.T) {
 	baseDir := t.TempDir()
-	instance := newTestStore(baseDir)
+	instance := New(baseDir)
 	sites := []model.Site{{ID: "site-1", Name: "example", Host: "example.com"}}
 
 	if err := instance.SaveSites(sites); err != nil {
@@ -55,7 +55,7 @@ func TestPrivatePermissionsAlsoRepairExistingFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s := newTestStore(dir)
+	s := New(dir)
 	if err := s.Ensure(); err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestStoreTransactionWorker(t *testing.T) {
 	if dir == "" {
 		return
 	}
-	s := newTestStore(dir)
+	s := New(dir)
 	for i := 0; i < 12; i++ {
 		if _, err := s.UpdateConfig(func(cfg *model.Config) error { cfg.WindowX++; return nil }); err != nil {
 			t.Fatal(err)
@@ -92,7 +92,7 @@ func TestStoreTransactionWorker(t *testing.T) {
 
 func TestStoreTransactionsSerializeDifferentProcesses(t *testing.T) {
 	dir := t.TempDir()
-	s := newTestStore(dir)
+	s := New(dir)
 	if err := s.SaveConfig(model.Config{}); err != nil {
 		t.Fatal(err)
 	}

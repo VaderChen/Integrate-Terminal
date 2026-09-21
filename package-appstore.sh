@@ -30,7 +30,7 @@ PROFILE_SEARCH_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 TEMP_KEYCHAIN=""
 TEMP_KEYCHAIN_DIR=""
 TEMP_KEYCHAIN_PASSWORD="${TEMP_KEYCHAIN_PASSWORD:-}"
-export MACOSX_DEPLOYMENT_TARGET="12.0"
+export MACOSX_DEPLOYMENT_TARGET="13.0"
 
 required_commands=(codesign productbuild pkgutil security xattr ditto mktemp uuidgen)
 for cmd in "${required_commands[@]}"; do

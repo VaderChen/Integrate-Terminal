@@ -22,31 +22,19 @@ func (a *App) handleRESTTabs(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleRESTCreateFileTab(w http.ResponseWriter, r *http.Request) {
 	a.handleRESTTabCreateWithSite(w, r, func(site model.Site) ([]model.Tab, error) {
-		tabs, err := a.createTabLocked(site)
-		if err != nil {
-			return tabs, err
-		}
-		return a.hideLatestTab(), nil
+		return a.createFileTab(site, true)
 	})
 }
 
 func (a *App) handleRESTCreateSSHTab(w http.ResponseWriter, r *http.Request) {
 	a.handleRESTTabCreateWithSite(w, r, func(site model.Site) ([]model.Tab, error) {
-		tabs, err := a.createSSHTabLocked(site)
-		if err != nil {
-			return tabs, err
-		}
-		return a.hideLatestTab(), nil
+		return a.createSSHTab(site, true)
 	})
 }
 
 func (a *App) handleRESTCreateTelnetTab(w http.ResponseWriter, r *http.Request) {
 	a.handleRESTTabCreateWithSite(w, r, func(site model.Site) ([]model.Tab, error) {
-		tabs, err := a.createTelnetTabLocked(site)
-		if err != nil {
-			return tabs, err
-		}
-		return a.hideLatestTab(), nil
+		return a.createTelnetTab(site, true)
 	})
 }
 
@@ -62,8 +50,6 @@ func (a *App) handleRESTTabCreateWithSite(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
 	tabs, err := create(payload.Site)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -84,24 +70,12 @@ func (a *App) handleRESTCreateLocalTab(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	tabs, err := a.createLocalTerminalTabLocked(payload.Cwd)
+	tabs, err := a.createLocalTerminalTab(payload.Cwd, true)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	tabs = a.hideLatestTab()
 	writeJSON(w, http.StatusOK, tabEnvelope{Tabs: tabs, SessionID: latestSessionID(tabs)})
-}
-
-func (a *App) hideLatestTab() []model.Tab {
-	if len(a.tabs) == 0 {
-		return a.tabs
-	}
-	a.tabs[len(a.tabs)-1].Hidden = true
-	_ = a.persistTabs()
-	return a.tabs
 }
 
 func latestSessionID(tabs []model.Tab) string {

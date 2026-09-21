@@ -47,10 +47,10 @@ func holdStoreTransaction(t *testing.T, instance *Store) func() {
 
 func TestStoreLockTimeoutAndRetryAfterRelease(t *testing.T) {
 	dir := t.TempDir()
-	holder := NewWithCredentials(dir, newMemoryCredentials())
+	holder := New(dir)
 	unlock := holdStoreTransaction(t, holder)
 	const timeout = 50 * time.Millisecond
-	contender := NewWithCredentialsAndLockTimeout(dir, newMemoryCredentials(), timeout)
+	contender := NewWithLockTimeout(dir, timeout)
 	var called atomic.Bool
 	started := time.Now()
 	err := contender.WithTransaction(func(*Transaction) error { called.Store(true); return nil })
@@ -74,11 +74,11 @@ func TestStoreLockTimeoutAndRetryAfterRelease(t *testing.T) {
 
 func TestStoreLockTimeoutDoesNotCancelActiveTransaction(t *testing.T) {
 	dir := t.TempDir()
-	instance := NewWithCredentialsAndLockTimeout(dir, newMemoryCredentials(), 20*time.Millisecond)
+	instance := NewWithLockTimeout(dir, 20*time.Millisecond)
 	err := instance.WithTransaction(func(tx *Transaction) error {
 		time.Sleep(60 * time.Millisecond)
 		// Its acquisition deadline expired, but it still owns the lock.
-		other := NewWithCredentialsAndLockTimeout(dir, newMemoryCredentials(), 15*time.Millisecond)
+		other := NewWithLockTimeout(dir, 15*time.Millisecond)
 		if _, err := other.LoadConfig(); !errors.Is(err, ErrLockTimeout) {
 			t.Errorf("active transaction lost its lock: %v", err)
 		}
@@ -95,8 +95,8 @@ func TestStoreLockTimeoutDoesNotCancelActiveTransaction(t *testing.T) {
 
 func TestExistingStoreConstructorStillWaitsForLock(t *testing.T) {
 	dir := t.TempDir()
-	unlock := holdStoreTransaction(t, newTestStore(dir))
-	contender := NewWithCredentials(dir, newMemoryCredentials())
+	unlock := holdStoreTransaction(t, New(dir))
+	contender := New(dir)
 	done := make(chan error, 1)
 	go func() { _, err := contender.LoadConfig(); done <- err }()
 	select {

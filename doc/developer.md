@@ -31,9 +31,7 @@ IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH
 - `internal/transport/`
   - SFTP / FTP client 抽象與實作。
 - `internal/store/`
-  - `sites.json`、`tabs.json`、`config.json` 的本地持久化與憑證引用。
-- `internal/credentials/`
-  - 透過 Security.framework 存取 macOS Keychain；一般測試使用記憶體 provider。
+  - `sites.json`、`tabs.json`、`config.json` 的本地檔案讀寫。
 - `frontend/`
   - 桌面 GUI 前端；語系、終端工具與站台操作已拆成獨立模組與 hooks。
 - `internal/purchase/`
@@ -49,9 +47,13 @@ IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH
 
 ## 本機開發
 
-需要可自動下載 toolchain 的 Go、Node.js 22.12 以上，以及 Xcode Command Line Tools。建置、開發與測試腳本依 `go.mod` 固定使用 Go 1.26.8，不受全域 GOTOOLCHAIN 設定影響；Go 1.27 已不支援 macOS 12。前端使用 Vite 7，輸出目標固定為 Safari 15，以保留 macOS 12 WebView 相容性。
+需要可自動下載 toolchain 的 Go、Node.js 22.12 以上，以及 Xcode Command Line Tools。主模組與專案內 systray 模組統一使用 Go 1.27.1；建置、開發與測試腳本依主模組的 `go.mod` 選用工具鏈，不受全域 GOTOOLCHAIN 設定影響。依 [Go 1.27 官方系統需求](https://go.dev/doc/go1.27#darwin)，應用程式最低支援 macOS 13；Go/CGO、Swift bridge 與 App plist 已同步此部署目標。前端使用 Vite 7，保留 Safari 15 輸出目標，可涵蓋 macOS 13 以上的 WebView。
 
 ### 啟動前端與 Wails 開發模式
+
+`run.sh` 與 `build.sh` 透過 `scripts/ensure-wails.sh` 選用專案專用的 Wails CLI。腳本依 `go.mod` 選定的 Wails、Go 工具鏈與 `golang.org/x/tools` 版本建立 CLI，並核對執行檔的編譯資訊；任何版本改變時會重新建立工具。CLI 的依賴位於獨立暫存模組，不會改寫應用程式的模組設定。
+
+工具預設快取於 `~/Library/Caches/IntegTERM/tools`（設定 `XDG_CACHE_HOME` 時使用該快取根目錄），也可透過 `INTEGTERM_TOOL_CACHE` 指定其他位置。首次啟動可能需要下載與編譯工具依賴；後續啟動重用已驗證的快取。專案不依賴 PATH 中其他專案安裝的 Wails CLI。
 
 ```bash
 ./run.sh
@@ -61,8 +63,8 @@ IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH
 
 - 先編譯 StoreKit 2 Swift bridge
 - 注入 `DYLD_LIBRARY_PATH`
-- 固定 `MACOSX_DEPLOYMENT_TARGET=12.0`
-- 固定 `CGO_CFLAGS / CGO_LDFLAGS = -mmacosx-version-min=12.0`
+- 固定 `MACOSX_DEPLOYMENT_TARGET=13.0`
+- 固定 `CGO_CFLAGS / CGO_LDFLAGS = -mmacosx-version-min=13.0`
 - 在本機 `/tmp/integterm-dev.*` 建立開發鏡像，再執行 `wails dev`
 - 以 checksum 同步原專案內容，只有檔案內容真正變更時才觸發 Vite / Wails rebuild
 - 結束開發模式時清理 watcher、Vite、暫存 tray service 與開發鏡像
@@ -75,11 +77,7 @@ IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH
 ./build.sh
 ```
 
-備註：
-
-```bash
-wails build -clean
-```
+請使用上述專案入口，以確保 CLI、工具鏈及原生 bridge 一致。
 
 - `build/darwin/Info.plist` 與 `build/darwin/Info.dev.plist` 的 `CFBundleIdentifier` 已固定為 `com.vader.integterm`
 - 不應再使用 `com.wails.IntegTERM`
@@ -149,13 +147,13 @@ go run . serve
 
 ### 已儲存連線的憑證
 
-`sites.json`／`tabs.json` 以隨機的 `credentialRef` 引用密碼與 PPK 密語。macOS 使用 file-based Keychain，本機 ad-hoc 與沙盒版使用相同的憑證來源。系統依應用程式的存取權限處理授權；簽章身分改變時，可能重新要求使用者確認。
+`sites.json`／`tabs.json` 直接保存站台、分頁、密碼與 PPK 密語，與原本的檔案儲存格式一致。GUI、背景服務與 MCP 都只讀寫資料檔案，沒有系統憑證儲存、查詢或自動遷移功能。
 
-憑證寫入與回讀驗證成功後才提交 JSON。啟動時必須成功讀取設定、站台和分頁才可寫回；GUI 提供重新讀取，REST sites/tabs 在資料暫時不可用時回傳 503。Keychain 需要解鎖時，可完成解鎖後重試。
+資料目錄使用 `0700`，JSON 使用 `0600` 權限。儲存透過交易鎖、暫存檔與原子取代，避免多個程序同時更新時遺失資料。JSON 內含密碼與密語，搬移、備份資料檔案即可保留連線設定。
 
-引用不依賴資料目錄路徑。密碼更新建立新的引用，既有 Keychain 項目保留供備份還原使用。搬到另一台 Mac 時，需同時處理 Keychain 資料或重新輸入憑證。
+讀取不會改寫原檔。未知欄位（包括舊版 `credentialRef`）直接忽略，不解析引用，也不查詢其他來源；檔案中沒有保存的密碼與 PPK 密語需在站台編輯畫面重新輸入並儲存。
 
-原生 provider 詳見 [`internal/credentials/README.md`](../internal/credentials/README.md)。一般回歸測試不操作真實 Keychain；其中列出的 opt-in 整合測試只建立並刪除自己的 UUID 假憑證。
+檔案格式錯誤或無法讀取時保留原始資料，不回傳部分資料，也不允許空資料覆寫。啟動仍須成功讀取設定、站台和分頁才可寫回；GUI 可重新讀取，REST sites/tabs 在資料暫時不可用時回傳 503。儲存回歸測試使用暫存資料目錄。
 
 ### 驗證
 
@@ -178,7 +176,7 @@ npm audit
 Go 漏洞掃描：
 
 ```bash
-GOTOOLCHAIN=go1.26.8 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' go.mod)" go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
 
 `go test -exec /usr/bin/true` 只會確認測試可以編譯，不能當作測試通過。`build.sh` / `run.sh` 已內建應用程式所需的動態庫處理。
@@ -223,7 +221,7 @@ GOTOOLCHAIN=go1.26.8 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 MCP 提供本機 stdio 與 Streamable HTTP 兩種傳輸；REST API、StoreKit、GUI 與封裝流程使用各自的入口。
 
 - 設定頁 `MCP > 本機` 顯示目前執行檔的絕對路徑，MCP client 使用 `command` 與 `args: ["mcp"]`；不開啟 GUI 或 tray，不必啟用 HTTP。
-- stdio 先完成協定啟動與工具探索，首次查詢站台時才載入保存狀態。Keychain 使用禁止互動的存取方式，資料鎖等待上限 2 秒；需要授權或資料忙碌時明確回報，RAM 操作仍可使用。桌面版保留原有授權流程。
+- stdio 先完成協定啟動與工具探索，首次查詢站台時才載入 JSON 檔案，資料鎖等待上限 2 秒。檔案無法讀取或資料忙碌時明確回報，RAM 操作仍可使用。
 - 本機 stdio 提供 RAM workspace 與已儲存站台的 VFS。先呼叫 `vfs_workspace_info`，再以 `vfs_list` 探索；根資源 URI 為 `integterm-vfs://workspace/mcp`。
 - 設定頁 `MCP > HTTP` 使用既有 REST 啟停與埠設定，Streamable HTTP endpoint 為 `http://127.0.0.1:<port>/mcp`；此模式另提供既有 REST 操作對應的 MCP tools。
 - HTTP 與 REST 共用 Bearer 驗證、loopback listener 及嚴格 Origin 檢查。stdio 與 HTTP 不共用同一個 RAM workspace；同一個 HTTP server 的 clients 則共用它的 workspace。

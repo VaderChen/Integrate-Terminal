@@ -52,7 +52,7 @@ def main():
         app = staging / "SandboxProbe.app"
         executable = app / "Contents/MacOS/SandboxProbe"
         executable.parent.mkdir(parents=True)
-        run(["/usr/bin/xcrun", "clang", "-fobjc-arc", "-mmacosx-version-min=12.0", "-Wno-deprecated-declarations", "-framework", "Foundation", "-framework", "Security", str(SOURCE), "-o", str(executable)])
+        run(["/usr/bin/xcrun", "clang", "-fobjc-arc", "-mmacosx-version-min=13.0", "-Wno-deprecated-declarations", "-framework", "Foundation", "-framework", "Security", str(SOURCE), "-o", str(executable)])
         (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": bundle_id, "CFBundleExecutable": "SandboxProbe", "CFBundleName": "IntegTERM Signed Sandbox Probe", "CFBundleVersion": "1", "CFBundlePackageType": "APPL"}))
         shutil.copy2(args.profile, app / "Contents/embedded.provisionprofile")
         entitlement_path = staging / "entitlements.plist"

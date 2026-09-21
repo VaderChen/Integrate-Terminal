@@ -16,6 +16,7 @@ cp internal/purchase/native/libintegtermstorekit2.dylib "$TEST_RUNTIME/"
 export CGO_LDFLAGS="${CGO_LDFLAGS:-} -Wl,-rpath,$TEST_RUNTIME"
 go test -race -count=1 -timeout=120s ./...
 go vet ./...
+python3 "$SCRIPT_DIR/test-wails-toolchain.py"
 python3 "$SCRIPT_DIR/test-packaging.py"
 python3 "$SCRIPT_DIR/tests/test_sandbox_probe.py"
 python3 "$PROJECT_DIR/internal/purchase/swift/test_bridge.py"

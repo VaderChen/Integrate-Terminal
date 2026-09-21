@@ -1,7 +1,7 @@
 import type { Messages } from '../i18n';
 
 export const jaMessages: Messages = {
-    storageLoadFailed: '保存した接続を読み込めませんでした。元のデータは保持されています。macOS キーチェーンがロックされている場合は、ロックを解除して再試行してください。',
+    storageLoadFailed: '保存した接続を読み込めませんでした。元のデータは保持されています。データファイルの読み書き権限を確認して再試行してください。',
     storageRetry: '再読み込み',
     loading: 'ワークスペースを読み込み中...',
     brandEyebrow: 'integrated Term',

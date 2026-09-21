@@ -4,6 +4,7 @@ import { faCopy, faDownload, faEye, faEyeSlash } from '@fortawesome/free-solid-s
 import type { Config, RestServerStatus } from '../types';
 import { type Locale, useI18n } from '../i18n';
 import { mcpClientConfig, parseMCPPort, redactMCPToken } from './mcpSettings';
+import { InfoBubble } from './InfoBubble';
 
 type Props = {
   config: Config;
@@ -119,15 +120,14 @@ export function MCPSettingsPanel({ config, locale, onRESTServerEnabledChange, on
 
   return (
     <div className="settings-section-card settings-section-stack settings-skill-card">
-      <div className="settings-section-copy"><strong>{t.settingsSkillTitle}</strong><span>{t.settingsSkillHint}</span></div>
+      <div className="settings-mcp-label"><strong>{t.settingsSkillTitle}</strong><InfoBubble label={t.settingsNavSkill}><p>{t.settingsSkillHint}</p><p>{t.settingsMcpContractSeparationHint}</p></InfoBubble></div>
       <div className="settings-mcp-tabs" role="tablist" aria-label={t.settingsNavSkill}>
         <button type="button" role="tab" aria-selected={contract === 'local'} className={`settings-mcp-tab ${contract === 'local' ? 'active' : ''}`} onClick={() => setContract('local')}>{t.settingsMcpLocalTab}</button>
         <button type="button" role="tab" aria-selected={contract === 'network'} className={`settings-mcp-tab ${contract === 'network' ? 'active' : ''}`} onClick={() => setContract('network')}>{t.settingsMcpNetworkTab}</button>
       </div>
-      <span className="settings-mcp-separation-hint">{t.settingsMcpContractSeparationHint}</span>
       {contract === 'local' ? (
         <div className="settings-section-card settings-section-stack">
-          <div className="settings-section-copy"><strong>{t.settingsMcpLocalTitle}</strong><span>{t.settingsMcpLocalHint}</span></div>
+          <div className="settings-mcp-label"><strong>{t.settingsMcpLocalTitle}</strong><InfoBubble label={t.settingsMcpLocalTitle}>{t.settingsMcpLocalHint}</InfoBubble></div>
           <div className="settings-mcp-endpoint-row"><span>{t.settingsMcpLocalVirtualRoot}</span><code>integterm-vfs://workspace/mcp</code></div>
         </div>
       ) : (
@@ -135,12 +135,13 @@ export function MCPSettingsPanel({ config, locale, onRESTServerEnabledChange, on
           <div className="settings-section-card settings-rest-server-row">
             <div className="settings-section-copy"><strong>{t.settingsRestServer}</strong><span>{loading ? t.loading : status?.running ? status.attached ? t.settingsRestServerStatusAttached(endpoint) : t.settingsRestServerStatusRunning(endpoint) : t.settingsRestServerStatusStopped(config.restServerPort)}</span></div>
             <div className="settings-rest-server-controls">
-              <div className="settings-rest-port-field"><input type="number" min={1} max={65535} value={portDraft} disabled={config.restServerEnabled || saving} aria-label={t.settingsRestServerPort} title={t.settingsRestServerPortHint} onChange={event => setPortDraft(event.target.value)} onBlur={event => { if (!(event.relatedTarget as HTMLElement | null)?.hasAttribute('data-mcp-toggle')) commitPort(); }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitPort(); } }} /></div>
+              <InfoBubble label={t.settingsRestServerPort}>{t.settingsRestServerPortHint}</InfoBubble>
+              <div className="settings-rest-port-field"><input type="number" min={1} max={65535} value={portDraft} disabled={config.restServerEnabled || saving} aria-label={t.settingsRestServerPort} onChange={event => setPortDraft(event.target.value)} onBlur={event => { if (!(event.relatedTarget as HTMLElement | null)?.hasAttribute('data-mcp-toggle')) commitPort(); }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); commitPort(); } }} /></div>
               <button type="button" data-mcp-toggle role="switch" aria-checked={config.restServerEnabled} aria-label={t.settingsRestServer} className={`ios-switch ${config.restServerEnabled ? 'active' : ''}`} disabled={saving || loading} onClick={toggleHTTP} title={config.restServerEnabled ? t.settingsOn : t.settingsOff}><span className="ios-switch-track" /><span className="ios-switch-thumb" /></button>
             </div>
           </div>
           <div className="settings-section-card settings-rest-token-card">
-            <div className="settings-section-copy"><strong>{t.settingsRestServerToken}</strong><span>{t.settingsRestServerTokenHint}</span></div>
+            <div className="settings-mcp-label"><strong>{t.settingsRestServerToken}</strong><InfoBubble label={t.settingsRestServerToken}>{t.settingsRestServerTokenHint}</InfoBubble></div>
             <div className="settings-rest-token-controls">
               <div className="settings-rest-token-field">
                 <input type={tokenVisible ? 'text' : 'password'} value={token} readOnly autoComplete="off" spellCheck={false} aria-label={t.settingsRestServerToken} placeholder={loading ? t.loading : t.settingsRestServerTokenUnavailable} />
@@ -150,22 +151,27 @@ export function MCPSettingsPanel({ config, locale, onRESTServerEnabledChange, on
             </div>
           </div>
           <div className="settings-section-card">
-            <div className="settings-section-copy"><strong>{t.settingsShowTrayIcon}</strong><span>{t.settingsShowTrayIconHint}</span></div>
-            <button type="button" role="switch" aria-checked={config.showTrayIcon} aria-label={t.settingsShowTrayIcon} className={`ios-switch ${config.showTrayIcon ? 'active' : ''}`} disabled={saving || config.restServerEnabled} onClick={() => void save(() => onShowTrayIconChange(!config.showTrayIcon))} title={config.restServerEnabled ? t.settingsShowTrayIconRequired : config.showTrayIcon ? t.settingsOn : t.settingsOff}><span className="ios-switch-track" /><span className="ios-switch-thumb" /></button>
+            <div className="settings-mcp-label"><strong>{t.settingsShowTrayIcon}</strong><InfoBubble label={t.settingsShowTrayIcon}><p>{t.settingsShowTrayIconHint}</p>{config.restServerEnabled ? <p>{t.settingsShowTrayIconRequired}</p> : null}</InfoBubble></div>
+            <button type="button" role="switch" aria-checked={config.showTrayIcon} aria-label={t.settingsShowTrayIcon} className={`ios-switch ${config.showTrayIcon ? 'active' : ''}`} disabled={saving || config.restServerEnabled} onClick={() => void save(() => onShowTrayIconChange(!config.showTrayIcon))} title={config.showTrayIcon ? t.settingsOn : t.settingsOff}><span className="ios-switch-track" /><span className="ios-switch-thumb" /></button>
           </div>
         </>
       )}
-      <div className="settings-section-copy"><strong>{t.settingsMcpClientConfig}</strong><span>{contract === 'network' ? t.settingsMcpHTTPConfigHint : t.settingsMcpLocalConfigHint}</span></div>
-      <pre className="settings-mcp-config">{loading ? t.loading : executable ? clientConfig : t.settingsSkillEmpty}</pre>
-      <div className="settings-skill-actions"><button type="button" className="settings-skill-action-button" disabled={loading || !executable} onClick={() => void copy(clientConfig)} aria-label={t.settingsMcpCopyConfig} title={t.settingsMcpCopyConfig}><FontAwesomeIcon icon={faCopy} /></button></div>
-      <details className="settings-skill-details">
-        <summary>{t.settingsSkillTitle}</summary>
-        <pre className="settings-skill-viewer">{loading ? t.loading : markdown || t.settingsSkillEmpty}</pre>
-        <div className="settings-skill-actions">
-          <button type="button" className="settings-skill-action-button" disabled={loading || !markdown} onClick={() => void copy(markdown)} aria-label={t.settingsSkillCopy} title={t.settingsSkillCopy}><FontAwesomeIcon icon={faCopy} /></button>
-          <button type="button" className="settings-skill-action-button accent" disabled={loading || !markdown} onClick={() => void exportMarkdown()} aria-label={t.settingsSkillExport} title={t.settingsSkillExport}><FontAwesomeIcon icon={faDownload} /></button>
+      <div className="settings-mcp-config-section">
+        <div className="settings-mcp-config-heading">
+          <div className="settings-mcp-label"><strong>{t.settingsMcpClientConfig}</strong><InfoBubble label={t.settingsMcpClientConfig}>{contract === 'network' ? t.settingsMcpHTTPConfigHint : t.settingsMcpLocalConfigHint}</InfoBubble></div>
+          <button type="button" className="settings-skill-action-button" disabled={loading || !executable} onClick={() => void copy(clientConfig)} aria-label={t.settingsMcpCopyConfig} title={t.settingsMcpCopyConfig}><FontAwesomeIcon icon={faCopy} /></button>
         </div>
-      </details>
+        <pre className="settings-mcp-config">{loading ? t.loading : executable ? clientConfig : t.settingsSkillEmpty}</pre>
+      </div>
+      <div className="settings-mcp-docs-action">
+        <InfoBubble label={t.settingsSkillTitle} triggerText={t.settingsSkillTitle} closeLabel={t.close}>
+          <pre className="settings-skill-viewer">{loading ? t.loading : markdown || t.settingsSkillEmpty}</pre>
+          <div className="settings-skill-actions">
+            <button type="button" className="settings-skill-action-button" disabled={loading || !markdown} onClick={() => void copy(markdown)} aria-label={t.settingsSkillCopy} title={t.settingsSkillCopy}><FontAwesomeIcon icon={faCopy} /></button>
+            <button type="button" className="settings-skill-action-button accent" disabled={loading || !markdown} onClick={() => void exportMarkdown()} aria-label={t.settingsSkillExport} title={t.settingsSkillExport}><FontAwesomeIcon icon={faDownload} /></button>
+          </div>
+        </InfoBubble>
+      </div>
       {error ? <span className="settings-skill-feedback error" role="alert">{error}</span> : null}
       {feedback ? <span className="settings-skill-feedback success" role="status">{feedback}</span> : null}
     </div>

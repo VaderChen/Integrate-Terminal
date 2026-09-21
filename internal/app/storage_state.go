@@ -7,7 +7,7 @@ import (
 	"IntegTERM/internal/store"
 )
 
-// Only publish initial state after every file and credential has been read.
+// 所有設定、站台與分頁檔案讀取成功後，才公布初始狀態。
 // The caller holds stateMu; retries are safe while storageInitErr blocks writes.
 func (a *App) loadInitialStateLocked() error {
 	var sites []model.Site

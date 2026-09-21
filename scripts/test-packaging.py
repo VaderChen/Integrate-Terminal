@@ -281,6 +281,9 @@ class BuildPrivacyTests(unittest.TestCase):
         bridge.parent.mkdir()
         bridge.write_text("#!/bin/sh\nexit 0\n")
         bridge.chmod(0o755)
+        # CLI 版本選擇另由 test-wails-toolchain.py 驗證；這裡只隔離編譯入口。
+        selector = self.root / "scripts/ensure-wails.sh"
+        selector.write_text('#!/bin/zsh\ncommand -v wails\n')
         icon = self.root / "sync-app-icon.sh"
         icon.write_text("#!/bin/sh\nexit 0\n")
         icon.chmod(0o755)
@@ -290,7 +293,8 @@ class BuildPrivacyTests(unittest.TestCase):
         # handling as a project on an external volume.
         probe = self.root / "private build root"
         probe.mkdir()
-        (probe / "go.mod").write_text("module example.com/build-privacy-probe\n\ngo 1.26.8\n")
+        go_version = next(line.split()[1] for line in (PROJECT / "go.mod").read_text().splitlines() if line.startswith("go "))
+        (probe / "go.mod").write_text(f"module example.com/build-privacy-probe\n\ngo {go_version}\n")
         (probe / "main.go").write_text('''package main
 /*
 #include <stdio.h>
@@ -302,6 +306,7 @@ func main() {
     _, file, _, _ := runtime.Caller(0)
     fmt.Println(file)
     fmt.Println(C.GoString(C.fixture_source_path()))
+    fmt.Println(runtime.Version())
 }
 ''')
         (probe / "fixture.c").write_text('const char *fixture_source_path(void) { return __FILE__; }\n')
@@ -350,6 +355,8 @@ raise SystemExit(73)  # Stop before launch/signing, after verifying compilation.
                     output = subprocess.check_output([str(binary)], text=True)
                     self.assertIn("build-privacy-probe/main.go", output)
                     self.assertEqual(Path(output.splitlines()[1]).name, "fixture.c")
+                    go_version = next(line.split()[1] for line in (PROJECT / "go.mod").read_text().splitlines() if line.startswith("go "))
+                    self.assertEqual(output.splitlines()[2], "go" + go_version)
                     self.assertNotIn(str(probe), output)
                     self.assertNotIn(str(probe).encode(), binary.read_bytes())
                     command = json.loads((self.root / "wails-record.json").read_text())
@@ -395,7 +402,7 @@ public func fixtureSourcePath() -> UnsafeMutablePointer<CChar>? {
         ids = subprocess.check_output(["otool", "-D", str(library)], text=True).splitlines()
         self.assertEqual(ids[1].strip(), "@rpath/libintegtermstorekit2.dylib")
         load_commands = subprocess.check_output(["otool", "-l", str(library)], text=True)
-        self.assertRegex(load_commands, r"minos\s+12\.0")
+        self.assertRegex(load_commands, r"minos\s+13\.0")
 
 if __name__ == "__main__":
     unittest.main()

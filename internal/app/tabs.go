@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -12,74 +13,88 @@ func (a *App) getTabsLocked() []model.Tab {
 	return a.tabs
 }
 
-func (a *App) createTabLocked(site model.Site) ([]model.Tab, error) {
+// createConnectedTab 先保留名額，再於鎖外等待連線；提交時一次設定分頁可見性。
+func (a *App) createConnectedTab(hidden bool, open func(context.Context) (model.Tab, error)) ([]model.Tab, error) {
+	a.stateMu.Lock()
 	if err := a.ensureTabCreationAllowed(); err != nil {
-		return a.tabs, err
+		tabs := append([]model.Tab{}, a.tabs...)
+		a.stateMu.Unlock()
+		return tabs, err
 	}
-	tab := session.MakeTab(site)
-	remotePath, err := a.sessionManager.Connect(tab)
-	if err != nil {
-		return a.tabs, err
+	a.pendingTabCreations++
+	ctx := a.ctx
+	a.stateMu.Unlock()
+
+	tab, err := open(ctx)
+	a.stateMu.Lock()
+	a.pendingTabCreations--
+	if err == nil {
+		err = a.ensureTabCreationAllowed()
 	}
-	if remotePath != "" {
-		tab.RemotePath = remotePath
+	accepted := err == nil
+	if accepted {
+		tab.Hidden = hidden
+		a.tabs = append(a.tabs, tab)
+		a.config.LastActiveTab = tab.ID
+		a.markTabActivity(tab.ID)
+		err = a.persistTabs()
 	}
-	tab.Connected = true
-	a.tabs = append(a.tabs, tab)
-	a.config.LastActiveTab = tab.ID
-	a.markTabActivity(tab.ID)
-	return a.tabs, a.persistTabs()
+	tabs := append([]model.Tab{}, a.tabs...)
+	a.stateMu.Unlock()
+	if !accepted && tab.ID != "" {
+		if tab.Mode == "terminal" {
+			_ = a.sessionManager.CloseSSHSession(tab.SessionID)
+		} else {
+			_ = a.sessionManager.Disconnect(tab.ID)
+		}
+	}
+	return tabs, err
 }
 
-func (a *App) createSSHTabLocked(site model.Site) ([]model.Tab, error) {
-	if err := a.ensureTabCreationAllowed(); err != nil {
-		return a.tabs, err
-	}
-	sessionID, err := a.sessionManager.StartSSHSession(a.ctx, site)
-	if err != nil {
-		return a.tabs, err
-	}
-
-	tab := session.MakeSSHTab(site, sessionID)
-	a.tabs = append(a.tabs, tab)
-	a.config.LastActiveTab = tab.ID
-	a.markTabActivity(tab.ID)
-	return a.tabs, a.persistTabs()
+func (a *App) createFileTab(site model.Site, hidden bool) ([]model.Tab, error) {
+	return a.createConnectedTab(hidden, func(context.Context) (model.Tab, error) {
+		tab := session.MakeTab(site)
+		remotePath, err := a.sessionManager.Connect(tab)
+		if remotePath != "" {
+			tab.RemotePath = remotePath
+		}
+		tab.Connected = err == nil
+		return tab, err
+	})
 }
 
-func (a *App) createTelnetTabLocked(site model.Site) ([]model.Tab, error) {
-	if err := a.ensureTabCreationAllowed(); err != nil {
-		return a.tabs, err
-	}
-	sessionID, err := a.sessionManager.StartTelnetSession(a.ctx, site)
-	if err != nil {
-		return a.tabs, err
-	}
-
-	tab := session.MakeTelnetTab(site, sessionID)
-	a.tabs = append(a.tabs, tab)
-	a.config.LastActiveTab = tab.ID
-	a.markTabActivity(tab.ID)
-	return a.tabs, a.persistTabs()
+func (a *App) createSSHTab(site model.Site, hidden bool) ([]model.Tab, error) {
+	return a.createConnectedTab(hidden, func(ctx context.Context) (model.Tab, error) {
+		sessionID, err := a.sessionManager.StartSSHSession(ctx, site)
+		if err != nil {
+			return model.Tab{}, err
+		}
+		return session.MakeSSHTab(site, sessionID), nil
+	})
 }
 
-func (a *App) createLocalTerminalTabLocked(cwd string) ([]model.Tab, error) {
-	if err := a.ensureTabCreationAllowed(); err != nil {
-		return a.tabs, err
-	}
-	sessionID, err := a.sessionManager.StartLocalSession(a.ctx, cwd)
-	if err != nil {
-		return a.tabs, err
-	}
+func (a *App) createTelnetTab(site model.Site, hidden bool) ([]model.Tab, error) {
+	return a.createConnectedTab(hidden, func(ctx context.Context) (model.Tab, error) {
+		sessionID, err := a.sessionManager.StartTelnetSession(ctx, site)
+		if err != nil {
+			return model.Tab{}, err
+		}
+		return session.MakeTelnetTab(site, sessionID), nil
+	})
+}
 
-	tab := session.MakeLocalTerminalTab(sessionID, cwd)
-	a.tabs = append(a.tabs, tab)
-	a.config.LastActiveTab = tab.ID
-	a.markTabActivity(tab.ID)
-	return a.tabs, a.persistTabs()
+func (a *App) createLocalTerminalTab(cwd string, hidden bool) ([]model.Tab, error) {
+	return a.createConnectedTab(hidden, func(ctx context.Context) (model.Tab, error) {
+		sessionID, err := a.sessionManager.StartLocalSession(ctx, cwd)
+		if err != nil {
+			return model.Tab{}, err
+		}
+		return session.MakeLocalTerminalTab(sessionID, cwd), nil
+	})
 }
 
 func (a *App) closeTabLocked(tabID string) ([]model.Tab, error) {
+	delete(a.tabConnections, tabID)
 	for _, tab := range a.tabs {
 		if tab.ID == tabID {
 			if tab.Mode == "terminal" && tab.SessionID != "" {
@@ -106,25 +121,67 @@ func (a *App) closeTabLocked(tabID string) ([]model.Tab, error) {
 	return a.tabs, a.persistTabs()
 }
 
-func (a *App) connectLocked(tabID string) ([]model.Tab, error) {
-	for i := range a.tabs {
-		if a.tabs[i].ID == tabID {
-			remotePath, err := a.sessionManager.Connect(a.tabs[i])
-			if err != nil {
-				return a.tabs, err
-			}
-			if remotePath != "" {
-				a.tabs[i].RemotePath = remotePath
-			}
-			a.tabs[i].Connected = true
-			a.markTabActivity(a.tabs[i].ID)
-			return a.tabs, a.persistTabs()
+func (a *App) connectTab(tabID string) ([]model.Tab, error) {
+	a.stateMu.Lock()
+	var target model.Tab
+	for _, tab := range a.tabs {
+		if tab.ID == tabID {
+			target = tab
+			break
 		}
 	}
-	return a.tabs, a.persistTabs()
+	if target.ID == "" {
+		tabs := append([]model.Tab{}, a.tabs...)
+		err := a.persistTabs()
+		a.stateMu.Unlock()
+		return tabs, err
+	}
+	if a.tabConnections == nil {
+		a.tabConnections = make(map[string]*model.Tab)
+	}
+	attempt := &target
+	a.tabConnections[tabID] = attempt
+	a.stateMu.Unlock()
+
+	connection, err := a.sessionManager.PrepareConnection(target)
+	a.stateMu.Lock()
+	cleanup := func() {}
+	if a.tabConnections[tabID] != attempt {
+		if err == nil {
+			err = fmt.Errorf("連線請求已取消: %s", tabID)
+		}
+	} else {
+		delete(a.tabConnections, tabID)
+		if err == nil {
+			for i := range a.tabs {
+				if a.tabs[i].ID == tabID {
+					cleanup = a.sessionManager.CommitConnection(tabID, connection)
+					if connection.RemotePath != "" {
+						a.tabs[i].RemotePath = connection.RemotePath
+					}
+					a.tabs[i].Connected = true
+					a.markTabActivity(tabID)
+					connection = nil
+					err = a.persistTabs()
+					break
+				}
+			}
+		}
+	}
+	if connection != nil && err == nil {
+		err = fmt.Errorf("連線請求已取消: %s", tabID)
+	}
+	tabs := append([]model.Tab{}, a.tabs...)
+	a.stateMu.Unlock()
+	cleanup()
+	if connection != nil {
+		_ = connection.Close()
+	}
+	return tabs, err
 }
 
 func (a *App) disconnectLocked(tabID string) ([]model.Tab, error) {
+	delete(a.tabConnections, tabID)
 	if err := a.sessionManager.Disconnect(tabID); err != nil {
 		return a.tabs, err
 	}

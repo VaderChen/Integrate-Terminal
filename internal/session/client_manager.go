@@ -4,13 +4,32 @@ import (
 	"fmt"
 
 	"IntegTERM/internal/model"
+	"IntegTERM/internal/transport"
 )
 
 func (m *Manager) Connect(tab model.Tab) (string, error) {
+	connection, err := m.PrepareConnection(tab)
+	if err != nil {
+		return "", err
+	}
+	cleanup := m.CommitConnection(tab.ID, connection)
+	cleanup()
+	return connection.RemotePath, nil
+}
+
+// PreparedConnection 在提交前不會取代現有連線，可安全取消過期的連線請求。
+type PreparedConnection struct {
+	client     transport.Client
+	RemotePath string
+}
+
+func (c *PreparedConnection) Close() error { return c.client.Close() }
+
+func (m *Manager) PrepareConnection(tab model.Tab) (*PreparedConnection, error) {
 	client, err := newClient(tab.Protocol)
 	if err != nil {
 		m.addLog(fmt.Sprintf("%s 連線初始化失敗: %v", tab.Title, err), "failed")
-		return "", err
+		return nil, err
 	}
 
 	if err := client.Connect(model.Site{
@@ -26,25 +45,32 @@ func (m *Manager) Connect(tab model.Tab) (string, error) {
 		LocalPath:     tab.LocalPath,
 		RemotePath:    tab.RemotePath,
 	}); err != nil {
+		_ = client.Close()
 		m.addLog(fmt.Sprintf("%s 連線失敗: %v", tab.Title, err), "failed")
-		return "", err
-	}
-
-	m.mu.Lock()
-	existing := m.clients[tab.ID]
-	m.clients[tab.ID] = client
-	m.mu.Unlock()
-	if existing != nil {
-		_ = existing.Close()
+		return nil, err
 	}
 
 	currentDir, err := client.CurrentDir()
 	if err != nil || currentDir == "" {
 		m.addLog(fmt.Sprintf("%s 已連線", tab.Title), "done")
-		return tab.RemotePath, nil
+		currentDir = tab.RemotePath
+	} else {
+		m.addLog(fmt.Sprintf("%s 已連線到 %s", tab.Title, currentDir), "done")
 	}
-	m.addLog(fmt.Sprintf("%s 已連線到 %s", tab.Title, currentDir), "done")
-	return currentDir, nil
+	return &PreparedConnection{client: client, RemotePath: currentDir}, nil
+}
+
+// CommitConnection 只更新索引；呼叫端釋放狀態鎖後再執行傳回的清理函式。
+func (m *Manager) CommitConnection(tabID string, connection *PreparedConnection) func() {
+	m.mu.Lock()
+	existing := m.clients[tabID]
+	m.clients[tabID] = connection.client
+	m.mu.Unlock()
+	return func() {
+		if existing != nil {
+			_ = existing.Close()
+		}
+	}
 }
 
 func (m *Manager) Disconnect(tabID string) error {

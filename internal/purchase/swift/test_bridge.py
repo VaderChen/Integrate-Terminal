@@ -21,7 +21,7 @@ def main():
         subprocess.run(
             [
                 "xcrun", "swiftc", "-parse-as-library", "-sanitize=thread",
-                "-target", platform.machine() + "-apple-macos12.0",
+                "-target", platform.machine() + "-apple-macos13.0",
                 str(source), "-o", str(binary),
             ],
             check=True,

@@ -11,16 +11,64 @@ import (
 )
 
 func (a *App) SaveConfig(config model.Config) (model.Config, error) {
+	a.runtimeConfigMu.Lock()
+	defer a.runtimeConfigMu.Unlock()
 	a.stateMu.Lock()
-	saved, err := a.saveConfigChangesLocked(config)
+	allowAttach := a.allowRESTAttach
+	var change *restServerChange
+	var previous model.Config
+	saved, err := a.saveConfigChangesLocked(config, func(before, next model.Config) error {
+		previous = before
+		var prepareErr error
+		change, prepareErr = a.prepareRESTServerConfig(next, allowAttach)
+		return prepareErr
+	})
 	a.stateMu.Unlock()
+	if change != nil {
+		defer change.close()
+	}
 	if err != nil {
 		return saved, err
 	}
-	return a.ReloadRuntimeConfig()
+	if allowAttach {
+		if shouldRunBackgroundService(saved) {
+			if err := a.ensureBackgroundService(saved); err != nil {
+				// 背景服務與 GUI 分屬不同程序，啟動失敗時只還原本次修改的欄位。
+				restored, restoreErr := a.store.UpdateConfig(func(latest *model.Config) error {
+					before, after, target := reflect.ValueOf(previous), reflect.ValueOf(saved), reflect.ValueOf(latest).Elem()
+					for i := 0; i < target.NumField(); i++ {
+						if target.Type().Field(i).Name != "ProUnlock" && reflect.DeepEqual(target.Field(i).Interface(), after.Field(i).Interface()) {
+							target.Field(i).Set(before.Field(i))
+						}
+					}
+					return nil
+				})
+				if restoreErr != nil {
+					return saved, fmt.Errorf("%w; 還原設定失敗: %v", err, restoreErr)
+				}
+				a.stateMu.Lock()
+				restored.ProUnlock = a.verifiedProUnlock
+				a.config = restored
+				a.stateMu.Unlock()
+				return cloneConfig(restored), err
+			}
+		}
+		a.syncAttachedRESTState(saved, allowAttach)
+	} else {
+		a.commitRESTServerConfig(change)
+	}
+	// 確認服務設定已生效後，再更新分頁還原資料。
+	a.stateMu.Lock()
+	defer a.stateMu.Unlock()
+	if !a.config.RestoreTabsOnStart {
+		err = a.store.SaveTabs([]model.Tab{})
+	} else if a.allowRESTAttach {
+		err = a.persistTabs()
+	}
+	return cloneConfig(a.config), err
 }
 
-func (a *App) saveConfigChangesLocked(config model.Config) (model.Config, error) {
+func (a *App) saveConfigChangesLocked(config model.Config, prepare func(model.Config, model.Config) error) (model.Config, error) {
 	previous := cloneConfig(a.config)
 	if a.storageInitErr != nil {
 		return previous, a.storageInitErr
@@ -28,6 +76,7 @@ func (a *App) saveConfigChangesLocked(config model.Config) (model.Config, error)
 	// General preferences cannot grant/revoke a StoreKit entitlement.
 	config.ProUnlock = previous.ProUnlock
 	saved, err := a.store.UpdateConfig(func(latest *model.Config) error {
+		beforeSave := cloneConfig(*latest)
 		before, requested, target := reflect.ValueOf(previous), reflect.ValueOf(config), reflect.ValueOf(latest).Elem()
 		for i := 0; i < target.NumField(); i++ {
 			if target.Type().Field(i).Name == "ProUnlock" || target.Type().Field(i).Name == "SiteFolders" {
@@ -52,23 +101,13 @@ func (a *App) saveConfigChangesLocked(config model.Config) (model.Config, error)
 		if !latest.RestoreTabsOnStart {
 			latest.LastActiveTab = ""
 		}
-		return nil
+		return prepare(beforeSave, *latest)
 	})
 	if err != nil {
 		return previous, err
 	}
 	a.config = saved
 	a.config.ProUnlock = a.verifiedProUnlock
-	if !a.config.RestoreTabsOnStart {
-		if err := a.store.SaveTabs([]model.Tab{}); err != nil {
-			return cloneConfig(a.config), err
-		}
-	}
-	if a.allowRESTAttach && a.config.RestoreTabsOnStart {
-		if err := a.persistTabs(); err != nil {
-			return cloneConfig(a.config), err
-		}
-	}
 	return cloneConfig(a.config), nil
 }
 
@@ -111,7 +150,7 @@ func (a *App) ensureTabCreationAllowed() error {
 	if limit == 0 {
 		return nil
 	}
-	if len(visibleTabs(a.tabs)) < limit {
+	if len(visibleTabs(a.tabs))+a.pendingTabCreations < limit {
 		return nil
 	}
 	return fmt.Errorf("目前未解鎖 Pro，最多只能開啟 %d 個 TAB", limit)

@@ -1,6 +1,6 @@
 module IntegTERM
 
-go 1.26.8
+go 1.27.1
 
 replace github.com/getlantern/systray => ./third_party/systray
 

@@ -7,33 +7,23 @@ import (
 	"path/filepath"
 	"time"
 
-	"IntegTERM/internal/credentials"
 	"IntegTERM/internal/model"
 )
 
 type Store struct {
 	baseDir      string
-	credentials  credentials.Backend
 	writeRecords func(string, any) error
 	lockTimeout  time.Duration
 }
 
 func New(baseDir string) *Store {
-	return NewWithCredentials(baseDir, credentials.New())
+	return NewWithLockTimeout(baseDir, 0)
 }
 
-// NewWithCredentials allows tests to use an isolated in-memory backend.
-// A nil backend fails closed whenever a record needs credentials.
-func NewWithCredentials(baseDir string, backend credentials.Backend) *Store {
-	return NewWithCredentialsAndLockTimeout(baseDir, backend, 0)
-}
-
-// NewWithCredentialsAndLockTimeout bounds only waiting to acquire a transaction's
-// file lock. Once acquired, the callback runs to completion without a deadline.
-// A non-positive timeout retains the blocking behavior of New/NewWithCredentials.
-// The option is immutable so concurrent transactions can safely share the Store.
-func NewWithCredentialsAndLockTimeout(baseDir string, backend credentials.Backend, timeout time.Duration) *Store {
-	return &Store{baseDir: baseDir, credentials: backend, writeRecords: writeJSON, lockTimeout: timeout}
+// NewWithLockTimeout 只限制取得檔案鎖的等待時間，取得後交易會執行至結束。
+// 非正值與 New 一樣持續等待；設定建立後不再改變，可供並行交易使用。
+func NewWithLockTimeout(baseDir string, timeout time.Duration) *Store {
+	return &Store{baseDir: baseDir, writeRecords: writeJSON, lockTimeout: timeout}
 }
 
 func (s *Store) BaseDir() string {
@@ -56,16 +46,38 @@ func (s *Store) Ensure() error {
 }
 
 func (s *Store) loadSites() ([]model.Site, error) {
-	return loadCredentialRecords[model.Site](s, filepath.Join(s.baseDir, "sites.json"))
+	return loadJSONRecords[model.Site](filepath.Join(s.baseDir, "sites.json"))
 }
 func (s *Store) saveSites(records []model.Site) error {
-	return saveCredentialRecords(s, filepath.Join(s.baseDir, "sites.json"), records)
+	return saveJSONRecords(s, filepath.Join(s.baseDir, "sites.json"), records)
 }
 func (s *Store) loadTabs() ([]model.Tab, error) {
-	return loadCredentialRecords[model.Tab](s, filepath.Join(s.baseDir, "tabs.json"))
+	return loadJSONRecords[model.Tab](filepath.Join(s.baseDir, "tabs.json"))
 }
 func (s *Store) saveTabs(records []model.Tab) error {
-	return saveCredentialRecords(s, filepath.Join(s.baseDir, "tabs.json"), records)
+	return saveJSONRecords(s, filepath.Join(s.baseDir, "tabs.json"), records)
+}
+
+func loadJSONRecords[T any](path string) ([]T, error) {
+	records, err := readJSON[[]T](path)
+	if errors.Is(err, os.ErrNotExist) {
+		return []T{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if records == nil {
+		records = []T{}
+	}
+	return records, nil
+}
+
+func saveJSONRecords[T any](s *Store, path string, records []T) error {
+	// 既有檔案無法完整讀取時，保留原檔，不以空資料或新資料覆蓋。
+	if _, err := loadJSONRecords[T](path); err != nil {
+		return err
+	}
+	return s.writeRecords(path, records)
 }
 
 func (s *Store) loadConfig() (model.Config, error) {

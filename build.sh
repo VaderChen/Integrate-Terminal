@@ -9,9 +9,9 @@ BUILD_BIN_DIR="$SCRIPT_DIR/build/bin"
 APP_PATH="$BUILD_BIN_DIR/$APP_NAME.app"
 PKG_PATH="$BUILD_BIN_DIR/$APP_NAME.pkg"
 TMP_ROOT=""
-export MACOSX_DEPLOYMENT_TARGET="12.0"
-export CGO_CFLAGS="-mmacosx-version-min=12.0"
-export CGO_LDFLAGS="-mmacosx-version-min=12.0"
+export MACOSX_DEPLOYMENT_TARGET="13.0"
+export CGO_CFLAGS="-mmacosx-version-min=13.0"
+export CGO_LDFLAGS="-mmacosx-version-min=13.0"
 export COPYFILE_DISABLE=1
 export COPY_EXTENDED_ATTRIBUTES_DISABLE=1
 
@@ -27,8 +27,7 @@ if [[ -f "$HOME/.zshrc" ]]; then
   source "$HOME/.zshrc"
 fi
 
-# Go 1.26 is the last release supporting the macOS 12 deployment target.
-# Do not inherit a newer global GOTOOLCHAIN from the user's shell.
+# 編譯版本統一取自 go.mod，不受使用者 shell 的全域工具鏈設定影響。
 unset GOROOT
 export GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' "$SCRIPT_DIR/go.mod")"
 # Applies to Wails' bindings helper and dev builds as well as the final binary.
@@ -42,40 +41,6 @@ APP_BUNDLE_VERSION="1.$(date +%y).$(date +%m%d%H%M)"
 export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
 export APP_MARKETING_VERSION
 export APP_BUNDLE_VERSION
-
-find_wails() {
-  if command -v wails >/dev/null 2>&1; then
-    command -v wails
-    return 0
-  fi
-
-  local candidates=()
-  local gopath=""
-  gopath="$(go env GOPATH 2>/dev/null || true)"
-  if [[ -n "$gopath" ]]; then
-    candidates+=("$gopath/bin/wails")
-  fi
-  candidates+=(
-    "$HOME/go/bin/wails"
-    "/opt/homebrew/bin/wails"
-    "/usr/local/bin/wails"
-  )
-
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    if [[ -x "$candidate" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-
-  return 1
-}
-
-install_wails() {
-  echo "未找到 Wails，正在自動安裝..."
-  GO111MODULE=on go install github.com/wailsapp/wails/v2/cmd/wails@latest
-}
 
 cleanup_appledouble() {
   local target_path="$1"
@@ -135,19 +100,7 @@ if ! command -v rsync >/dev/null 2>&1; then
   exit 1
 fi
 
-WAILS_BIN="$(find_wails || true)"
-if [[ -z "$WAILS_BIN" ]]; then
-  install_wails
-  WAILS_BIN="$(find_wails || true)"
-fi
-
-if [[ -z "$WAILS_BIN" ]]; then
-  echo "缺少必要指令: wails"
-  echo "已嘗試自動安裝，但仍未找到。"
-  echo "可手動執行：go install github.com/wailsapp/wails/v2/cmd/wails@latest"
-  echo "若已安裝，請確認 \$HOME/go/bin 或 \$(go env GOPATH)/bin 已加入 PATH。"
-  exit 1
-fi
+WAILS_BIN="$(zsh "$SCRIPT_DIR/scripts/ensure-wails.sh")"
 
 if ! command -v codesign >/dev/null 2>&1; then
   echo "缺少必要指令: codesign"
@@ -225,8 +178,8 @@ cleanup_appledouble "$STAGING_DIR/frontend/dist"
 echo "開始於本機暫存目錄打包 Wails 應用程式（production / App Store-safe build）..."
 (
   cd "$STAGING_DIR"
-  export CGO_CFLAGS="-mmacosx-version-min=12.0"
-  export CGO_LDFLAGS="-mmacosx-version-min=12.0"
+  export CGO_CFLAGS="-mmacosx-version-min=13.0"
+  export CGO_LDFLAGS="-mmacosx-version-min=13.0"
   export DYLD_LIBRARY_PATH="$STAGING_DIR/internal/purchase/native${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
   "$WAILS_BIN" build -clean -s -trimpath
 )

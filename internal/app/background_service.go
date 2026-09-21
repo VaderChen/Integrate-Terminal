@@ -51,6 +51,7 @@ func (a *App) ensureBackgroundService(config model.Config) error {
 				}
 				time.Sleep(200 * time.Millisecond)
 			}
+			return fmt.Errorf("background service did not become ready at %s", baseURL)
 		}
 		return nil
 	}
@@ -157,7 +158,6 @@ func (a *App) ReloadRuntimeConfig() (model.Config, error) {
 	a.stateMu.Lock()
 	cfg.ProUnlock = a.verifiedProUnlock
 	cfg.RESTServerPort = sanitizeRESTServerPort(cfg.RESTServerPort)
-	a.config = cfg
 	allowAttach := a.allowRESTAttach
 	a.stateMu.Unlock()
 	if allowAttach {
@@ -167,7 +167,12 @@ func (a *App) ReloadRuntimeConfig() (model.Config, error) {
 			}
 		}
 		a.syncAttachedRESTState(cfg, allowAttach)
-		return cloneConfig(cfg), nil
+	} else if err := a.applyRESTServerConfig(cfg, allowAttach); err != nil {
+		return a.GetConfig(), err
 	}
-	return cloneConfig(cfg), a.applyRESTServerConfig(cfg, allowAttach)
+	a.stateMu.Lock()
+	cfg.ProUnlock = a.verifiedProUnlock
+	a.config = cfg
+	a.stateMu.Unlock()
+	return cloneConfig(cfg), nil
 }

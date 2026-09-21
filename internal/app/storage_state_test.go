@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,36 +10,10 @@ import (
 	"testing"
 
 	"IntegTERM/internal/model"
-	"IntegTERM/internal/store"
 )
 
-type recoverableTestVault struct {
-	items  map[string][]byte
-	locked bool
-}
-
-func (v *recoverableTestVault) Get(ref string) ([]byte, error) {
-	if v.locked {
-		return nil, errors.New("test keychain locked")
-	}
-	data, ok := v.items[ref]
-	if !ok {
-		return nil, errors.New("test credential missing")
-	}
-	return append([]byte(nil), data...), nil
-}
-func (v *recoverableTestVault) Put(ref string, value []byte) error {
-	if v.locked {
-		return errors.New("test keychain locked")
-	}
-	v.items[ref] = append([]byte(nil), value...)
-	return nil
-}
-func (v *recoverableTestVault) Delete(ref string) error { delete(v.items, ref); return nil }
-
-func TestLockedVaultStartupPreservesSavedWorkspaceAndCanRetry(t *testing.T) {
-	vault := &recoverableTestVault{items: make(map[string][]byte)}
-	s := store.NewWithCredentials(t.TempDir(), vault)
+func TestUnreadableSitesPreserveSavedWorkspaceAndCanRetry(t *testing.T) {
+	s := newAppTestStore(t.TempDir())
 	site := regressionSite("saved")
 	if err := s.SaveSites([]model.Site{site}); err != nil {
 		t.Fatal(err)
@@ -58,6 +31,14 @@ func TestLockedVaultStartupPreservesSavedWorkspaceAndCanRetry(t *testing.T) {
 	if err := s.SaveConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
+	sitesPath := filepath.Join(s.BaseDir(), "sites.json")
+	validSites, err := os.ReadFile(sitesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sitesPath, []byte("{broken"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	before := make(map[string][]byte)
 	for _, name := range []string{"sites.json", "tabs.json", "config.json"} {
 		before[name], err = os.ReadFile(filepath.Join(s.BaseDir(), name))
@@ -67,10 +48,9 @@ func TestLockedVaultStartupPreservesSavedWorkspaceAndCanRetry(t *testing.T) {
 	}
 	a := regressionApp(t, s)
 	a.allowRESTAttach = true
-	vault.locked = true
 	a.storageInitErr = a.loadInitialStateLocked()
 	if a.storageInitErr == nil {
-		t.Fatal("locked keychain reported a successful startup")
+		t.Fatal("invalid sites file reported a successful startup")
 	}
 	if payload := a.Bootstrap(); payload.StorageError == "" {
 		t.Fatal("missing recoverable storage error")
@@ -82,7 +62,7 @@ func TestLockedVaultStartupPreservesSavedWorkspaceAndCanRetry(t *testing.T) {
 		t.Fatal("new tab bypassed failed restore guard")
 	}
 	if _, err := a.GetSites(); err == nil {
-		t.Fatal("locked keychain returned a successful site list")
+		t.Fatal("invalid sites file returned a successful site list")
 	}
 	for _, endpoint := range []string{"/api/sites", "/api/tabs"} {
 		response := httptest.NewRecorder()
@@ -98,7 +78,9 @@ func TestLockedVaultStartupPreservesSavedWorkspaceAndCanRetry(t *testing.T) {
 			t.Fatalf("failed startup changed %s: %v", name, err)
 		}
 	}
-	vault.locked = false
+	if err := os.WriteFile(sitesPath, validSites, 0600); err != nil {
+		t.Fatal(err)
+	}
 	payload := a.Bootstrap()
 	if payload.StorageError != "" || len(payload.Sites) != 1 || len(payload.Tabs) != 1 {
 		t.Fatalf("retry did not recover saved workspace: error=%s sites=%d tabs=%d", payload.StorageError, len(payload.Sites), len(payload.Tabs))
@@ -134,9 +116,8 @@ func TestUnreadableConfigDoesNotEraseSavedTabsOnShutdown(t *testing.T) {
 	}
 }
 
-func TestLockedTabCredentialProtectsWorkspaceAndRESTReadsCanRecover(t *testing.T) {
-	vault := &recoverableTestVault{items: make(map[string][]byte)}
-	s := store.NewWithCredentials(t.TempDir(), vault)
+func TestUnreadableTabsProtectWorkspaceAndRESTReadsCanRecover(t *testing.T) {
+	s := newAppTestStore(t.TempDir())
 	tab := model.Tab{ID: "saved-tab", Mode: "file", Password: "tab-only-secret"}
 	if err := s.SaveTabs([]model.Tab{tab}); err != nil {
 		t.Fatal(err)
@@ -149,16 +130,20 @@ func TestLockedTabCredentialProtectsWorkspaceAndRESTReadsCanRecover(t *testing.T
 	if err := s.SaveConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
-	before, err := os.ReadFile(filepath.Join(s.BaseDir(), "tabs.json"))
+	tabsPath := filepath.Join(s.BaseDir(), "tabs.json")
+	validTabs, err := os.ReadFile(tabsPath)
 	if err != nil {
+		t.Fatal(err)
+	}
+	before := []byte("{broken")
+	if err := os.WriteFile(tabsPath, before, 0600); err != nil {
 		t.Fatal(err)
 	}
 	a := regressionApp(t, s)
 	a.allowRESTAttach = true
-	vault.locked = true
 	a.storageInitErr = a.loadInitialStateLocked()
 	if a.storageInitErr == nil {
-		t.Fatal("locked saved tab did not fail startup")
+		t.Fatal("invalid tabs file did not fail startup")
 	}
 	if _, err := a.CreateSiteFolder("unread-workspace"); err == nil {
 		t.Fatal("folder mutation bypassed failed startup guard")
@@ -181,10 +166,45 @@ func TestLockedTabCredentialProtectsWorkspaceAndRESTReadsCanRecover(t *testing.T
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatalf("unread saved tabs were overwritten: %v", err)
 	}
-	vault.locked = false
+	if err := os.WriteFile(tabsPath, validTabs, 0600); err != nil {
+		t.Fatal(err)
+	}
 	response := httptest.NewRecorder()
 	a.restMux().ServeHTTP(response, authorizedRequest(http.MethodGet, "/api/tabs", nil))
 	if response.Code != http.StatusOK || a.storageInitErr != nil || len(a.tabs) != 1 || a.tabs[0].Password != tab.Password {
 		t.Fatalf("read did not recover saved tabs: status=%d error=%v count=%d", response.Code, a.storageInitErr, len(a.tabs))
+	}
+}
+
+func TestFileWorkspaceStartsAndSaves(t *testing.T) {
+	s := newAppTestStore(t.TempDir())
+	site := regressionSite("file-site")
+	if err := s.SaveSites([]model.Site{site}); err != nil {
+		t.Fatal(err)
+	}
+	tab := model.Tab{ID: "file-tab", SiteID: site.ID, Mode: "file", Password: "tab-secret"}
+	if err := s.SaveTabs([]model.Tab{tab}); err != nil {
+		t.Fatal(err)
+	}
+	a := regressionApp(t, s)
+	a.storageInitErr = a.loadInitialStateLocked()
+	payload := a.Bootstrap()
+	if a.storageInitErr != nil || payload.StorageError != "" || len(payload.Sites) != 1 || len(payload.Tabs) != 1 {
+		t.Fatal("檔案工作區啟動失敗")
+	}
+	if payload.Sites[0].Password != site.Password || payload.Tabs[0].Password != tab.Password {
+		t.Fatal("檔案工作區遺失憑證")
+	}
+	site.Name = "重新命名"
+	site.Password = "changed-test"
+	if _, err := a.SaveSite(site); err != nil {
+		t.Fatal(err)
+	}
+	restarted := regressionApp(t, newAppTestStore(s.BaseDir()))
+	if err := restarted.loadInitialStateLocked(); err != nil {
+		t.Fatal(err)
+	}
+	if len(restarted.sites) != 1 || restarted.sites[0].Password != site.Password || restarted.sites[0].Name != site.Name {
+		t.Fatal("檔案變更未跨程序保存")
 	}
 }

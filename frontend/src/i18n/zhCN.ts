@@ -1,7 +1,7 @@
 import type { Messages } from '../i18n';
 
 export const zhCNMessages: Messages = {
-    storageLoadFailed: '无法读取已保存的连接，原数据已保留。如果 macOS 钥匙串已锁定，请解锁后重试。',
+    storageLoadFailed: '无法读取已保存的连接，原数据已保留。请确认数据文件可读写后重试。',
     storageRetry: '重新读取',
     loading: '正在载入工作区...',
     brandEyebrow: 'integrated Term',

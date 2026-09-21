@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"IntegTERM/internal/credentials"
 	"IntegTERM/internal/model"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -220,12 +219,13 @@ func TestMCPMountPreservesConfiguredRootAndRejectsEscapes(t *testing.T) {
 }
 
 func TestMCPStorageFailureIsVisibleAndRAMRemainsUsable(t *testing.T) {
-	app := &App{storageInitErr: credentials.ErrLocked}
+	storageErr := errors.New("saved data file unavailable")
+	app := &App{storageInitErr: storageErr}
 	layer := newMCPVirtualLayer(app)
-	if _, err := layer.listRemoteSites(); !errors.Is(err, credentials.ErrLocked) {
+	if _, err := layer.listRemoteSites(); !errors.Is(err, storageErr) {
 		t.Fatalf("sites hid storage failure: %v", err)
 	}
-	if _, err := layer.mcpRemoteSiteCount(); !errors.Is(err, credentials.ErrLocked) {
+	if _, err := layer.mcpRemoteSiteCount(); !errors.Is(err, storageErr) {
 		t.Fatalf("count hid storage failure: %v", err)
 	}
 	if _, err := layer.writeVirtual("recovery-note", "hello", "", false); err != nil {
@@ -250,7 +250,7 @@ func TestMCPStorageFailureIsVisibleAndRAMRemainsUsable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !result.IsError {
-		t.Fatal("workspace_info advertised empty sites after credential failure")
+		t.Fatal("workspace_info advertised empty sites after file read failure")
 	}
 	app.stateMu.Lock()
 	app.storageInitErr = nil

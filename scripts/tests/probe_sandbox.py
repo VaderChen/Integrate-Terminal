@@ -129,7 +129,7 @@ def adhoc_probes():
     keep_staging = False
     try:
         executable = staging / "compiled-probe"
-        run(["/usr/bin/xcrun", "clang", "-fobjc-arc", "-mmacosx-version-min=12.0", "-Wno-deprecated-declarations", "-framework", "Foundation", "-framework", "Security", str(SOURCE), "-o", str(executable)])
+        run(["/usr/bin/xcrun", "clang", "-fobjc-arc", "-mmacosx-version-min=13.0", "-Wno-deprecated-declarations", "-framework", "Foundation", "-framework", "Security", str(SOURCE), "-o", str(executable)])
         for mode in ("plain-adhoc", "sandbox-no-server", "sandbox-with-server"):
             run_id = str(uuid.uuid4())
             bundle_id = f"com.vader.integterm.sandbox-probe.{run_id}"

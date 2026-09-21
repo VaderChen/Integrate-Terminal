@@ -6,9 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FRONTEND_DIR="$SCRIPT_DIR/frontend"
 TMP_ROOT=""
 SYNC_WATCHER_PID=""
-export MACOSX_DEPLOYMENT_TARGET="12.0"
-export CGO_CFLAGS="-mmacosx-version-min=12.0"
-export CGO_LDFLAGS="-mmacosx-version-min=12.0"
+export MACOSX_DEPLOYMENT_TARGET="13.0"
+export CGO_CFLAGS="-mmacosx-version-min=13.0"
+export CGO_LDFLAGS="-mmacosx-version-min=13.0"
 export DYLD_LIBRARY_PATH="$SCRIPT_DIR/internal/purchase/native${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 export VITE_APP_VERSION="1.$(date +%y).$(date +%m%d) build $(date +%H%M)"
 export COPYFILE_DISABLE=1
@@ -40,47 +40,12 @@ if [[ -f "$HOME/.zshrc" ]]; then
   source "$HOME/.zshrc"
 fi
 
-# Match the production toolchain and retain macOS 12 compatibility.
+# 開發模式與正式建置使用相同的 Go 工具鏈及 macOS 13 部署目標。
 unset GOROOT
 export GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' "$SCRIPT_DIR/go.mod")"
 # Applies to Wails' bindings helper and dev builds as well as the final binary.
 # Go also remaps CGO C/Objective-C source paths when trimpath is enabled.
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
-
-find_wails() {
-  if command -v wails >/dev/null 2>&1; then
-    command -v wails
-    return 0
-  fi
-
-  local candidates=()
-  local gopath=""
-  gopath="$(go env GOPATH 2>/dev/null || true)"
-  if [[ -n "$gopath" ]]; then
-    candidates+=("$gopath/bin/wails")
-  fi
-  candidates+=(
-    "$HOME/go/bin/wails"
-    "/opt/homebrew/bin/wails"
-    "/usr/local/bin/wails"
-  )
-
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    if [[ -x "$candidate" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-
-  return 1
-}
-
-install_wails() {
-  echo "未找到 Wails，正在自動安裝..."
-  local install_target="github.com/wailsapp/wails/v2/cmd/wails@latest"
-  GO111MODULE=on go install "$install_target"
-}
 
 required_commands=(go node npm rsync)
 for cmd in "${required_commands[@]}"; do
@@ -91,19 +56,7 @@ for cmd in "${required_commands[@]}"; do
   fi
 done
 
-WAILS_BIN="$(find_wails || true)"
-if [[ -z "$WAILS_BIN" ]]; then
-  install_wails
-  WAILS_BIN="$(find_wails || true)"
-fi
-
-if [[ -z "$WAILS_BIN" ]]; then
-  echo "缺少必要指令: wails"
-  echo "已嘗試自動安裝，但仍未找到。"
-  echo "可手動執行：go install github.com/wailsapp/wails/v2/cmd/wails@latest"
-  echo "若已安裝，請確認 \$HOME/go/bin 或 \$(go env GOPATH)/bin 已加入 PATH。"
-  exit 1
-fi
+WAILS_BIN="$(zsh "$SCRIPT_DIR/scripts/ensure-wails.sh")"
 
 cd "$FRONTEND_DIR"
 if [[ ! -d node_modules ]]; then

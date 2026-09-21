@@ -1,7 +1,7 @@
 import type { Messages } from '../i18n';
 
 export const enMessages: Messages = {
-    storageLoadFailed: 'Saved connections could not be loaded. Your data has been kept. If your macOS keychain is locked, unlock it and retry.',
+    storageLoadFailed: 'Saved connections could not be loaded. Your data has been kept. Check access to the data files and retry.',
     storageRetry: 'Retry loading',
     loading: 'Loading workspace...',
     brandEyebrow: 'integrated Term',

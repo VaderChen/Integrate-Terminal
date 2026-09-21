@@ -39,6 +39,9 @@ type App struct {
 	restAttached      bool
 	allowRESTAttach   bool
 	operations        map[string]RESTOperation
+
+	pendingTabCreations int
+	tabConnections      map[string]*model.Tab
 }
 
 func New() *App {

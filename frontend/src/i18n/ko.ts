@@ -1,7 +1,7 @@
 import type { Messages } from '../i18n';
 
 export const koMessages: Messages = {
-    storageLoadFailed: '저장된 연결을 불러오지 못했습니다. 기존 데이터는 유지됩니다. macOS 키체인이 잠겨 있다면 잠금을 해제한 후 다시 시도하세요.',
+    storageLoadFailed: '저장된 연결을 불러오지 못했습니다. 기존 데이터는 유지됩니다. 데이터 파일의 읽기 및 쓰기 권한을 확인한 후 다시 시도하세요.',
     storageRetry: '다시 불러오기',
     loading: '작업 공간을 불러오는 중...',
     brandEyebrow: 'integrated Term',

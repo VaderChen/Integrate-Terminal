@@ -42,31 +42,19 @@ func (a *App) GetTabs() ([]model.Tab, error) {
 }
 
 func (a *App) CreateTab(site model.Site) ([]model.Tab, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	value, err := a.createTabLocked(site)
-	return append([]model.Tab{}, value...), err
+	return a.createFileTab(site, false)
 }
 
 func (a *App) CreateSSHTab(site model.Site) ([]model.Tab, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	value, err := a.createSSHTabLocked(site)
-	return append([]model.Tab{}, value...), err
+	return a.createSSHTab(site, false)
 }
 
 func (a *App) CreateTelnetTab(site model.Site) ([]model.Tab, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	value, err := a.createTelnetTabLocked(site)
-	return append([]model.Tab{}, value...), err
+	return a.createTelnetTab(site, false)
 }
 
 func (a *App) CreateLocalTerminalTab(cwd string) ([]model.Tab, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	value, err := a.createLocalTerminalTabLocked(cwd)
-	return append([]model.Tab{}, value...), err
+	return a.createLocalTerminalTab(cwd, false)
 }
 
 func (a *App) CloseTab(tabID string) ([]model.Tab, error) {
@@ -77,10 +65,7 @@ func (a *App) CloseTab(tabID string) ([]model.Tab, error) {
 }
 
 func (a *App) Connect(tabID string) ([]model.Tab, error) {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	value, err := a.connectLocked(tabID)
-	return append([]model.Tab{}, value...), err
+	return a.connectTab(tabID)
 }
 
 func (a *App) Disconnect(tabID string) ([]model.Tab, error) {

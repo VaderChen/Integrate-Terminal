@@ -31,20 +31,12 @@ func (a *App) handleRESTConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		a.stateMu.Lock()
-		config, err := a.saveConfigChangesLocked(payload.Config)
-		a.stateMu.Unlock()
+		config, err := a.SaveConfig(payload.Config)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, configEnvelope{Config: config})
-		// Shutdown must run outside the handler it is waiting to drain.
-		go func() {
-			if _, err := a.ReloadRuntimeConfig(); err != nil {
-				a.sessionManager.AppendLog("更新 REST 設定失敗: "+err.Error(), "failed")
-			}
-		}()
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}

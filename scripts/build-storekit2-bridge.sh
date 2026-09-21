@@ -17,7 +17,7 @@ mkdir -p "$OUTPUT_DIR"
 
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
 TARGET_ARCH="$(uname -m)"
-TARGET_TRIPLE="${TARGET_ARCH}-apple-macos12.0"
+TARGET_TRIPLE="${TARGET_ARCH}-apple-macos13.0"
 
 # Relative input and stable source mappings keep the builder's home/volume out
 # of Swift runtime locations, debug metadata and imported Clang source paths.
