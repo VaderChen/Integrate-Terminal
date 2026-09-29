@@ -20,13 +20,28 @@ func SignerFromPPK(filePath string, passphrase string) (ssh.Signer, error) {
 		return nil, err
 	}
 
-	var rawKey interface{}
-	if puttyKey.Encryption != "none" {
-		rawKey, err = puttyKey.ParseRawPrivateKey([]byte(passphrase))
-	} else {
-		rawKey, err = puttyKey.ParseRawPrivateKey(nil)
+	// 先確認私鑰存在，避免套件將只有公鑰的檔案誤判為缺少密語。
+	if len(puttyKey.PrivateKey) == 0 {
+		return nil, errors.New("PPK 不含私鑰，請選擇完整的 PPK 私鑰檔案")
 	}
+
+	// 依檔案的加密標記決定是否使用密語；未加密時忽略已儲存的舊密語。
+	var password []byte
+	if puttyKey.Encryption != "none" {
+		if passphrase == "" {
+			return nil, fmt.Errorf("PPK 已加密（%s），請輸入此檔案的密語", puttyKey.Encryption)
+		}
+		password = []byte(passphrase)
+	}
+	rawKey, err := puttyKey.ParseRawPrivateKey(password)
 	if err != nil {
+		// 套件未提供可辨識的 HMAC 錯誤型別；僅轉換此驗證錯誤，其他錯誤保留。
+		if strings.HasPrefix(err.Error(), "calculated HMAC ") {
+			if puttyKey.Encryption == "none" {
+				return nil, errors.New("PPK 完整性驗證失敗：此檔案未加密，請檢查檔案是否已變動或損毀")
+			}
+			return nil, errors.New("PPK 驗證失敗：密語不符或檔案損毀，請確認金鑰檔案與 PPK 密語")
+		}
 		return nil, err
 	}
 

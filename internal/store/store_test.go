@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 func TestWriteJSONAtomically(t *testing.T) {
 	baseDir := t.TempDir()
 	instance := New(baseDir)
-	sites := []model.Site{{ID: "site-1", Name: "example", Host: "example.com"}}
+	sites := []model.Site{{ID: "site-1", Name: "example", Host: "example.com", Tags: []string{"正式", "客戶 A"}}}
 
 	if err := instance.SaveSites(sites); err != nil {
 		t.Fatalf("save sites: %v", err)
@@ -24,6 +25,9 @@ func TestWriteJSONAtomically(t *testing.T) {
 	}
 	if len(loaded) != 1 || loaded[0].ID != sites[0].ID {
 		t.Fatalf("unexpected sites: %#v", loaded)
+	}
+	if !reflect.DeepEqual(loaded[0].Tags, sites[0].Tags) {
+		t.Fatalf("標籤儲存後遺失: %v", loaded[0].Tags)
 	}
 
 	tempFiles, err := filepath.Glob(filepath.Join(baseDir, ".integterm-*.tmp"))

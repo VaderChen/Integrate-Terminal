@@ -909,6 +909,7 @@ function serializeSiteDraft(site: Site) {
     password: site.password,
     ppkPath: site.ppkPath,
     ppkPassphrase: site.ppkPassphrase,
+    tags: site.tags ?? [],
     localPath: site.localPath,
     remotePath: site.remotePath,
   });

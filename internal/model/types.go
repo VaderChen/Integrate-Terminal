@@ -1,6 +1,7 @@
 package model
 
 type Site struct {
+	Tags                    []string `json:"tags,omitempty"`
 	ID                      string   `json:"id"`
 	Name                    string   `json:"name"`
 	Folder                  string   `json:"folder,omitempty"`

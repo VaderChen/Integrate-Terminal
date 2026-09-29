@@ -1,4 +1,5 @@
 export type Site = {
+  tags?: string[];
   id: string;
   name: string;
   folder: string;

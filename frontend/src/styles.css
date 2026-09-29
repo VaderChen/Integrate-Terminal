@@ -2719,7 +2719,9 @@ select {
 }
 
 .site-editor-modal {
-  width: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  width: min(840px, 100%);
   min-height: auto;
   max-height: min(860px, calc(100vh - 40px));
   overflow: hidden;
@@ -2738,8 +2740,36 @@ select {
 }
 
 .site-editor-form .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   overflow: auto;
   padding-right: 4px;
+}
+
+.site-editor-form .form-grid > label {
+  min-width: 0;
+}
+
+.site-editor-form .site-protocol-field {
+  grid-column: 2;
+}
+
+.site-editor-form .path-picker {
+  flex-direction: row;
+}
+
+.site-editor-form .picker-button {
+  height: auto;
+  align-self: stretch;
+}
+
+@media (max-width: 640px) {
+  .site-editor-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-editor-form .site-protocol-field {
+    grid-column: auto;
+  }
 }
 
 .site-editor-form .form-grid::-webkit-scrollbar {

@@ -151,6 +151,7 @@ export namespace model {
 	    }
 	}
 	export class Site {
+	    tags?: string[];
 	    id: string;
 	    name: string;
 	    folder?: string;
@@ -178,6 +179,7 @@ export namespace model {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.folder = source["folder"];
+	        this.tags = source["tags"];
 	        this.protocol = source["protocol"];
 	        this.protocolLabel = source["protocolLabel"];
 	        this.supportedModes = source["supportedModes"];

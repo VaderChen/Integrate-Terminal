@@ -142,6 +142,8 @@ export type Messages = {
   expand: string;
   fieldName: string;
   fieldFolder: string;
+  fieldTags: string;
+  placeholderTags: string;
   fieldProtocol: string;
   fieldHost: string;
   fieldPort: string;

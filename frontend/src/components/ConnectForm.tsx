@@ -1,4 +1,6 @@
 import type { Site } from '../types';
+import { useEffect, useState } from 'react';
+import { parseSiteTags } from '../appUtils';
 import { type Locale, useI18n } from '../i18n';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronDown, faChevronUp, faFloppyDisk, faXmark } from '@fortawesome/free-solid-svg-icons';
@@ -20,6 +22,12 @@ type Props = {
 export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expanded, onToggle, onClose, dialogTitleId, variant = 'card', locale }: Props) {
   const t = useI18n(locale);
   const supportsPPK = draft.protocol === 'sftp';
+  const [tagsText, setTagsText] = useState(() => (draft.tags ?? []).join(', '));
+  useEffect(() => {
+    // 保留輸入中的分隔符號，同時同步外部載入的站台標籤。
+    setTagsText(previous => JSON.stringify(parseSiteTags(previous)) === JSON.stringify(draft.tags ?? [])
+      ? previous : (draft.tags ?? []).join(', '));
+  }, [draft.id, draft.tags]);
   const textInputProps = {
     autoCapitalize: 'none' as const,
     autoCorrect: 'off' as const,
@@ -91,6 +99,18 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
               />
             </label>
             <label>
+              <span>{t.fieldTags}</span>
+              <input
+                {...textInputProps}
+                value={tagsText}
+                placeholder={t.placeholderTags}
+                onChange={event => {
+                  setTagsText(event.target.value);
+                  update('tags', parseSiteTags(event.target.value));
+                }}
+              />
+            </label>
+            <label className="site-protocol-field">
               <span>{t.fieldProtocol}</span>
               <div className="select-shell">
                 <select
@@ -142,7 +162,7 @@ export function ConnectForm({ draft, onChange, onSave, canSave, isDirty, expande
             </label>
             {supportsPPK ? (
               <>
-                <label className="full-width">
+                <label>
                   <span>{t.fieldPPKPath}</span>
                   <div className="path-picker">
                     <input

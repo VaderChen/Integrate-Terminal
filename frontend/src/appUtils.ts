@@ -47,6 +47,7 @@ export function buildBlankSite(defaultLocalPath: string): Site {
     id: '',
     name: '',
     folder: '',
+    tags: [],
     protocol: 'sftp',
     host: '',
     port: 22,
@@ -58,6 +59,10 @@ export function buildBlankSite(defaultLocalPath: string): Site {
     remotePath: '/',
     lastUsedAt: '',
   };
+}
+
+export function parseSiteTags(value: string): string[] {
+  return [...new Set(value.split(/[,，、]/).map(tag => tag.trim()).filter(Boolean))];
 }
 
 export function canSaveSite(site: Site) {
