@@ -35,7 +35,7 @@ export GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' "$SCRIPT_DIR/go.m
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
 
 APP_MARKETING_VERSION="1.$(date +%y).$(date +%m%d)"
-APP_BUILD_LABEL="$(date +%H%M)"
+export APP_BUILD_LABEL="$(date +%H%M)"
 APP_DISPLAY_VERSION="$APP_MARKETING_VERSION build $APP_BUILD_LABEL"
 APP_BUNDLE_VERSION="1.$(date +%y).$(date +%m%d%H%M)"
 export VITE_APP_VERSION="$APP_DISPLAY_VERSION"
@@ -141,7 +141,7 @@ config.info = {
 };
 
 fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-fs.writeFileSync(serviceVersionPath, `${JSON.stringify({ productVersion: appVersion }, null, 2)}\n`);
+fs.writeFileSync(serviceVersionPath, `${JSON.stringify({ productVersion: appVersion, build: process.env.APP_BUILD_LABEL }, null, 2)}\n`);
 EOF
 
 echo "建置前端資產..."

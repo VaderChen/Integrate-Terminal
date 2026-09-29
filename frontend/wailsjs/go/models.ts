@@ -352,6 +352,45 @@ export namespace model {
 	}
 	
 
+	export class UpdateActionResult {
+	    downloaded: boolean;
+	    installScheduled: boolean;
+	    restarting: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateActionResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.downloaded = source["downloaded"];
+	        this.installScheduled = source["installScheduled"];
+	        this.restarting = source["restarting"];
+	    }
+	}
+	export class UpdateCheckResult {
+	    currentVersion: string;
+	    latestVersion: string;
+	    latestTag: string;
+	    updateAvailable: boolean;
+	    canDownload: boolean;
+	    assetName: string;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateCheckResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.latestTag = source["latestTag"];
+	        this.updateAvailable = source["updateAvailable"];
+	        this.canDownload = source["canDownload"];
+	        this.assetName = source["assetName"];
+	    }
+	}
+
 }
 
 export namespace session {

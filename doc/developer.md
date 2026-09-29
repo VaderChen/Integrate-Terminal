@@ -435,18 +435,11 @@ GET /api/operations/{id}
 
 這份文件定位為發版前快速交接與開發者維護參考。
 
-## Developer ID 簽章與 Apple 公證發行
+## 正式版發行
 
-正式 DMG 使用與 YourDesk 相同的流程：內嵌動態庫與執行檔由內而外使用固定 Developer ID Application 簽章，啟用 Hardened Runtime 與時間戳記，再分別公證 App 和 DMG、附加票根並執行 Gatekeeper 驗證。簽章或公證失敗即停止，不降級為 ad-hoc。
+使用 `python3 scripts/release-macos.py --build` 產生正式發行包。發行環境由維護者在本機設定。
+公開附件僅包含 DMG 與 `SHA256SUMS.txt`，內部建置及驗證紀錄不隨 Release 公開。
 
-```bash
-export INTEGTERM_CODESIGN_IDENTITY='Developer ID Application: 開發者名稱 (TEAMID)'
-export INTEGTERM_NOTARY_PROFILE='本機既有公證設定名稱'
-python3 scripts/release-macos.py --build
-```
+更新流程由「關於」頁面的檢查更新啟動。下載時透過 `update:progress` 回報實際位元組、總大小與階段；前端以每次請求 ID 過濾過期事件。下載、檔案驗證及安裝準備分別顯示，不以計時器模擬百分比。保留檔案大小與 SHA-256 驗證，下載失敗可重試，macOS 安裝失敗時回復原 App。
 
-公證設定在建置前檢查；既有 Developer ID 與 Apple 公證認證由 macOS 工具使用，不匯出私鑰、不將認證寫入原始碼。這是發行簽章用途，與站台密碼／PPK 的 JSON 檔案儲存相互獨立。
-
-產物位於 `dist/<版本>.<build>/`，包含已簽署與公證的 App、DMG、`SHA256SUMS.txt` 與 `notarization.json`。整組驗證通過後才發布至產物目錄，已存在的版本不覆寫；SHA-256 在 DMG 完成票根附加後計算。App 與 DMG 的 Gatekeeper 都必須回報 accepted。
-
-`build.sh` 和 `package-dmg.sh` 保留本機 ad-hoc 開發封裝用途；正式發行應使用上述 `release-macos.py`，不能將本機開發包當作已公證包上傳。
+設定已移除授權導覽與 Pro 解鎖頁面。

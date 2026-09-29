@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faXmark } from '@fortawesome/free-solid-svg-icons';
-import type { Config, PurchaseStatus } from '../types';
+import type { Config } from '../types';
 import { type Locale, useI18n } from '../i18n';
 import { MCPSettingsPanel } from './MCPSettingsPanel';
 
-type SettingsSection = 'general' | 'purchase' | 'display' | 'system' | 'skill' | 'about';
+type SettingsSection = 'general' | 'display' | 'system' | 'skill' | 'about';
 
 const BUILD_VERSION = import.meta.env.VITE_APP_VERSION ?? '1.00.00';
 
 type Props = {
+  updateChecking: boolean;
+  updateFeedback: string;
+  onCheckForUpdates: () => void;
   open: boolean;
   onClose: () => void;
   config: Config;
   locale: Locale;
-  purchaseStatus: PurchaseStatus;
   onLanguageChange: (language: Config['language']) => void;
   onThemeChange: (theme: Config['theme']) => void;
   onRestoreTabsChange: (restoreTabsOnStart: boolean) => void;
@@ -26,17 +28,16 @@ type Props = {
   onRESTServerEnabledChange: (restServerEnabled: boolean, restServerPort?: number) => Promise<void> | void;
   onRESTServerPortChange: (restServerPort: number) => void;
   onFontScaleChange: (scale: Config['fontScale']) => void;
-  onPurchaseProUnlock: () => Promise<void>;
-  onRestorePurchases: () => Promise<void>;
-  onRefreshPurchaseStatus: () => Promise<void>;
 };
 
 export function SettingsModal({
+  updateChecking,
+  updateFeedback,
+  onCheckForUpdates,
   open,
   onClose,
   config,
   locale,
-  purchaseStatus,
   onLanguageChange,
   onThemeChange,
   onRestoreTabsChange,
@@ -48,15 +49,11 @@ export function SettingsModal({
   onRESTServerEnabledChange,
   onRESTServerPortChange,
   onFontScaleChange,
-  onPurchaseProUnlock,
-  onRestorePurchases,
-  onRefreshPurchaseStatus,
 }: Props) {
   const t = useI18n(locale);
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
   if (!open) return null;
 
-  const purchaseSourceLabel = resolvePurchaseSourceLabel(purchaseStatus.source, t);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -84,9 +81,6 @@ export function SettingsModal({
             </button>
 	            <button className={`settings-nav-item ${activeSection === 'skill' ? 'active' : ''}`} onClick={() => setActiveSection('skill')}>
 	              {t.settingsNavSkill}
-	            </button>
-	            <button className={`settings-nav-item ${activeSection === 'purchase' ? 'active' : ''}`} onClick={() => setActiveSection('purchase')}>
-	              {t.settingsNavPurchase}
 	            </button>
 	            <button className={`settings-nav-item ${activeSection === 'about' ? 'active' : ''}`} onClick={() => setActiveSection('about')}>
 	              {t.settingsNavAbout}
@@ -153,47 +147,6 @@ export function SettingsModal({
               </>
             ) : null}
 
-            {activeSection === 'purchase' ? (
-              <div className="settings-section-card settings-section-stack">
-                <div className="settings-section-copy">
-                  <strong>{t.purchaseTitle}</strong>
-                  <span>{t.purchaseHint}</span>
-                </div>
-                <div className="settings-about-meta">
-                  <div className="settings-about-row">
-                    <strong>{t.purchasePlanLabel}</strong>
-                    <span>
-                      {purchaseStatus.proUnlock
-                        ? `${t.purchasePlanPro} / ${t.purchaseTabLimitUnlimited}`
-                        : `${t.purchasePlanFree} / ${t.purchaseTabLimit(2)}`}
-                    </span>
-                  </div>
-                  <div className="settings-about-row">
-                    <strong>{t.purchaseSourceLabel}</strong>
-                    <span>{purchaseSourceLabel}</span>
-                  </div>
-                </div>
-                <div className="settings-skill-actions">
-                  <button className="purchase-action-button purchase-action-button-muted" onClick={() => void onRefreshPurchaseStatus()}>
-                    {t.purchaseRefreshButton}
-                  </button>
-                  <button
-                    className="purchase-action-button purchase-action-button-muted"
-                    onClick={() => void onRestorePurchases()}
-                    disabled={!purchaseStatus.canRestore}
-                  >
-                    {t.purchaseRestoreButton}
-                  </button>
-                  <button
-                    className="purchase-action-button purchase-action-button-accent"
-                    onClick={() => void onPurchaseProUnlock()}
-                    disabled={!purchaseStatus.canPurchase}
-                  >
-                    {t.purchaseBuyButton}
-                  </button>
-                </div>
-              </div>
-            ) : null}
 
             {activeSection === 'display' ? (
               <>
@@ -316,11 +269,13 @@ export function SettingsModal({
                 <div className="settings-section-copy">
                   <strong>{t.brandTitle}</strong>
                   <span>{t.brandSubtitle}</span>
+                  {updateFeedback ? <span role="status">{updateFeedback}</span> : null}
                 </div>
                 <div className="settings-about-meta">
                   <div className="settings-about-row">
                     <strong>{t.settingsAboutVersion}</strong>
                     <span>{BUILD_VERSION}</span>
+                    <button className="ghost" onClick={onCheckForUpdates} disabled={updateChecking}>{updateChecking ? t.settingsUpdateChecking : t.settingsUpdateCheck}</button>
                   </div>
                   <div className="settings-about-row">
                     <strong>{t.settingsAboutAuthor}</strong>
@@ -334,24 +289,4 @@ export function SettingsModal({
       </section>
     </div>
   );
-}
-
-function resolvePurchaseSourceLabel(source: string, t: ReturnType<typeof useI18n>) {
-  switch (source) {
-    case 'storekit2-entitlement':
-      return t.purchaseSourceAppStore;
-    case 'storekit2-transaction':
-      return t.purchaseSourcePurchase;
-    case 'storekit2-sync':
-      return t.purchaseSourceRestore;
-    case 'storekit2-refresh':
-    case 'storekit2':
-      return t.purchaseSourceRefresh;
-    case 'config':
-      return t.purchaseSourceLocal;
-    case '':
-      return '-';
-    default:
-      return t.purchaseSourceUnknown;
-  }
 }

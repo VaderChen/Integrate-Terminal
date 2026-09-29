@@ -2990,3 +2990,81 @@ select {
   height: 32px;
   border-radius: 8px;
 }
+
+.update-modal-overlay {
+  z-index: 31;
+}
+
+.settings-modal.action-modal.update-modal {
+  width: min(500px, 100%);
+  max-width: 500px;
+}
+
+.update-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.update-version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.update-version-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.update-version-grid span {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.update-version-grid strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.update-version-grid .update-asset-row {
+  grid-column: 1 / -1;
+}
+
+.update-dialog-note,
+.update-dialog-status {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.update-dialog-note {
+  background: color-mix(in srgb, #b45309 10%, var(--app-surface));
+  color: #9a5a13;
+}
+
+.update-dialog-status.error {
+  background: color-mix(in srgb, #b91c1c 10%, var(--app-surface));
+  color: #b91c1c;
+}
+
+.update-dialog-status.success {
+  background: color-mix(in srgb, #15803d 10%, var(--app-surface));
+  color: #15803d;
+}
+
+
+.update-download-progress { display: grid; gap: 8px; font-variant-numeric: tabular-nums; }
+.update-download-progress progress { width: 100%; height: 10px; accent-color: var(--accent, #269e90); }
+.update-download-progress header { display: flex; justify-content: space-between; gap: 12px; }
+.update-download-progress small { color: var(--muted); }
+@media (max-width: 520px) { .update-version-grid { grid-template-columns: 1fr; } }

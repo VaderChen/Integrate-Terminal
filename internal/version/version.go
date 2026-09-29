@@ -10,6 +10,7 @@ import (
 var versionJSON []byte
 
 type configFile struct {
+	Build          string `json:"build"`
 	ProductVersion string `json:"productVersion"`
 }
 
@@ -26,3 +27,12 @@ func ProductVersion() string {
 }
 
 func Current() string { return "IntegTERM " + ProductVersion() }
+
+func UpdateVersion() string {
+	var cfg configFile
+	_ = json.Unmarshal(versionJSON, &cfg)
+	if strings.TrimSpace(cfg.Build) != "" {
+		return ProductVersion() + "." + strings.TrimSpace(cfg.Build)
+	}
+	return ProductVersion()
+}

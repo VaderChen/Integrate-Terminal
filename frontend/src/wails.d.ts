@@ -3,6 +3,8 @@ declare global {
     go?: {
       app?: {
         App?: {
+          CheckForUpdates: () => Promise<import('./types').UpdateCheckResult>;
+          StartUpdate: (tag: string, requestID: string) => Promise<import('./types').UpdateActionResult>;
           ApproveHost: (prompt: import('./types').HostTrustPrompt) => Promise<void>;
           Bootstrap: () => Promise<import('./types').BootstrapPayload>;
           SaveSite: (site: import('./types').Site) => Promise<import('./types').Site[]>;

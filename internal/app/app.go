@@ -15,6 +15,7 @@ import (
 const freePlanTabLimit = 2
 
 type App struct {
+	updateMu          sync.Mutex
 	mcpMu             sync.Mutex
 	mcpVFS            *mcpVFS
 	ctx               context.Context

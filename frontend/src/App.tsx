@@ -12,7 +12,8 @@ import { useFileActions } from './hooks/useFileActions';
 import { useFilePanels } from './hooks/useFilePanels';
 import { useSettingsActions } from './hooks/useSettingsActions';
 import { useSiteLibraryActions } from './hooks/useSiteLibraryActions';
-import { usePurchaseActions } from './hooks/usePurchaseActions';
+import { useUpdateActions } from './hooks/useUpdateActions';
+import { UpdateDialog } from './components/UpdateDialog';
 import { useTransferActions } from './hooks/useTransferActions';
 import { useTerminalEvents } from './hooks/useTerminalEvents';
 import { SSHConsolePanel } from './components/SSHConsolePanel';
@@ -73,6 +74,7 @@ export default function App() {
   const terminalUploadConfirmResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const locale = useMemo(() => resolveLocale(config.language), [config.language]);
   const t = useMemo(() => getMessages(locale), [locale]);
+  const updates = useUpdateActions(locale);
   const brandEyebrowLabel = purchaseStatus.proUnlock ? `${t.brandEyebrow} Pro` : t.brandEyebrow;
   const draftCanSave = useMemo(() => canSaveSite(draftSite), [draftSite]);
   const draftIsDirty = useMemo(() => serializeSiteDraft(draftSite) !== serializeSiteDraft(draftSiteBaseline), [draftSite, draftSiteBaseline]);
@@ -277,16 +279,6 @@ export default function App() {
     setSiteFolderDialog,
   });
 
-  const {
-    handleRefreshPurchaseStatus,
-    handlePurchaseProUnlock,
-    handleRestorePurchases,
-  } = usePurchaseActions({
-    connectionFailed: t.connectionFailed,
-    setPurchaseStatus,
-    setConfig,
-    setErrorMessage,
-  });
 
   const handleReorderTabs = async (tabIDs: string[]) => {
     const nextTabs = await window.go?.app?.App?.ReorderTabs?.(tabIDs);
@@ -605,12 +597,15 @@ export default function App() {
         </div>
       ) : null}
 
+      <UpdateDialog locale={locale} result={updates.result} actionBusy={updates.busy} actionResult={updates.actionResult} actionError={updates.error} progress={updates.progress} onClose={updates.close} onStartUpdate={() => void updates.start()} />
       <SettingsModal
+        updateChecking={updates.checking}
+        updateFeedback={updates.feedback}
+        onCheckForUpdates={() => void updates.check()}
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         config={config}
         locale={locale}
-        purchaseStatus={purchaseStatus}
         onLanguageChange={handleLanguageChange}
         onThemeChange={handleThemeChange}
         onRestoreTabsChange={handleRestoreTabsChange}
@@ -622,9 +617,6 @@ export default function App() {
         onRESTServerEnabledChange={handleRESTServerEnabledChange}
         onRESTServerPortChange={handleRESTServerPortChange}
         onFontScaleChange={handleFontScaleChange}
-        onPurchaseProUnlock={handlePurchaseProUnlock}
-        onRestorePurchases={handleRestorePurchases}
-        onRefreshPurchaseStatus={handleRefreshPurchaseStatus}
       />
 
       <main className="workspace">

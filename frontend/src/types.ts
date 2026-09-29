@@ -133,3 +133,7 @@ export type HostTrustPrompt = {
   fingerprintSHA256: string;
   authorizedKey: string;
 };
+
+export type UpdateCheckResult = { currentVersion: string; latestVersion: string; latestTag: string; updateAvailable: boolean; canDownload: boolean; assetName: string };
+export type UpdateActionResult = { downloaded: boolean; installScheduled: boolean; restarting: boolean };
+export type UpdateProgress = { requestID: string; stage: 'preparing' | 'downloading' | 'verifying' | 'installing'; downloadedBytes: number; totalBytes: number };
