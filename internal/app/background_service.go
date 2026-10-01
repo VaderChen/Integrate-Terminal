@@ -1,6 +1,7 @@
 package app
 
 import (
+	"IntegTERM/internal/processutil"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,7 +65,7 @@ func (a *App) ensureBackgroundService(config model.Config) error {
 
 	cmd := exec.Command(executablePath, "serve")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+	if err := processutil.Start(cmd); err != nil {
 		return err
 	}
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"IntegTERM/internal/processutil"
 	"fmt"
 	"os"
 	"os/exec"
@@ -91,8 +92,8 @@ func collapseNestedDeleteTargets(side string, targetPaths []string) []string {
 	cleaned := make([]string, 0, len(targetPaths))
 	seen := make(map[string]struct{}, len(targetPaths))
 	for _, targetPath := range targetPaths {
-		trimmed := strings.TrimSpace(targetPath)
-		if trimmed == "" {
+		trimmed := targetPath
+		if strings.TrimSpace(trimmed) == "" {
 			continue
 		}
 		if side == "remote" {
@@ -175,8 +176,8 @@ func (a *App) MoveEntriesToDirectory(tabID string, side string, sourcePaths []st
 
 	seen := make(map[string]struct{}, len(sourcePaths))
 	for _, sourcePath := range sourcePaths {
-		trimmedSource := strings.TrimSpace(sourcePath)
-		if trimmedSource == "" {
+		trimmedSource := sourcePath
+		if strings.TrimSpace(trimmedSource) == "" {
 			continue
 		}
 		if _, ok := seen[trimmedSource]; ok {
@@ -226,11 +227,10 @@ func (a *App) OpenLocalPath(targetPath string) error {
 	}
 
 	cmd := exec.Command(command, args...)
-	if err := cmd.Start(); err != nil {
+	if err := processutil.Start(cmd); err != nil {
 		a.sessionManager.AppendLog(fmt.Sprintf("開啟本機項目失敗: %s", targetPath), "failed")
 		return err
 	}
-	_ = cmd.Process.Release()
 	a.sessionManager.AppendLog(fmt.Sprintf("已開啟本機項目: %s", targetPath), "done")
 	return nil
 }
@@ -254,11 +254,10 @@ func (a *App) ExecuteLocalPath(targetPath string) error {
 	cmd := exec.Command(targetPath)
 	cmd.Dir = filepath.Dir(targetPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := cmd.Start(); err != nil {
+	if err := processutil.Start(cmd); err != nil {
 		a.sessionManager.AppendLog(fmt.Sprintf("執行本機檔案失敗: %s", targetPath), "failed")
 		return err
 	}
-	_ = cmd.Process.Release()
 	a.sessionManager.AppendLog(fmt.Sprintf("已執行本機檔案: %s", targetPath), "done")
 	return nil
 }

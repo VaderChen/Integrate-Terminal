@@ -3,6 +3,7 @@
 package app
 
 import (
+	"IntegTERM/internal/processutil"
 	"fmt"
 	"os/exec"
 )
@@ -12,5 +13,5 @@ func scheduleUpdateInstall(_, _, _, _ string, _ int) error {
 }
 
 func startDetachedCommand(name string, args ...string) error {
-	return exec.Command(name, args...).Start()
+	return processutil.Start(exec.Command(name, args...))
 }

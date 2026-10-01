@@ -17,7 +17,11 @@ func (m *Manager) uploadPathWithQueue(client transport.Client, localPath, remote
 	return m.uploadPathWithParent(client, localPath, remotePath, displayPath, "")
 }
 
-func (m *Manager) uploadPathWithParent(client transport.Client, localPath, remotePath, displayPath, parentID string) (err error) {
+func (m *Manager) uploadPathWithParent(client transport.Client, localPath, remotePath, displayPath, parentID string) error {
+	return m.uploadPathWithAncestors(client, localPath, remotePath, displayPath, parentID, nil)
+}
+
+func (m *Manager) uploadPathWithAncestors(client transport.Client, localPath, remotePath, displayPath, parentID string, ancestors []os.FileInfo) (err error) {
 	itemID := m.addChildTransfer(displayPath, "upload", parentID)
 	defer func() { m.finishPathTransfer(itemID, err) }()
 	if !m.awaitTransferActive(itemID, 0) {
@@ -28,6 +32,12 @@ func (m *Manager) uploadPathWithParent(client transport.Client, localPath, remot
 		return err
 	}
 	if info.IsDir() {
+		for _, ancestor := range ancestors {
+			if os.SameFile(info, ancestor) {
+				return fmt.Errorf("upload directory cycle: %s", localPath)
+			}
+		}
+		ancestors = append(ancestors, info)
 		if err := client.Mkdir(remotePath); err != nil && !remoteDirectoryExists(client, remotePath) {
 			return err
 		}
@@ -42,11 +52,14 @@ func (m *Manager) uploadPathWithParent(client transport.Client, localPath, remot
 			if isHiddenName(entry.Name()) {
 				continue
 			}
-			if err := m.uploadPathWithParent(client, filepath.Join(localPath, entry.Name()), path.Join(remotePath, entry.Name()), filepath.ToSlash(filepath.Join(displayPath, entry.Name())), itemID); err != nil {
+			if err := m.uploadPathWithAncestors(client, filepath.Join(localPath, entry.Name()), path.Join(remotePath, entry.Name()), filepath.ToSlash(filepath.Join(displayPath, entry.Name())), itemID, ancestors); err != nil {
 				return err
 			}
 		}
 	} else {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("upload source is not a regular file: %s", localPath)
+		}
 		if err := client.Upload(localPath, remotePath, m.pathTransferProgress(itemID)); err != nil {
 			return err
 		}

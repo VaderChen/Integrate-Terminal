@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -336,6 +337,13 @@ func (a *App) withRESTSecurity(next http.Handler) http.Handler {
 }
 
 func (a *App) isAuthorizedRESTRequest(r *http.Request) bool {
+	// 僅信任 TCP 對端；Host 與轉送標頭不能用來判斷來源。
+	if r.URL.Path == "/mcp" {
+		if peer, err := netip.ParseAddrPort(r.RemoteAddr); err == nil && peer.Addr().Unmap() == netip.MustParseAddr("127.0.0.1") {
+			return true
+		}
+	}
+
 	token := strings.TrimSpace(r.Header.Get("X-IntegTERM-Token"))
 	if authorization := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(authorization, "Bearer ") {
 		token = strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))

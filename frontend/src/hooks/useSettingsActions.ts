@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type React from 'react';
 import type { Config, Tab } from '../types';
 
@@ -9,61 +10,75 @@ type Params = {
 };
 
 export function useSettingsActions({ config, setConfig, activeTabRef, refreshPanels }: Params) {
-  const saveConfig = async (nextConfig: Config) => {
-    const previousConfig = config;
-    setConfig(nextConfig);
-    try {
-      const saved = await window.go?.app?.App?.SaveConfig?.(nextConfig);
-      setConfig(saved ?? nextConfig);
-    } catch (error) {
-      setConfig(previousConfig);
-      throw error;
-    }
+  const current = useRef(config);
+  const savedConfig = useRef(config);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const pending = useRef<Array<Partial<Config>>>([]);
+  if (pending.current.length === 0) {
+    current.current = config;
+    savedConfig.current = config;
+  }
+  const saveConfig = (patch: Partial<Config>) => {
+    pending.current.push(patch);
+    current.current = { ...current.current, ...patch };
+    setConfig(current.current);
+    const operation = queue.current.then(async () => {
+      const next = { ...savedConfig.current, ...patch };
+      try {
+        savedConfig.current = await window.go?.app?.App?.SaveConfig?.(next) ?? next;
+      } finally {
+        pending.current.shift();
+        current.current = pending.current.reduce<Config>((value, change) => ({ ...value, ...change }), savedConfig.current);
+        setConfig(current.current);
+      }
+    });
+    queue.current = operation.catch(() => {});
+    return operation;
   };
 
   const handleFontScaleChange = async (fontScale: Config['fontScale']) => {
-    await saveConfig({ ...config, fontScale });
+    await saveConfig({ fontScale });
   };
 
   const handleLanguageChange = async (language: Config['language']) => {
-    await saveConfig({ ...config, language });
+    await saveConfig({ language });
   };
 
   const handleThemeChange = async (theme: Config['theme']) => {
-    await saveConfig({ ...config, theme });
+    await saveConfig({ theme });
   };
 
   const handleShowHiddenFilesChange = async (showHiddenFiles: boolean) => {
-    await saveConfig({ ...config, showHiddenFiles });
+    await saveConfig({ showHiddenFiles });
     await refreshPanels(activeTabRef.current);
   };
 
   const handleShowTrayIconChange = async (showTrayIcon: boolean) => {
-    await saveConfig({ ...config, showTrayIcon });
+    await saveConfig({ showTrayIcon });
   };
 
   const handleRememberWindowPositionChange = async (rememberWindowPosition: boolean) => {
-    await saveConfig({ ...config, rememberWindowPosition });
+    await saveConfig({ rememberWindowPosition });
   };
 
   const handleTelnetLocalEchoChange = async (telnetLocalEcho: boolean) => {
-    await saveConfig({ ...config, telnetLocalEcho });
+    await saveConfig({ telnetLocalEcho });
   };
 
-  const handleRESTServerEnabledChange = async (restServerEnabled: boolean, restServerPort = config.restServerPort) => {
-    await saveConfig({ ...config, restServerEnabled, restServerPort });
+  const handleRESTServerEnabledChange = async (restServerEnabled: boolean, restServerPort = current.current.restServerPort) => {
+    await saveConfig({ restServerEnabled, restServerPort });
   };
 
   const handleRESTServerPortChange = async (restServerPort: number) => {
-    await saveConfig({ ...config, restServerPort });
+    await saveConfig({ restServerPort });
   };
 
   const handleRestoreTabsChange = async (restoreTabsOnStart: boolean) => {
-    await saveConfig({ ...config, restoreTabsOnStart });
+    await saveConfig({ restoreTabsOnStart });
   };
 
   const handleCloseTerminalTabOnDisconnectChange = async (closeTerminalTabOnDisconnect: boolean) => {
-    await saveConfig({ ...config, closeTerminalTabOnDisconnect });
+    await saveConfig({ closeTerminalTabOnDisconnect });
   };
 
   return {

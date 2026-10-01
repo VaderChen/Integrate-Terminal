@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +53,7 @@ const (
 func (m *Manager) StartTelnetSession(ctx context.Context, site model.Site) (string, error) {
 	sessionID := fmt.Sprintf("telnet-%s", uuid.NewString())
 
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", site.Host, site.Port), 10*time.Second)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(site.Host, strconv.Itoa(site.Port)), 10*time.Second)
 	if err != nil {
 		return "", err
 	}
@@ -72,6 +73,12 @@ func (m *Manager) StartTelnetSession(ctx context.Context, site model.Site) (stri
 }
 
 func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTerminalSession) {
+	defer func() {
+		_ = session.conn.Close()
+		session.lock.Lock()
+		session.stopPasswordFallback()
+		session.lock.Unlock()
+	}()
 	buffer := make([]byte, 4096)
 	var pending []byte
 	var pendingControl []byte
@@ -238,10 +245,10 @@ func (m *Manager) CloseTelnetSession(sessionID string) error {
 		return nil
 	}
 
+	_ = session.conn.Close()
 	session.lock.Lock()
 	defer session.lock.Unlock()
 	session.stopPasswordFallback()
-	_ = session.conn.Close()
 	m.removeTelnetSession(sessionID)
 	return nil
 }

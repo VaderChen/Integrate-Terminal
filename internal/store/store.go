@@ -48,16 +48,9 @@ func (s *Store) Ensure() error {
 func (s *Store) loadSites() ([]model.Site, error) {
 	return loadJSONRecords[model.Site](filepath.Join(s.baseDir, "sites.json"))
 }
-func (s *Store) saveSites(records []model.Site) error {
-	return saveJSONRecords(s, filepath.Join(s.baseDir, "sites.json"), records)
-}
 func (s *Store) loadTabs() ([]model.Tab, error) {
 	return loadJSONRecords[model.Tab](filepath.Join(s.baseDir, "tabs.json"))
 }
-func (s *Store) saveTabs(records []model.Tab) error {
-	return saveJSONRecords(s, filepath.Join(s.baseDir, "tabs.json"), records)
-}
-
 func loadJSONRecords[T any](path string) ([]T, error) {
 	records, err := readJSON[[]T](path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -70,14 +63,6 @@ func loadJSONRecords[T any](path string) ([]T, error) {
 		records = []T{}
 	}
 	return records, nil
-}
-
-func saveJSONRecords[T any](s *Store, path string, records []T) error {
-	// 既有檔案無法完整讀取時，保留原檔，不以空資料或新資料覆蓋。
-	if _, err := loadJSONRecords[T](path); err != nil {
-		return err
-	}
-	return s.writeRecords(path, records)
 }
 
 func (s *Store) loadConfig() (model.Config, error) {
@@ -106,11 +91,6 @@ func (s *Store) loadConfig() (model.Config, error) {
 	return record, err
 }
 
-func (s *Store) saveConfig(record model.Config) error {
-	record.ProUnlock = false // An editable cache is never an entitlement authority.
-	return writeJSON(filepath.Join(s.baseDir, "config.json"), record)
-}
-
 func readJSON[T any](path string) (T, error) {
 	var out T
 
@@ -130,6 +110,10 @@ func writeJSON(path string, value any) error {
 	if err != nil {
 		return err
 	}
+	return writeFileAtomically(path, data)
+}
+
+func writeFileAtomically(path string, data []byte) error {
 	file, err := os.CreateTemp(filepath.Dir(path), ".integterm-*.tmp")
 	if err != nil {
 		return err

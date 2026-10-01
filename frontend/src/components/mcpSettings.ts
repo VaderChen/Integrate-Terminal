@@ -5,11 +5,13 @@ export function redactMCPToken(markdown: string, token: string): string {
 }
 
 export function mcpClientConfig(contract: 'local' | 'network', executable: string, endpoint: string): string {
+  let localHTTP = false;
+  try { const url = new URL(endpoint); localHTTP = url.protocol === 'http:' && url.hostname === '127.0.0.1'; } catch { /* 無效網址沿用需要金鑰的設定。 */ }
   return JSON.stringify({
     mcpServers: {
       integterm: contract === 'local'
         ? { command: executable, args: ['mcp'] }
-        : { url: endpoint, headers: { Authorization: `Bearer ${MCP_TOKEN_PLACEHOLDER}` } },
+        : localHTTP ? { url: endpoint } : { url: endpoint, headers: { Authorization: `Bearer ${MCP_TOKEN_PLACEHOLDER}` } },
     },
   }, null, 2);
 }

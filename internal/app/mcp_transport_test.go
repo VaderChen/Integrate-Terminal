@@ -146,11 +146,11 @@ func TestMCPHTTPUsesAuthorizationAndExactOriginValidation(t *testing.T) {
 		name, token, origin, host string
 		status                    int
 	}{
-		{name: "no token", status: http.StatusUnauthorized},
-		{name: "wrong token", token: "wrong", status: http.StatusUnauthorized},
-		{name: "foreign origin", token: "test", origin: "https://evil.example", status: http.StatusForbidden},
+		{name: "local peer without token", status: http.StatusOK},
+		{name: "local peer ignores token", token: "wrong", status: http.StatusOK},
+		{name: "foreign origin without token", origin: "https://evil.example", status: http.StatusForbidden},
 		{name: "userinfo origin", token: "test", origin: "http://localhost:8080@evil.example", status: http.StatusForbidden},
-		{name: "rebound host", token: "test", host: "evil.example", status: http.StatusForbidden},
+		{name: "rebound host without token", host: "evil.example", status: http.StatusForbidden},
 		{name: "valid local origin", token: "test", origin: "http://localhost:8080", status: http.StatusOK},
 	} {
 		t.Run(test.name, func(t *testing.T) {

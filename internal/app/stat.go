@@ -7,8 +7,7 @@ import (
 )
 
 func (a *App) StatRemoteEntry(tabID string, targetPath string) (map[string]any, error) {
-	targetPath = strings.TrimSpace(targetPath)
-	if targetPath == "" {
+	if strings.TrimSpace(targetPath) == "" {
 		return nil, fmt.Errorf("path is required")
 	}
 

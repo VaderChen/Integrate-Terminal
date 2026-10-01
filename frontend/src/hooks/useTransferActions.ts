@@ -110,7 +110,7 @@ export function useTransferActions({
 
   const handleDropToTerminal = async (currentTab: Tab, paths: string[], remotePathOverride?: string) => {
     if (!liveTab(currentTab)?.connected || currentTab.mode !== 'terminal' || currentTab.protocol !== 'ssh') return;
-    const remotePath = remotePathOverride?.trim() || currentTab.remotePath;
+    const remotePath = remotePathOverride?.trim() ? remotePathOverride : currentTab.remotePath;
 
     const optimisticItems: TransferItem[] = paths.map((path, index) => ({
       id: `pending-terminal-${Date.now()}-${index}`,

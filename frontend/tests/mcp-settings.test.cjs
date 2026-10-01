@@ -132,9 +132,10 @@ test('an older metadata response cannot overwrite the document after changing th
 
 test('the settings hook saves HTTP enabled and draft port together', async () => {
   const writes = [];
-  const load = sourceLoader({ globals: { window: { go: { app: { App: { SaveConfig: async config => { writes.push(config); return config; } } } } } } });
+  const harness = hookHarness();
+  const load = sourceLoader({ mocks: { react: harness.react }, globals: { window: { go: { app: { App: { SaveConfig: async config => { writes.push(config); return config; } } } } } } });
   const { useSettingsActions } = load('src/hooks/useSettingsActions.ts');
-  const actions = useSettingsActions({ config: { restServerEnabled: false, restServerPort: 18080, theme: 'dark' }, setConfig: () => {}, activeTabRef: { current: null }, refreshPanels: async () => {} });
+  const actions = harness.render(() => useSettingsActions({ config: { restServerEnabled: false, restServerPort: 18080, theme: 'dark' }, setConfig: () => {}, activeTabRef: { current: null }, refreshPanels: async () => {} }));
   await actions.handleRESTServerEnabledChange(true, 22558);
   assert.deepEqual(JSON.parse(JSON.stringify(writes)), [{ restServerEnabled: true, restServerPort: 22558, theme: 'dark' }]);
 });

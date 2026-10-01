@@ -3,6 +3,7 @@
 package app
 
 import (
+	"IntegTERM/internal/processutil"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,7 +12,7 @@ import (
 )
 
 func startDetachedCommand(name string, args ...string) error {
-	return exec.Command(name, args...).Start()
+	return processutil.Start(exec.Command(name, args...))
 }
 
 func scheduleUpdateInstall(dmgPath, targetApp, expectedVersion, expectedBundleVersion string, parentPID int) error {
@@ -25,8 +26,43 @@ func scheduleUpdateInstall(dmgPath, targetApp, expectedVersion, expectedBundleVe
 		return err
 	}
 	scriptPath := script.Name()
+	queued := false
+	defer func() {
+		if !queued {
+			_ = script.Close()
+			_ = os.Remove(scriptPath)
+		}
+	}()
+	contents := updateInstallScript(dmgPath, targetApp, expectedVersion, expectedBundleVersion, parentPID, logPath)
+	if _, err := script.WriteString(contents); err != nil {
+		_ = script.Close()
+		return err
+	}
+	if err := script.Chmod(0o700); err != nil {
+		_ = script.Close()
+		return err
+	}
+	if err := script.Close(); err != nil {
+		return err
+	}
+	command := exec.Command("/usr/bin/nohup", "/bin/sh", scriptPath)
+	command.Stdin = nil
+	command.Stdout = nil
+	command.Stderr = nil
+	if err := processutil.Start(command); err != nil {
+		return err
+	}
+	queued = true
+	return nil
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func updateInstallScript(dmgPath, targetApp, expectedVersion, expectedBundleVersion string, parentPID int, logPath string) string {
 	quote := shellQuote
-	contents := fmt.Sprintf(`#!/bin/sh
+	return fmt.Sprintf(`#!/bin/sh
 set -eu
 dmg=%s
 target=%s
@@ -36,13 +72,14 @@ parent=%d
 log=%s
 mount=""
 backup=""
+committed=0
 relaunch=0
 exec >>"$log" 2>&1
 echo "update installer started"
 cleanup() {
   status=$?
   trap - EXIT
-  if [ -n "$backup" ] && [ -d "$backup" ]; then
+  if [ "$committed" -eq 0 ] && [ -n "$backup" ] && [ -d "$backup" ]; then
     rm -rf "$target"
     mv "$backup" "$target"
     echo "restored previous app after update failure"
@@ -109,28 +146,10 @@ mv "$target" "$backup"
 /usr/bin/codesign --verify --deep --strict "$target"
 /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$target/Contents/Info.plist" | grep -Fx "$expected"
 /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$target/Contents/Info.plist" | grep -Fx "$expected_bundle"
-rm -rf "$backup"
+# 新 App 已通過所有檢查；此後備份清理失敗不能觸發回復。
+committed=1
+rm -rf "$backup" || echo "old backup cleanup incomplete; keeping validated app"
 backup=""
 echo "update installer completed"
 `, quote(dmgPath), quote(targetApp), quote(expectedVersion), quote(expectedBundleVersion), parentPID, quote(logPath))
-	if _, err := script.WriteString(contents); err != nil {
-		_ = script.Close()
-		return err
-	}
-	if err := script.Chmod(0o700); err != nil {
-		_ = script.Close()
-		return err
-	}
-	if err := script.Close(); err != nil {
-		return err
-	}
-	command := exec.Command("/usr/bin/nohup", "/bin/sh", scriptPath)
-	command.Stdin = nil
-	command.Stdout = nil
-	command.Stderr = nil
-	return command.Start()
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }

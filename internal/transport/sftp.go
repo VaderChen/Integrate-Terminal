@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,8 +54,8 @@ func (c *SFTPClient) Connect(site model.Site) error {
 		Timeout:         10 * time.Second,
 	}
 
-	address := fmt.Sprintf("%s:%d", site.Host, site.Port)
-	sshClient, err := ssh.Dial("tcp", address, sshConfig)
+	address := net.JoinHostPort(site.Host, strconv.Itoa(site.Port))
+	sshClient, err := sshutil.Dial("tcp", address, sshConfig)
 	if err != nil {
 		var trustErr *sshutil.HostTrustRequiredError
 		if errors.As(err, &trustErr) {

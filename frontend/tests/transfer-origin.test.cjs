@@ -65,6 +65,16 @@ test('native terminal upload is cancelled if its session closes during confirmat
   assert.equal(state.calls.length, 0);
 });
 
+test('terminal upload preserves whitespace in the selected remote directory', async () => {
+  const state = setup();
+  const source = tab('A', { mode: 'terminal', protocol: 'ssh', sessionId: 'session-A' });
+  state.activeTabRef.current = source; state.tabsRef.current = [source];
+  await state.actions.handleDropToTerminal(source, ['/tmp/source'], '/remote/folder ');
+  assert.equal(state.calls.length, 1);
+  assert.equal(state.calls[0][1].remotePath, '/remote/folder ');
+  assert.equal(state.calls[0][3], '/remote/folder ');
+});
+
 test('actual FilePanel rejects remote drag from another host before dispatching download', async () => {
   const harness = hookHarness(); let downloads = 0;
   const { FilePanel } = sourceLoader({ mocks: { react: harness.react } })('src/components/FilePanel.tsx');

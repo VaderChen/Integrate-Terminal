@@ -15,6 +15,10 @@ func (m *Manager) updateTransfer(itemID string, progress int, speedBps int64, st
 }
 
 func (m *Manager) updateTransferLocked(itemID string, progress int, speedBps int64, status string) {
+	// 取消後仍可能收到 worker 已取出的進度，不能恢復執行中狀態。
+	if (status == "running" || status == "paused") && m.isTransferCancelledLocked(itemID) {
+		return
+	}
 	if status == "done" || status == "cancelled" || status == "failed" {
 		// Only the worker reports terminal state through this method. UI removal
 		// may happen earlier, but cancellation must remain effective until now.
@@ -95,6 +99,10 @@ func (m *Manager) addChildTransfer(name string, direction string, parentID strin
 func (m *Manager) isTransferCancelled(itemID string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.isTransferCancelledLocked(itemID)
+}
+
+func (m *Manager) isTransferCancelledLocked(itemID string) bool {
 	for itemID != "" {
 		if m.cancelledTransfers[itemID] {
 			return true

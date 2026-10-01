@@ -53,7 +53,7 @@ func (m *Manager) UploadPathsWithSite(site model.Site, localPaths []string, remo
 	currentDir, _ := client.CurrentDir()
 	homeDir := currentDir
 	if sftpClient, ok := client.(*transport.SFTPClient); ok {
-		if resolvedHome := strings.TrimSpace(sftpClient.HomeDir()); resolvedHome != "" {
+		if resolvedHome := sftpClient.HomeDir(); strings.TrimSpace(resolvedHome) != "" {
 			homeDir = resolvedHome
 		}
 	}
@@ -82,8 +82,8 @@ func (m *Manager) UploadPathsWithSite(site model.Site, localPaths []string, remo
 }
 
 func resolveRemoteBasePath(currentDir string, remoteBase string) string {
-	trimmed := strings.TrimSpace(remoteBase)
-	if trimmed == "" {
+	trimmed := remoteBase
+	if strings.TrimSpace(trimmed) == "" {
 		return currentDir
 	}
 	if trimmed == "~" {

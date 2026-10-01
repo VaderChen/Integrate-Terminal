@@ -9,12 +9,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/creack/pty"
 	"github.com/google/uuid"
 )
 
 type localTerminalSession struct {
+	outputDone     chan struct{}
+	inputMu        sync.Mutex
 	id             string
 	cmd            *exec.Cmd
 	ptyFile        *os.File
@@ -52,9 +55,10 @@ func (m *Manager) StartLocalSession(ctx context.Context, cwd string) (string, er
 	}
 
 	session := &localTerminalSession{
-		id:      sessionID,
-		cmd:     cmd,
-		ptyFile: ptyFile,
+		id:         sessionID,
+		outputDone: make(chan struct{}),
+		cmd:        cmd,
+		ptyFile:    ptyFile,
 	}
 	m.mu.Lock()
 	m.localSessions[sessionID] = session
@@ -67,6 +71,11 @@ func (m *Manager) StartLocalSession(ctx context.Context, cwd string) (string, er
 }
 
 func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalSession) {
+	defer func() {
+		if session.outputDone != nil {
+			close(session.outputDone)
+		}
+	}()
 	buffer := make([]byte, 4096)
 	var pending []byte
 	var pendingControl []byte
@@ -118,6 +127,16 @@ func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalS
 
 func (m *Manager) watchLocalExit(ctx context.Context, session *localTerminalSession) {
 	_ = session.cmd.Wait()
+	// 先讓輸出 reader 排空尾端資料；繼承 PTY 的子程序不能阻止清理。
+	if session.outputDone != nil {
+		timer := time.NewTimer(250 * time.Millisecond)
+		select {
+		case <-session.outputDone:
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
+	_ = session.ptyFile.Close()
 	emitSessionEvent(ctx, fmt.Sprintf("ssh:closed:%s", session.id))
 	m.removeLocalSession(session.id)
 }
@@ -130,8 +149,8 @@ func (m *Manager) WriteLocalInput(sessionID string, data string) error {
 		return fmt.Errorf("local session not found")
 	}
 
-	session.lock.Lock()
-	defer session.lock.Unlock()
+	session.inputMu.Lock()
+	defer session.inputMu.Unlock()
 	_, err := session.ptyFile.Write([]byte(data))
 	return err
 }
@@ -153,9 +172,6 @@ func (m *Manager) CloseLocalSession(sessionID string) error {
 	if !ok {
 		return nil
 	}
-
-	session.lock.Lock()
-	defer session.lock.Unlock()
 
 	if session.cmd.Process != nil {
 		_ = session.cmd.Process.Kill()

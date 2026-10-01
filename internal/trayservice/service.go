@@ -144,9 +144,7 @@ func (s *Service) openUI() error {
 		if attempt.Process != nil {
 			pid = attempt.Process.Pid
 		}
-		if err := attempt.Process.Release(); err != nil {
-			log.Printf("release ui launch process failed: %v", err)
-		}
+		go func() { _ = attempt.Wait() }()
 		if err := s.activateUIWithRetry(pid); err != nil {
 			log.Printf("activate ui failed after launch: %v", err)
 		}
@@ -384,11 +382,7 @@ func detachedCommand(workdir string, name string, args ...string) *exec.Cmd {
 	if workdir != "" {
 		cmd.Dir = workdir
 	}
-	nullFile, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
-	if err == nil {
-		cmd.Stdout = nullFile
-		cmd.Stderr = nullFile
-		cmd.Stdin = nullFile
-	}
+	// nil 標準串流由 os/exec 自動接到空裝置，避免自行開啟後未關閉。
+
 	return cmd
 }

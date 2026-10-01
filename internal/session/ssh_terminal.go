@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 )
 
 type sshTerminalSession struct {
+	inputMu        sync.Mutex
 	id             string
 	client         *ssh.Client
 	session        *ssh.Session
@@ -57,7 +60,7 @@ func (m *Manager) StartSSHSession(ctx context.Context, site model.Site) (string,
 		Timeout:         10 * time.Second,
 	}
 
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", site.Host, site.Port), sshConfig)
+	client, err := sshutil.Dial("tcp", net.JoinHostPort(site.Host, strconv.Itoa(site.Port)), sshConfig)
 	if err != nil {
 		var trustErr *sshutil.HostTrustRequiredError
 		if errors.As(err, &trustErr) {
@@ -195,6 +198,7 @@ func (m *Manager) GetSSHOutputBuffer(sessionID string) string {
 
 func (m *Manager) watchSSHExit(ctx context.Context, session *sshTerminalSession) {
 	_ = session.session.Wait()
+	_ = session.client.Close()
 	emitSessionEvent(ctx, fmt.Sprintf("ssh:closed:%s", session.id))
 	m.removeSSHSession(session.id)
 }
@@ -215,8 +219,8 @@ func (m *Manager) WriteSSHInput(sessionID string, data string) error {
 		return fmt.Errorf("ssh session not found")
 	}
 
-	session.lock.Lock()
-	defer session.lock.Unlock()
+	session.inputMu.Lock()
+	defer session.inputMu.Unlock()
 	_, err := session.stdin.Write([]byte(data))
 	return err
 }
@@ -255,11 +259,8 @@ func (m *Manager) CloseSSHSession(sessionID string) error {
 		return nil
 	}
 
-	session.lock.Lock()
-	defer session.lock.Unlock()
-
-	_ = session.session.Close()
 	_ = session.client.Close()
+	_ = session.session.Close()
 	m.removeSSHSession(sessionID)
 	return nil
 }
