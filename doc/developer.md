@@ -138,6 +138,14 @@ go run . serve
 - 提供 `Open Main Window` 與 `Quit Background Service`
 - 讓 GUI 在啟動時附著到既有 background service
 
+### macOS 多螢幕選單列尺寸
+
+2026-10-04 修正不同螢幕下 `ACT／背景連線數` 被截斷的問題。原實作把雙行 `NSTextField` 疊在按鈕上，並以固定的 leading 距離排版，但 `NSVariableStatusItemLength` 仍只根據原生圖示計算寬度；螢幕切換或系統重新配置選單列時，自訂文字可能超出按鈕範圍。
+
+目前將原有 18-point 圖示及雙行文字合成同一張 template `NSImage`，以字型實際量測值計算完整寬度，交由 AppKit 配置選單列空間。繪圖回呼使用 point 座標，由目的 graphics context 處理解析度，避免固定採用某個螢幕的像素倍率。保留 `ACT` 的 6.5-point 字型、數字的 11.5-point 字型、雙行排列、原生深淺色、提示文字及 popover 點擊操作；單行或空標題仍走原生配置。
+
+`python3 scripts/test-tray-layout.py` 會編譯實際 Objective-C 實作，透過 AppKit 按鈕及位圖 context 測試 6 種連線數、22／24／37-point 高度與同一張圖像的 1×／1.5×／2× 交替繪製，並檢查標題切換及點擊動作。測試不建立系統選單列項目或啟動正式背景服務。修改前版本可重現寬度不足，修改後通過；此為元件層驗證，不等同實體多螢幕切換的人工驗證。完整 `scripts/test.sh` 已納入此 Smoke。
+
 ### GUI 首屏載入原則
 
 前端啟動時會先呼叫 `Bootstrap()` 取得站台、分頁、設定、傳輸與 log 等輕量狀態，完成後立即顯示主介面。為避免首頁目錄或 StoreKit 偶發延遲拖住站台列表：
@@ -431,6 +439,7 @@ GET /api/operations/{id}
 
 - `go run . serve` 後可在 macOS menu bar 看到 tray
 - tray title 顯示 `ACT` 與背景連線數
+- 在不同縮放倍率的螢幕切換選單列後，圖示、`ACT` 與多位數連線數均完整顯示
 - 點擊 tray 可開啟 custom popover panel
 - `狀態` / `功能` 卡片顯示正常
 - `後端服務` 卡片可正確顯示目前 base URL
@@ -475,7 +484,7 @@ GET /api/operations/{id}
 
 ## 正式版發行
 
-目前版本為 `1.26.1003`、Build `2336`，對應標籤 `v1.26.1003.2336`。本版整合高頻路徑與全專案函式級效率／記憶體最佳化，並加入操作日誌 1,000 筆、磁碟崩潰日誌 5 MiB 的保存上限；維持既有操作、功能與 UI。公開說明見[版本更新紀錄](release_1.26.1003.2336.md)，量測範圍與限制見[函式級最佳化紀錄](function-optimization.md)。
+目前版本為 `1.26.1004`、Build `0046`，對應標籤 `v1.26.1004.0046`。本版修正不同螢幕下選單列圖示與 `ACT／背景連線數` 被截斷的問題，保留既有雙行樣式與操作；延續上一版函式最佳化及日誌保存上限。公開說明見[版本更新紀錄](release_1.26.1004.0046.md)，先前量測範圍與限制見[函式級最佳化紀錄](function-optimization.md)。
 
 使用 `python3 scripts/release-macos.py --build` 產生正式發行包。發行環境由維護者在本機設定。
 公開附件僅包含 DMG 與 `SHA256SUMS.txt`，內部建置及驗證紀錄不隨 Release 公開。
@@ -484,7 +493,7 @@ GET /api/operations/{id}
 
 GitHub Release 使用 `Integrate Terminal 版本 (Build 編號)` 作為標題，內文採繁體中文並省略重複標題；正式版本不標記為 Pre-release，附件完整上傳後才設為 Latest。App、Git 標籤與附件檔名需使用同一組版本。發布前須確認 Developer ID 簽章、App／DMG 公證與票根、Gatekeeper、SHA-256，以及包內程式的 MCP Smoke。
 
-`1.26.1003.2336` 發版已重新通過完整 `scripts/test.sh` 與正式建置。DMG 打包對照 YourDesk 流程，使用 ULMO 壓縮及 Applications 捷徑；App 與 DMG 均通過 Developer ID 簽章、Apple 公證、票根與 Gatekeeper。另完成 DMG 唯讀掛載、包內 App 與已驗證產物逐檔雜湊比對、版本／架構／最低系統版本核對，以及包內 MCP 啟動、10 項工具探索、RAM 檔案讀寫刪除與分塊 SHA-256 Smoke。該 Smoke 以系統 sandbox 禁止使用者資料目錄與網路存取。
+`1.26.1004.0046` 發版已通過完整 `scripts/test.sh`（包含新增的托盤 AppKit Smoke）與正式建置。DMG 打包對照 YourDesk 流程，使用 ULMO 壓縮及 Applications 捷徑；App 與 DMG 均通過 Developer ID 簽章、Apple 公證、票根與 Gatekeeper。另完成 DMG 唯讀掛載、包內 App 與已驗證產物逐檔雜湊比對、版本／架構／最低系統版本核對、新版托盤實作確認，以及包內 MCP 啟動、10 項工具探索、RAM 檔案讀寫刪除與分塊 SHA-256 Smoke。該 Smoke 以系統 sandbox 禁止使用者資料目錄與網路存取。
 
 更新流程由「關於」頁面的檢查更新啟動。下載時透過 `update:progress` 回報實際位元組、總大小與階段；前端以每次請求 ID 過濾過期事件。下載、檔案驗證及安裝準備分別顯示，不以計時器模擬百分比。保留檔案大小與 SHA-256 驗證，下載失敗可重試，macOS 安裝失敗時回復原 App。
 

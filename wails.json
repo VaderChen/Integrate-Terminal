@@ -7,7 +7,7 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "info": {
-    "productVersion": "1.26.1003"
+    "productVersion": "1.26.1004"
   },
   "author": {
     "name": "Codex",

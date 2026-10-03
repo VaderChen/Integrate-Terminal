@@ -14,6 +14,46 @@
 
 #endif
 
+// 讓 AppKit 以完整內容的 point 尺寸配置選單列寬度。
+// 使用繪圖回呼，切換螢幕時由目標 context 決定解析度，不快取某個螢幕的像素尺寸。
+static NSImage *statusImageWithTitle(NSImage *icon, NSString *top, NSString *bottom) {
+  NSImage *sourceIcon = [icon copy];
+  BOOL isTemplate = sourceIcon == nil || sourceIcon.isTemplate;
+  NSColor *textColor = isTemplate ? NSColor.blackColor : NSColor.labelColor;
+  NSDictionary *topAttributes = @{
+    NSFontAttributeName: [NSFont systemFontOfSize:6.5 weight:NSFontWeightSemibold],
+    NSForegroundColorAttributeName: textColor
+  };
+  NSDictionary *bottomAttributes = @{
+    NSFontAttributeName: [NSFont systemFontOfSize:11.5 weight:NSFontWeightSemibold],
+    NSForegroundColorAttributeName: textColor
+  };
+  NSSize topSize = [top sizeWithAttributes:topAttributes];
+  NSSize bottomSize = [bottom sizeWithAttributes:bottomAttributes];
+  NSSize iconSize = sourceIcon == nil ? NSZeroSize : sourceIcon.size;
+  CGFloat titleWidth = ceil(MAX(topSize.width, bottomSize.width)) + 4.0;
+  CGFloat titleHeight = topSize.height + bottomSize.height - 3.0;
+  CGFloat titleX = iconSize.width + (sourceIcon == nil ? 0.0 : 3.0);
+  NSSize size = NSMakeSize(ceil(titleX + titleWidth), ceil(MAX(iconSize.height, titleHeight + 1.0)));
+  CGFloat titleY = (size.height - titleHeight) / 2.0 - 0.5;
+
+  NSImage *image = [NSImage imageWithSize:size flipped:NO drawingHandler:^BOOL(NSRect rect) {
+    (void)rect;
+    if (sourceIcon != nil) {
+      [sourceIcon drawInRect:NSMakeRect(0, (size.height - iconSize.height) / 2.0, iconSize.width, iconSize.height)
+                   fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1.0];
+    }
+    [bottom drawAtPoint:NSMakePoint(titleX + (titleWidth - bottomSize.width) / 2.0, titleY)
+         withAttributes:bottomAttributes];
+    [top drawAtPoint:NSMakePoint(titleX + (titleWidth - topSize.width) / 2.0, titleY + bottomSize.height - 3.0)
+      withAttributes:topAttributes];
+    return YES;
+  }];
+  image.template = isTemplate;
+  image.accessibilityDescription = [NSString stringWithFormat:@"%@ %@", top, bottom];
+  return image;
+}
+
 @interface MenuItem : NSObject
 {
   @public
@@ -74,6 +114,9 @@ withParentMenuId: (int)theParentMenuId
   @implementation IntegTERMSystrayAppDelegate
 {
   NSStatusItem *statusItem;
+  NSImage *trayIcon;
+  NSString *trayTitleTop;
+  NSString *trayTitleBottom;
   NSPopover *popover;
   NSViewController *popoverController;
   NSStackView *popoverStack;
@@ -143,27 +186,27 @@ withParentMenuId: (int)theParentMenuId
 }
 
 - (void)setIcon:(NSImage *)image {
-  statusItem.button.image = image;
+  trayIcon = image;
   [self updateTitleButtonStyle];
 }
 
 - (void)setTitle:(NSString *)title {
   NSArray<NSString *> *parts = [title componentsSeparatedByString:@"\n"];
+  statusItem.button.attributedTitle = [[NSAttributedString alloc] initWithString:@""];
   if ([parts count] >= 2) {
-    NSString *line1 = parts[0];
-    NSString *line2 = parts[1];
-    [self setCustomTitleTop:line1 bottom:line2];
-    statusItem.button.attributedTitle = [[NSAttributedString alloc] initWithString:@""];
+    trayTitleTop = [parts[0] copy];
+    trayTitleBottom = [parts[1] copy];
     statusItem.button.title = @"";
   } else {
-    [self clearCustomTitle];
-    statusItem.button.attributedTitle = [[NSAttributedString alloc] initWithString:@""];
+    trayTitleTop = nil;
+    trayTitleBottom = nil;
     statusItem.button.title = title;
   }
   [self updateTitleButtonStyle];
 }
 
 -(void)updateTitleButtonStyle {
+  statusItem.button.image = trayTitleTop == nil ? trayIcon : statusImageWithTitle(trayIcon, trayTitleTop, trayTitleBottom);
   if (statusItem.button.image != nil) {
     if ([statusItem.button.title length] == 0) {
       statusItem.button.imagePosition = NSImageOnly;
@@ -178,71 +221,6 @@ withParentMenuId: (int)theParentMenuId
 
 - (void)setTooltip:(NSString *)tooltip {
   statusItem.button.toolTip = tooltip;
-}
-
-- (void)setCustomTitleTop:(NSString *)top bottom:(NSString *)bottom {
-  NSStatusBarButton *button = statusItem.button;
-  NSStackView *stack = nil;
-  for (NSView *subview in button.subviews) {
-    if ([subview isKindOfClass:[NSStackView class]] && [subview.identifier isEqualToString:@"IntegTERMCustomTitleStack"]) {
-      stack = (NSStackView *)subview;
-      break;
-    }
-  }
-  NSTextField *topLabel;
-  NSTextField *bottomLabel;
-
-  if (stack == nil) {
-    stack = [[NSStackView alloc] init];
-    stack.identifier = @"IntegTERMCustomTitleStack";
-    stack.orientation = NSUserInterfaceLayoutOrientationVertical;
-    stack.alignment = NSLayoutAttributeCenterX;
-    stack.spacing = -3.0;
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-
-    topLabel = [NSTextField labelWithString:@""];
-    topLabel.identifier = @"IntegTERMCustomTitleTop";
-    topLabel.alignment = NSTextAlignmentCenter;
-    topLabel.font = [NSFont systemFontOfSize:6.5 weight:NSFontWeightSemibold];
-
-    bottomLabel = [NSTextField labelWithString:@""];
-    bottomLabel.identifier = @"IntegTERMCustomTitleBottom";
-    bottomLabel.alignment = NSTextAlignmentCenter;
-    bottomLabel.font = [NSFont systemFontOfSize:11.5 weight:NSFontWeightSemibold];
-
-    [stack addArrangedSubview:topLabel];
-    [stack addArrangedSubview:bottomLabel];
-    [button addSubview:stack];
-
-    [NSLayoutConstraint activateConstraints:@[
-      [stack.centerYAnchor constraintEqualToAnchor:button.centerYAnchor constant:-0.5],
-      [stack.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:-1.0],
-      [stack.leadingAnchor constraintGreaterThanOrEqualToAnchor:button.leadingAnchor constant:38.0]
-    ]];
-  } else {
-    topLabel = nil;
-    bottomLabel = nil;
-    for (NSView *subview in stack.arrangedSubviews) {
-      if ([subview isKindOfClass:[NSTextField class]] && [subview.identifier isEqualToString:@"IntegTERMCustomTitleTop"]) {
-        topLabel = (NSTextField *)subview;
-      }
-      if ([subview isKindOfClass:[NSTextField class]] && [subview.identifier isEqualToString:@"IntegTERMCustomTitleBottom"]) {
-        bottomLabel = (NSTextField *)subview;
-      }
-    }
-  }
-
-  topLabel.stringValue = top;
-  bottomLabel.stringValue = bottom;
-  stack.hidden = NO;
-}
-
-- (void)clearCustomTitle {
-  for (NSView *subview in statusItem.button.subviews) {
-    if ([subview isKindOfClass:[NSStackView class]] && [subview.identifier isEqualToString:@"IntegTERMCustomTitleStack"]) {
-      subview.hidden = YES;
-    }
-  }
 }
 
 - (IBAction)menuHandler:(id)sender

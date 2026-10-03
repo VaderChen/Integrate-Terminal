@@ -19,6 +19,7 @@ go vet ./...
 python3 "$SCRIPT_DIR/test-wails-toolchain.py"
 python3 "$SCRIPT_DIR/test-packaging.py"
 python3 "$SCRIPT_DIR/test_release_macos.py"
+python3 "$SCRIPT_DIR/test-tray-layout.py"
 python3 "$SCRIPT_DIR/tests/test_sandbox_probe.py"
 python3 "$PROJECT_DIR/internal/purchase/swift/test_bridge.py"
 cd frontend
