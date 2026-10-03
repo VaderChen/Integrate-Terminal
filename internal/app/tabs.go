@@ -246,8 +246,8 @@ func (a *App) reorderTabsLocked(tabIDs []string) ([]model.Tab, error) {
 			visibleIndex++
 		}
 		a.tabs = nextTabs
-		if !containsTabID(visibleTabs(a.tabs), a.config.LastActiveTab) && len(visibleTabs(a.tabs)) > 0 {
-			a.config.LastActiveTab = visibleTabs(a.tabs)[0].ID
+		if !containsTabID(reorderedVisible, a.config.LastActiveTab) && len(reorderedVisible) > 0 {
+			a.config.LastActiveTab = reorderedVisible[0].ID
 		}
 		return a.tabs, a.persistTabs()
 	}

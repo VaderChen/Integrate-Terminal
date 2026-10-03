@@ -132,6 +132,7 @@ func (m *Manager) StartSSHSession(ctx context.Context, site model.Site) (string,
 }
 
 func (m *Manager) streamSSHOutput(ctx context.Context, session *sshTerminalSession, reader io.Reader) {
+	outputEvent := "ssh:output:" + session.id
 	buffer := make([]byte, 4096)
 	var pending []byte
 	var pendingControl []byte
@@ -152,7 +153,7 @@ func (m *Manager) streamSSHOutput(ctx context.Context, session *sshTerminalSessi
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, visibleChunk)
 				session.outputSequence++
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk), session.outputSequence)
+				emitSessionEvent(ctx, outputEvent, string(visibleChunk), session.outputSequence)
 				session.lock.Unlock()
 			}
 		}
@@ -165,7 +166,7 @@ func (m *Manager) streamSSHOutput(ctx context.Context, session *sshTerminalSessi
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, pending)
 				session.outputSequence++
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending), session.outputSequence)
+				emitSessionEvent(ctx, outputEvent, string(pending), session.outputSequence)
 				session.lock.Unlock()
 			}
 			if err != io.EOF {

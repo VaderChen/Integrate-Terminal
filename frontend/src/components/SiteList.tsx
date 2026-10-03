@@ -72,7 +72,7 @@ export function SiteList({
   const [dragOverFolderKey, setDragOverFolderKey] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const groupedSites = useMemo(() => groupSitesByFolder(sites, siteFolders, t.defaultSiteFolder), [siteFolders, sites, t.defaultSiteFolder]);
-  const appShellFontSize = typeof window !== 'undefined'
+  const appShellFontSize = contextMenu && typeof window !== 'undefined'
     ? window.getComputedStyle(document.querySelector('.app-shell') ?? document.body).fontSize
     : undefined;
 

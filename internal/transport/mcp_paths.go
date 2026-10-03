@@ -142,7 +142,7 @@ func cleanRemoteAbsolutePath(value string) (string, error) {
 	}
 	// Cleaning a/../b before checking a could erase a symlink traversal while
 	// the server later evaluates the original path. Reject such input instead.
-	for _, component := range strings.Split(value, "/") {
+	for component := range strings.SplitSeq(value, "/") {
 		if component == "." || component == ".." {
 			return "", fmt.Errorf("remote path must not contain dot components")
 		}
@@ -162,16 +162,12 @@ func inspectRemoteRootPath(root, target string, allowMissingLeaf bool, lstat rem
 	if root != "/" && target != root && !strings.HasPrefix(target, root+"/") {
 		return 0, false, fmt.Errorf("remote path is outside its configured root")
 	}
-	components := []string{"/"}
-	current := ""
-	if target != "/" {
-		for _, component := range strings.Split(strings.TrimPrefix(target, "/"), "/") {
-			current += "/" + component
-			components = append(components, current)
-		}
-	}
-	for i, current := range components {
-		leaf := i == len(components)-1
+	// 逐段借用正規化路徑的前綴，仍依序驗證每一層，避免建立前綴切片。
+	end := 0
+	for component := range strings.SplitSeq(target, "/") {
+		end += len(component)
+		current := target[:max(1, end)]
+		leaf := len(current) == len(target)
 		mode, err := lstat(current)
 		if err != nil {
 			if leaf && target != root && allowMissingLeaf && errors.Is(err, os.ErrNotExist) {
@@ -188,6 +184,7 @@ func inspectRemoteRootPath(root, target string, allowMissingLeaf bool, lstat rem
 		if leaf {
 			return mode, true, nil
 		}
+		end++
 	}
 	panic("absolute remote path has no components")
 }

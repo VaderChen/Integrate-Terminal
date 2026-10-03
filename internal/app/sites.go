@@ -81,16 +81,12 @@ func (a *App) deleteSiteLocked(id string) ([]model.Site, error) {
 }
 
 func (a *App) sortSitesByNameLocked() ([]model.Site, error) {
-	sort.SliceStable(a.sites, func(i, j int) bool {
-		left := strings.ToLower(strings.TrimSpace(a.sites[i].Name))
-		right := strings.ToLower(strings.TrimSpace(a.sites[j].Name))
-		if left == "" {
-			left = strings.ToLower(strings.TrimSpace(a.sites[i].Host))
+	sortByKey(a.sites, func(site model.Site) string {
+		name := strings.TrimSpace(site.Name)
+		if name == "" {
+			name = strings.TrimSpace(site.Host)
 		}
-		if right == "" {
-			right = strings.ToLower(strings.TrimSpace(a.sites[j].Host))
-		}
-		return left < right
+		return strings.ToLower(name)
 	})
 
 	return enrichSites(a.sites), nil
@@ -107,10 +103,32 @@ func (a *App) createSiteFolderLocked(name string) (model.Config, error) {
 
 func (a *App) sortSiteFoldersLocked() (model.Config, error) {
 	a.config.SiteFolders = sanitizeSiteFolders(a.config.SiteFolders, a.sites)
-	sort.SliceStable(a.config.SiteFolders, func(i, j int) bool {
-		return strings.ToLower(a.config.SiteFolders[i]) < strings.ToLower(a.config.SiteFolders[j])
-	})
+	sortByKey(a.config.SiteFolders, strings.ToLower)
 	return a.config, nil
+}
+
+// 排序鍵只計算一次，交換時同步移動，保留相同鍵的原始順序。
+type keyedSort[T any] struct {
+	items []T
+	keys  []string
+}
+
+func (s keyedSort[T]) Len() int           { return len(s.items) }
+func (s keyedSort[T]) Less(i, j int) bool { return s.keys[i] < s.keys[j] }
+func (s keyedSort[T]) Swap(i, j int) {
+	s.items[i], s.items[j] = s.items[j], s.items[i]
+	s.keys[i], s.keys[j] = s.keys[j], s.keys[i]
+}
+
+func sortByKey[T any](items []T, key func(T) string) {
+	if len(items) < 2 {
+		return
+	}
+	keys := make([]string, len(items))
+	for i, item := range items {
+		keys[i] = key(item)
+	}
+	sort.Stable(keyedSort[T]{items: items, keys: keys})
 }
 
 func (a *App) renameSiteFolderLocked(name string, nextName string) (model.SiteLibraryMutationResult, error) {

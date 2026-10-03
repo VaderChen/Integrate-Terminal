@@ -12,42 +12,63 @@ type Params = {
 export function useTerminalEvents({ tabs, setTabs, closeTerminalTabOnDisconnect, onSessionClosed }: Params) {
   const closeOnDisconnectRef = useRef(closeTerminalTabOnDisconnect);
   const onSessionClosedRef = useRef(onSessionClosed);
-  const promptBufferRef = useRef<Record<string, string>>({});
+  const setTabsRef = useRef(setTabs);
+  const subscriptionsRef = useRef(new Map<string, { sessionId: string; dispose: () => void }>());
 
   useEffect(() => {
     closeOnDisconnectRef.current = closeTerminalTabOnDisconnect;
     onSessionClosedRef.current = onSessionClosed;
-  }, [closeTerminalTabOnDisconnect, onSessionClosed]);
+    setTabsRef.current = setTabs;
+  }, [closeTerminalTabOnDisconnect, onSessionClosed, setTabs]);
 
   useEffect(() => {
-    const terminalTabs = tabs.filter((tab) => tab.mode === 'terminal' && tab.sessionId);
-    const disposers = terminalTabs.flatMap((tab) => [
-      EventsOn('ssh:closed:' + tab.sessionId, () => {
-        if (closeOnDisconnectRef.current) {
-          void onSessionClosedRef.current(tab.sessionId);
-        }
-      }),
-      EventsOn('ssh:cwd:' + tab.sessionId, (remotePath: string) => {
-        updateRemotePath(setTabs, tab.id, remotePath);
-      }),
-      EventsOn('ssh:output:' + tab.sessionId, (chunk: string) => {
-        const cleaned = stripAnsiSequences((promptBufferRef.current[tab.sessionId] ?? '') + chunk).slice(-2048);
-        promptBufferRef.current[tab.sessionId] = cleaned;
-        const promptPath = extractPromptPath(cleaned);
-        if (promptPath) {
-          updateRemotePath(setTabs, tab.id, promptPath);
-        }
-      }),
-    ]);
+    const terminalTabs = new Map(tabs.filter((tab) => tab.mode === 'terminal' && tab.sessionId).map((tab) => [tab.id, tab]));
+    const subscriptions = subscriptionsRef.current;
+    for (const [tabId, subscription] of subscriptions) {
+      if (terminalTabs.get(tabId)?.sessionId !== subscription.sessionId) {
+        subscription.dispose();
+        subscriptions.delete(tabId);
+      }
+    }
+    for (const tab of terminalTabs.values()) {
+      if (subscriptions.has(tab.id)) continue;
+      // 提示字串與訂閱共用生命週期，關閉分頁即釋放，路徑更新不重訂閱。
+      let promptBuffer = '';
+      const disposers = [
+        EventsOn('ssh:closed:' + tab.sessionId, () => {
+          if (closeOnDisconnectRef.current) {
+            void onSessionClosedRef.current(tab.sessionId);
+          }
+        }),
+        EventsOn('ssh:cwd:' + tab.sessionId, (remotePath: string) => {
+          updateRemotePath(setTabsRef.current, tab.id, remotePath);
+        }),
+        EventsOn('ssh:output:' + tab.sessionId, (chunk: string) => {
+          promptBuffer = stripAnsiSequences(promptBuffer + chunk).slice(-2048);
+          const promptPath = extractPromptPath(promptBuffer);
+          if (promptPath) {
+            updateRemotePath(setTabsRef.current, tab.id, promptPath);
+          }
+        }),
+      ];
+      subscriptions.set(tab.id, { sessionId: tab.sessionId, dispose: () => disposers.forEach(dispose => dispose()) });
+    }
+  }, [tabs]);
 
-    return () => disposers.forEach((dispose) => dispose());
-  }, [setTabs, tabs]);
+  useEffect(() => () => {
+    for (const subscription of subscriptionsRef.current.values()) subscription.dispose();
+    subscriptionsRef.current.clear();
+  }, []);
 }
 
 function updateRemotePath(setTabs: Dispatch<SetStateAction<Tab[]>>, tabId: string, remotePath: string) {
-  setTabs((current) => current.map((tab) => (
-    tab.id === tabId && tab.remotePath !== remotePath ? { ...tab, remotePath } : tab
-  )));
+  setTabs((current) => {
+    const index = current.findIndex(tab => tab.id === tabId);
+    if (index < 0 || current[index].remotePath === remotePath) return current;
+    const next = [...current];
+    next[index] = { ...current[index], remotePath };
+    return next;
+  });
 }
 
 function stripAnsiSequences(value: string) {
@@ -63,4 +84,3 @@ function extractPromptPath(value: string) {
   }
   return '';
 }
-

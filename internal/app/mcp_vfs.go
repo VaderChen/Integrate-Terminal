@@ -246,27 +246,31 @@ func (vfs *mcpVFS) list(path string) ([]mcpVFSItem, error) {
 	}
 
 	vfs.mu.RLock()
-	defer vfs.mu.RUnlock()
 	node, ok := vfs.nodes[relativePath]
 	if !ok {
+		vfs.mu.RUnlock()
 		return nil, fmt.Errorf("virtual path not found: %s", path)
 	}
 	if !node.directory {
+		vfs.mu.RUnlock()
 		return nil, fmt.Errorf("virtual path is not a directory: %s", path)
 	}
 
-	children := make(map[string]mcpVFSNode)
-	for nodePath, child := range vfs.nodes {
-		if nodePath == relativePath || mcpVFSParent(nodePath) != relativePath {
-			continue
+	// 先計算直接子項數量，精確配置快照；不複製含檔案資料的節點 map。
+	count := 0
+	for nodePath := range vfs.nodes {
+		if nodePath != relativePath && mcpVFSParent(nodePath) == relativePath {
+			count++
 		}
-		children[nodePath] = child
 	}
-
-	items := make([]mcpVFSItem, 0, len(children))
-	for nodePath, child := range children {
-		items = append(items, mcpVFSItemFromNode(nodePath, child))
+	items := make([]mcpVFSItem, 0, count)
+	for nodePath, child := range vfs.nodes {
+		if nodePath != relativePath && mcpVFSParent(nodePath) == relativePath {
+			items = append(items, mcpVFSItemFromNode(nodePath, child))
+		}
 	}
+	vfs.mu.RUnlock()
+	// 快照已獨立，排序期間不必阻擋寫入。
 	sort.Slice(items, func(left, right int) bool {
 		if items[left].IsDir != items[right].IsDir {
 			return items[left].IsDir
@@ -463,7 +467,8 @@ func (layer *mcpVirtualLayer) writeVirtualChunk(input mcpVFSWriteChunkInput) (mc
 		return output, nil
 	}
 	state.finalizing = true
-	stagedData := append([]byte(nil), state.data...)
+	// finalizing 會拒絕同一路徑的追加或重啟；同步寫入完成前可安全借用。
+	stagedData := state.data
 	vfs.chunkMu.Unlock()
 
 	digest := sha256.Sum256(stagedData)
@@ -968,7 +973,7 @@ func normalizeMCPVFSPath(value string) (string, error) {
 	if value == "" {
 		return "", nil
 	}
-	for _, segment := range strings.Split(value, "/") {
+	for segment := range strings.SplitSeq(value, "/") {
 		if segment == ".." {
 			return "", fmt.Errorf("virtual path cannot contain ..")
 		}

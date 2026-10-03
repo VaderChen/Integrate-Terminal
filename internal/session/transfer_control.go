@@ -8,13 +8,13 @@ import (
 
 func (m *Manager) ClearCompletedTransfers() []model.TransferItem {
 	m.mu.Lock()
-	filtered := make([]model.TransferItem, 0, len(m.transfers))
-	for _, item := range m.transfers {
-		if item.Status != "done" && item.Status != "cancelled" {
-			filtered = append(filtered, item)
+	for entry := m.newestTransfer; entry != nil; {
+		next := entry.older
+		if entry.item.Status == "done" || entry.item.Status == "cancelled" {
+			m.unlinkTransferLocked(entry)
 		}
+		entry = next
 	}
-	m.transfers = filtered
 	m.notifyStateLocked()
 	m.mu.Unlock()
 	return m.SampleTransfers()
@@ -22,12 +22,14 @@ func (m *Manager) ClearCompletedTransfers() []model.TransferItem {
 
 func (m *Manager) ClearAllTransfers() []model.TransferItem {
 	m.mu.Lock()
-	for _, item := range m.transfers {
+	for entry := m.newestTransfer; entry != nil; entry = entry.older {
+		item := &entry.item
 		if item.Status == "running" || item.Status == "paused" {
 			m.cancelledTransfers[item.ID] = true
 		}
 	}
-	m.transfers = []model.TransferItem{}
+	m.transferItems = nil
+	m.newestTransfer = nil
 	m.pausedTransfers = make(map[string]bool)
 	m.pauseAllTransfers = false
 	m.notifyStateLocked()
@@ -39,12 +41,12 @@ func (m *Manager) CancelTransfer(itemID string) []model.TransferItem {
 	m.mu.Lock()
 	m.cancelledTransfers[itemID] = true
 	delete(m.pausedTransfers, itemID)
-	for i := range m.transfers {
-		if m.transfers[i].ID == itemID && (m.transfers[i].Status == "running" || m.transfers[i].Status == "paused") {
-			m.transfers[i].Status = "cancelled"
-			m.transfers[i].SpeedBps = 0
-			m.addLogLocked(fmt.Sprintf("已取消傳輸: %s", m.transfers[i].Name), "failed")
-			break
+	if entry := m.transferItems[itemID]; entry != nil {
+		item := &entry.item
+		if item.Status == "running" || item.Status == "paused" {
+			item.Status = "cancelled"
+			item.SpeedBps = 0
+			m.addLogLocked(fmt.Sprintf("已取消傳輸: %s", item.Name), "failed")
 		}
 	}
 	m.notifyStateLocked()
@@ -54,21 +56,18 @@ func (m *Manager) CancelTransfer(itemID string) []model.TransferItem {
 
 func (m *Manager) TogglePauseTransfer(itemID string) []model.TransferItem {
 	m.mu.Lock()
-	for i := range m.transfers {
-		if m.transfers[i].ID != itemID {
-			continue
-		}
-		if m.transfers[i].Status == "running" {
+	if entry := m.transferItems[itemID]; entry != nil {
+		item := &entry.item
+		if item.Status == "running" {
 			m.pausedTransfers[itemID] = true
-			m.transfers[i].Status = "paused"
-			m.transfers[i].SpeedBps = 0
-			m.addLogLocked(fmt.Sprintf("已暫停傳輸: %s", m.transfers[i].Name), "running")
-		} else if m.transfers[i].Status == "paused" {
+			item.Status = "paused"
+			item.SpeedBps = 0
+			m.addLogLocked(fmt.Sprintf("已暫停傳輸: %s", item.Name), "running")
+		} else if item.Status == "paused" {
 			delete(m.pausedTransfers, itemID)
-			m.transfers[i].Status = "running"
-			m.addLogLocked(fmt.Sprintf("已繼續傳輸: %s", m.transfers[i].Name), "running")
+			item.Status = "running"
+			m.addLogLocked(fmt.Sprintf("已繼續傳輸: %s", item.Name), "running")
 		}
-		break
 	}
 	m.notifyStateLocked()
 	m.mu.Unlock()
@@ -80,19 +79,21 @@ func (m *Manager) TogglePauseAllTransfers() []model.TransferItem {
 	shouldPause := !m.pauseAllTransfers
 	m.pauseAllTransfers = shouldPause
 	if shouldPause {
-		for i := range m.transfers {
-			if m.transfers[i].Status == "running" {
-				m.pausedTransfers[m.transfers[i].ID] = true
-				m.transfers[i].Status = "paused"
-				m.transfers[i].SpeedBps = 0
+		for entry := m.newestTransfer; entry != nil; entry = entry.older {
+			item := &entry.item
+			if item.Status == "running" {
+				m.pausedTransfers[item.ID] = true
+				item.Status = "paused"
+				item.SpeedBps = 0
 			}
 		}
 		m.addLogLocked("已暫停全部傳輸", "running")
 	} else {
-		for i := range m.transfers {
-			if m.transfers[i].Status == "paused" {
-				delete(m.pausedTransfers, m.transfers[i].ID)
-				m.transfers[i].Status = "running"
+		for entry := m.newestTransfer; entry != nil; entry = entry.older {
+			item := &entry.item
+			if item.Status == "paused" {
+				delete(m.pausedTransfers, item.ID)
+				item.Status = "running"
 			}
 		}
 		m.addLogLocked("已繼續全部傳輸", "running")
@@ -105,6 +106,7 @@ func (m *Manager) TogglePauseAllTransfers() []model.TransferItem {
 func (m *Manager) ClearLogs() []model.LogItem {
 	m.mu.Lock()
 	m.logs = []model.LogItem{}
+	m.logStart = 0
 	m.notifyStateLocked()
 	m.mu.Unlock()
 	return m.SampleLogs()

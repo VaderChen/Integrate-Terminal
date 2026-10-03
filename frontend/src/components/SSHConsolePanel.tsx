@@ -68,7 +68,7 @@ export function SSHConsolePanel({
   const lastMeasuredWidthRef = useRef<number>(0);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [systemFonts, setSystemFonts] = useState<string[]>(FALLBACK_FONT_FAMILIES);
-  const appShellFontSize = typeof window !== 'undefined'
+  const appShellFontSize = contextMenu && typeof window !== 'undefined'
     ? window.getComputedStyle(document.querySelector('.app-shell') ?? document.body).fontSize
     : undefined;
   const contextMenuStyle = contextMenu

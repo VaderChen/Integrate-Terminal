@@ -48,17 +48,17 @@ func parseMCPVFSLocation(value string) (mcpVFSLocation, error) {
 	if !strings.HasPrefix(normalized, mcpVFSSitesPath+"/") {
 		return location, nil
 	}
-	parts := strings.Split(normalized, "/")
-	if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+	siteID, remotePath, hasRemotePath := strings.Cut(normalized[len(mcpVFSSitesPath)+1:], "/")
+	if strings.TrimSpace(siteID) == "" {
 		return mcpVFSLocation{}, fmt.Errorf("remote site id is required in virtual path: %s", value)
 	}
-	location.siteID = parts[1]
-	if len(parts) == 2 {
+	location.siteID = siteID
+	if !hasRemotePath {
 		location.kind = mcpVFSLocationSiteRoot
 		return location, nil
 	}
 	location.kind = mcpVFSLocationRemote
-	location.remotePath = strings.Join(parts[2:], "/")
+	location.remotePath = remotePath
 	return location, nil
 }
 
@@ -532,7 +532,9 @@ func (a *App) closeMCPRemoteTab(tabID string) {
 	a.stateMu.Lock()
 	for i, tab := range a.tabs {
 		if tab.ID == tabID && tab.Hidden {
-			a.tabs = append(a.tabs[:i], a.tabs[i+1:]...)
+			copy(a.tabs[i:], a.tabs[i+1:])
+			a.tabs[len(a.tabs)-1] = model.Tab{}
+			a.tabs = a.tabs[:len(a.tabs)-1]
 			break
 		}
 	}
@@ -546,7 +548,7 @@ func mcpMountRoot(configured, cwd string) (string, error) {
 	if configured == "" {
 		configured = cwd
 	}
-	for _, segment := range strings.Split(configured, "/") {
+	for segment := range strings.SplitSeq(configured, "/") {
 		if segment == ".." {
 			return "", fmt.Errorf("remote root cannot contain ..")
 		}

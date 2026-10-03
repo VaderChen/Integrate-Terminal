@@ -177,7 +177,7 @@ func (a *App) applyRESTServerShutdown() error {
 func (a *App) serveRESTListenerLocked(listener net.Listener, baseURL string) {
 	server := &http.Server{
 		Handler:      a.restMux(),
-		ErrorLog:     log.New(mustOpenCrashLogWriter(), "rest-server: ", log.LstdFlags|log.Lshortfile),
+		ErrorLog:     log.New(crashlog.Writer(), "rest-server: ", log.LstdFlags|log.Lshortfile),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -369,15 +369,6 @@ func isAllowedRESTOrigin(origin string) bool {
 		return err == nil && number > 0 && number <= 65535
 	}
 	return true
-}
-
-func mustOpenCrashLogWriter() *os.File {
-	path := crashlog.Path()
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return os.Stderr
-	}
-	return file
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

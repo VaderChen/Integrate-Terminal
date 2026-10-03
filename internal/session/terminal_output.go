@@ -48,7 +48,11 @@ func (m *Manager) GetTerminalOutputSnapshot(sessionID string) TerminalOutputSnap
 }
 
 func splitUTF8SafeChunk(pending []byte, chunk []byte) (complete []byte, rest []byte) {
-	data := append(pending, chunk...)
+	// 完整區塊只在本次 Read 期間使用；只有跨區塊資料需要另外配置。
+	data := chunk
+	if len(pending) > 0 {
+		data = append(pending, chunk...)
+	}
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -65,10 +69,6 @@ func splitUTF8SafeChunk(pending []byte, chunk []byte) (complete []byte, rest []b
 			}
 			return data[:start], append([]byte(nil), data[start:end]...)
 		}
-	}
-
-	if utf8.Valid(data) {
-		return data, nil
 	}
 
 	return data, nil
@@ -88,17 +88,29 @@ func appendTerminalOutput(buffer []byte, chunk []byte) []byte {
 			start++
 		}
 	}
-	return append([]byte(nil), buffer[start:]...)
+	// session lock 保護緩衝；對外快照已複製成字串，可重用原配置。
+	return buffer[:copy(buffer, buffer[start:])]
 }
 
 func stripTerminalSignals(pending []byte, chunk []byte) ([]byte, []byte, []string) {
-	data := append(append([]byte(nil), pending...), chunk...)
+	data := chunk
+	if len(pending) > 0 {
+		data = append(pending, chunk...)
+	}
 	if len(data) == 0 {
 		return nil, nil, nil
 	}
+	// 一般文字及 CSI 色彩序列不必重建輸出；保留尾端 ESC 給下次解析。
+	if !bytes.Contains(data, []byte(oscStart)) {
+		if suffixLength := longestOSCPrefixSuffix(data); suffixLength > 0 {
+			end := len(data) - suffixLength
+			return data[:end], append([]byte(nil), data[end:]...), nil
+		}
+		return data, nil, nil
+	}
 
 	visible := make([]byte, 0, len(data))
-	cwds := make([]string, 0, 1)
+	var cwds []string
 	index := 0
 	for index < len(data) {
 		start := bytes.Index(data[index:], []byte(oscStart))

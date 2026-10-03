@@ -18,12 +18,15 @@ type Manager struct {
 	sshSessions        map[string]*sshTerminalSession
 	telnetSessions     map[string]*telnetTerminalSession
 	localSessions      map[string]*localTerminalSession
-	transfers          []model.TransferItem
+	transferItems      map[string]*transferEntry
+	newestTransfer     *transferEntry
+	lastItemTimestamp  int64
 	cancelledTransfers map[string]bool
 	pausedTransfers    map[string]bool
 	transferParents    map[string]string
 	pauseAllTransfers  bool
 	logs               []model.LogItem
+	logStart           int
 	eventCtx           context.Context
 	stateEvents        chan struct{}
 }
@@ -34,7 +37,6 @@ func NewManager() *Manager {
 		sshSessions:        make(map[string]*sshTerminalSession),
 		telnetSessions:     make(map[string]*telnetTerminalSession),
 		localSessions:      make(map[string]*localTerminalSession),
-		transfers:          make([]model.TransferItem, 0),
 		cancelledTransfers: make(map[string]bool),
 		pausedTransfers:    make(map[string]bool),
 		transferParents:    make(map[string]string),
@@ -65,8 +67,18 @@ func (m *Manager) runStateEventLoop() {
 
 		m.mu.RLock()
 		ctx := m.eventCtx
-		transfers := append([]model.TransferItem(nil), m.transfers...)
-		logs := append([]model.LogItem(nil), m.logs...)
+		if ctx == nil {
+			m.mu.RUnlock()
+			continue
+		}
+		var transfers []model.TransferItem
+		if len(m.transferItems) > 0 {
+			transfers = m.sampleTransfersLocked()
+		}
+		var logs []model.LogItem
+		if len(m.logs) > 0 {
+			logs = m.sampleLogsLocked()
+		}
 		m.mu.RUnlock()
 		if ctx != nil {
 			emitSessionEvent(ctx, "transfer:state", map[string]any{
@@ -78,6 +90,10 @@ func (m *Manager) runStateEventLoop() {
 }
 
 func (m *Manager) notifyStateLocked() {
+	// 背景服務透過 REST 讀取快照，沒有 GUI 訂閱時不必喚醒事件迴圈。
+	if m.eventCtx == nil {
+		return
+	}
 	select {
 	case m.stateEvents <- struct{}{}:
 	default:
@@ -123,16 +139,28 @@ func (m *Manager) SampleRemoteFiles(basePath string) []model.FileEntry {
 func (m *Manager) SampleTransfers() []model.TransferItem {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]model.TransferItem, len(m.transfers))
-	copy(out, m.transfers)
+	return m.sampleTransfersLocked()
+}
+
+func (m *Manager) sampleTransfersLocked() []model.TransferItem {
+	out := make([]model.TransferItem, 0, len(m.transferItems))
+	for entry := m.newestTransfer; entry != nil; entry = entry.older {
+		out = append(out, entry.item)
+	}
 	return out
 }
 
 func (m *Manager) SampleLogs() []model.LogItem {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	return m.sampleLogsLocked()
+}
+
+func (m *Manager) sampleLogsLocked() []model.LogItem {
 	out := make([]model.LogItem, len(m.logs))
-	copy(out, m.logs)
+	for i := range m.logs {
+		out[len(out)-1-i] = m.logs[(m.logStart+i)%len(m.logs)]
+	}
 	return out
 }
 

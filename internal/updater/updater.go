@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -171,11 +170,8 @@ func fetchLatestRelease(ctx context.Context, currentVersion string) (githubRelea
 }
 
 func selectAsset(assets []githubAsset, goos string, goarch string) (githubAsset, bool) {
-	type candidate struct {
-		asset githubAsset
-		score int
-	}
-	candidates := make([]candidate, 0, len(assets))
+	var best githubAsset
+	bestScore := 0
 	for _, asset := range assets {
 		if !validAsset(asset) {
 			continue
@@ -184,18 +180,12 @@ func selectAsset(assets []githubAsset, goos string, goarch string) (githubAsset,
 		if score <= 0 {
 			continue
 		}
-		candidates = append(candidates, candidate{asset: asset, score: score})
-	}
-	if len(candidates) == 0 {
-		return githubAsset{}, false
-	}
-	sort.Slice(candidates, func(left int, right int) bool {
-		if candidates[left].score != candidates[right].score {
-			return candidates[left].score > candidates[right].score
+		if score > bestScore || (score == bestScore && asset.Name < best.Name) {
+			best = asset
+			bestScore = score
 		}
-		return candidates[left].asset.Name < candidates[right].asset.Name
-	})
-	return candidates[0].asset, true
+	}
+	return best, bestScore > 0
 }
 
 func validAsset(asset githubAsset) bool {
@@ -448,16 +438,12 @@ func normalizedVersion(value string) (string, error) {
 	if separator := strings.IndexAny(value, "+-"); separator >= 0 {
 		value = value[:separator]
 	}
-	parts := strings.Split(value, ".")
-	if len(parts) == 0 {
-		return "", errors.New("version is empty")
-	}
-	for _, part := range parts {
+	for part := range strings.SplitSeq(value, ".") {
 		if part == "" || strings.IndexFunc(part, func(character rune) bool { return !unicode.IsDigit(character) }) >= 0 {
 			return "", fmt.Errorf("version %q is not numeric", value)
 		}
 	}
-	return strings.Join(parts, "."), nil
+	return value, nil
 }
 
 func compareVersions(left string, right string) (int, error) {

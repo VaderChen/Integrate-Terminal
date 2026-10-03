@@ -2,6 +2,7 @@ package crashlog
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -9,7 +10,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"IntegTERM/internal/boundedlog"
 )
+
+// 崩潰與 REST 伺服器錯誤共用同一個檔案及儲存上限。
+const maxLogBytes = 5 * 1024 * 1024
 
 var (
 	initOnce sync.Once
@@ -29,6 +35,18 @@ func Path() string {
 	return Init()
 }
 
+func Writer() io.Writer { return logWriter{path: Init()} }
+
+type logWriter struct{ path string }
+
+func (writer logWriter) Write(data []byte) (int, error) {
+	n, err := boundedlog.Append(writer.path, data, maxLogBytes)
+	if err != nil {
+		return os.Stderr.Write(data)
+	}
+	return n, nil
+}
+
 func Recover(scope string) {
 	if recovered := recover(); recovered != nil {
 		Write(scope, recovered)
@@ -44,15 +62,8 @@ func Write(scope string, recovered interface{}) {
 		debug.Stack(),
 	)
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
+	if _, err := boundedlog.Append(path, []byte(payload), maxLogBytes); err != nil {
 		log.Printf("write crash log failed (%s): %v; original panic: %v", path, err, recovered)
-		return
-	}
-	defer file.Close()
-
-	if _, err := file.WriteString(payload); err != nil {
-		log.Printf("append crash log failed (%s): %v; original panic: %v", path, err, recovered)
 		return
 	}
 

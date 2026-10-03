@@ -81,9 +81,21 @@ export function FilePanel({
   const dropTargetStyle: CSSProperties | undefined =
     side === 'remote' ? ({ '--wails-drop-target': 'drop' } as CSSProperties) : undefined;
   const entryPathSet = useMemo(() => new Set(entries.filter(isActionableEntry).map((entry) => entry.path)), [entries]);
+  const entryByPath = useMemo(() => {
+    const index = new Map<string, FileEntry>();
+    for (const entry of entries) {
+      if (!index.has(entry.path)) index.set(entry.path, entry);
+    }
+    return index;
+  }, [entries]);
+  const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const draggingPathSet = useMemo(() => new Set(draggingPaths), [draggingPaths]);
 
   useEffect(() => {
-    setSelectedPaths((current) => current.filter((path) => entryPathSet.has(path)));
+    setSelectedPaths((current) => {
+      const retained = current.filter((path) => entryPathSet.has(path));
+      return retained.length === current.length ? current : retained;
+    });
     setAnchorPath((current) => (entryPathSet.has(current) ? current : ''));
   }, [entryPathSet, path, side]);
 
@@ -252,8 +264,8 @@ export function FilePanel({
         {entries.map((entry, index) => (
           <div
             key={entry.path}
-            className={`file-row ${entry.isDir ? 'clickable-row' : ''} ${selectedPaths.includes(entry.path) ? 'selected' : ''} ${dragOverDirectoryPath === entry.path ? 'drag-target' : ''}`}
-            aria-selected={selectedPaths.includes(entry.path)}
+            className={`file-row ${entry.isDir ? 'clickable-row' : ''} ${selectedPathSet.has(entry.path) ? 'selected' : ''} ${dragOverDirectoryPath === entry.path ? 'drag-target' : ''}`}
+            aria-selected={selectedPathSet.has(entry.path)}
             draggable={!disabled && isActionableEntry(entry)}
             onClick={(event) => handleRowClick(event, entry, index)}
             onDragStart={(event) => {
@@ -262,8 +274,8 @@ export function FilePanel({
                 return;
               }
 
-              const dragPaths = (selectedPaths.includes(entry.path) ? selectedPaths : [entry.path]).filter(value => entryPathSet.has(value));
-              if (isActionableEntry(entry) && !selectedPaths.includes(entry.path)) {
+              const dragPaths = (selectedPathSet.has(entry.path) ? selectedPaths : [entry.path]).filter(value => entryPathSet.has(value));
+              if (isActionableEntry(entry) && !selectedPathSet.has(entry.path)) {
                 setSelectedPaths([entry.path]);
                 setAnchorPath(entry.path);
               }
@@ -341,7 +353,7 @@ export function FilePanel({
               if (disabled || !location) return;
               event.preventDefault();
               event.stopPropagation();
-              if (isActionableEntry(entry) && !selectedPaths.includes(entry.path)) {
+              if (isActionableEntry(entry) && !selectedPathSet.has(entry.path)) {
                 setSelectedPaths([entry.path]);
                 setAnchorPath(entry.path);
               }
@@ -352,9 +364,9 @@ export function FilePanel({
                 y: event.clientY,
                 entry,
                 side,
-                selectedPaths: (selectedPaths.includes(entry.path) ? selectedPaths : [entry.path]).filter(value => entryPathSet.has(value)),
-                selectedEntries: (selectedPaths.includes(entry.path) ? selectedPaths : [entry.path])
-                  .map((selectedPath) => entries.find((candidate) => candidate.path === selectedPath))
+                selectedPaths: (selectedPathSet.has(entry.path) ? selectedPaths : [entry.path]).filter(value => entryPathSet.has(value)),
+                selectedEntries: (selectedPathSet.has(entry.path) ? selectedPaths : [entry.path])
+                  .map((selectedPath) => entryByPath.get(selectedPath))
                   .filter((candidate): candidate is FileEntry => Boolean(candidate) && isActionableEntry(candidate!)),
               });
             }}
@@ -369,7 +381,7 @@ export function FilePanel({
                 <FontAwesomeIcon icon={resolveEntryIcon(entry)} />
               </span>
               <span className="entry-label">{entry.name}</span>
-              {draggingPaths.includes(entry.path) ? <span className="dragging-badge">{selectedPaths.length > 1 ? selectedPaths.length : ''}</span> : null}
+              {draggingPathSet.has(entry.path) ? <span className="dragging-badge">{selectedPaths.length > 1 ? selectedPaths.length : ''}</span> : null}
             </span>
             <span>{entry.modified}</span>
             <span>{entry.isDir ? '-' : formatSize(entry.size)}</span>

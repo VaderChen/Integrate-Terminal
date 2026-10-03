@@ -162,28 +162,13 @@ func isTerminalFontFamily(family string) bool {
 		}
 	}
 
-	exactMatches := map[string]struct{}{
-		"menlo":          {},
-		"monaco":         {},
-		"consolas":       {},
-		"courier":        {},
-		"courier new":    {},
-		"andale mono":    {},
-		"lucida console": {},
-		"pt mono":        {},
-		"input":          {},
-		"pragmatapro":    {},
-		"berkeley mono":  {},
-		"operator mono":  {},
-		"ubuntu mono":    {},
-		"comic code":     {},
-		"recursive mono": {},
-		"departure mono": {},
-		"iosevka term":   {},
-		"iosevka fixed":  {},
-		"apl385 unicode": {},
-		"apl333":         {},
+	switch name {
+	case "menlo", "monaco", "consolas", "courier", "courier new", "andale mono",
+		"lucida console", "pt mono", "input", "pragmatapro", "berkeley mono",
+		"operator mono", "ubuntu mono", "comic code", "recursive mono", "departure mono",
+		"iosevka term", "iosevka fixed", "apl385 unicode", "apl333":
+		return true
+	default:
+		return false
 	}
-	_, ok := exactMatches[name]
-	return ok
 }

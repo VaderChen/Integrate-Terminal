@@ -150,7 +150,7 @@ func (a *App) ensureTabCreationAllowed() error {
 	if limit == 0 {
 		return nil
 	}
-	if len(visibleTabs(a.tabs))+a.pendingTabCreations < limit {
+	if countVisibleTabs(a.tabs)+a.pendingTabCreations < limit {
 		return nil
 	}
 	return fmt.Errorf("目前未解鎖 Pro，最多只能開啟 %d 個 TAB", limit)
@@ -196,7 +196,7 @@ func (a *App) mergePurchaseStatus(state purchase.State, sourceErr error) model.P
 		}
 	}
 
-	currentTabs := len(visibleTabs(a.tabs))
+	currentTabs := countVisibleTabs(a.tabs)
 	maxTabs := a.currentTabLimit()
 	canPurchase := state.CanPurchase
 	canRestore := state.CanRestore
@@ -250,6 +250,16 @@ func visibleTabs(tabs []model.Tab) []model.Tab {
 		visible = append(visible, tab)
 	}
 	return visible
+}
+
+func countVisibleTabs(tabs []model.Tab) int {
+	count := 0
+	for i := range tabs {
+		if !tabs[i].Hidden {
+			count++
+		}
+	}
+	return count
 }
 
 func containsTabID(tabs []model.Tab, tabID string) bool {

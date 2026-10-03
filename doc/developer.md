@@ -1,4 +1,4 @@
-# IntegTERM Developer Guide
+# IntegTERM 開發者指南
 
 ## 專案定位
 
@@ -32,6 +32,8 @@ IntegTERM 是以 Wails 為基礎的桌面應用，提供本地 GUI 形式的 SSH
   - SFTP / FTP client 抽象與實作。
 - `internal/store/`
   - `sites.json`、`tabs.json`、`config.json` 的本地檔案讀寫。
+- `internal/boundedlog/`
+  - 共用磁碟日誌容量限制與跨行程寫入鎖，避免 GUI 與背景服務累積無上限紀錄。
 - `frontend/`
   - 桌面 GUI 前端；語系、終端工具與站台操作已拆成獨立模組與 hooks。
 - `internal/purchase/`
@@ -200,6 +202,42 @@ GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' go.mod)" go run golang.o
 ```
 
 `go test -exec /usr/bin/true` 只會確認測試可以編譯，不能當作測試通過。`build.sh` / `run.sh` 已內建應用程式所需的動態庫處理。
+
+### 高頻路徑與日誌上限
+
+2026-10-03 的最佳化保留既有操作、UI、終端輸出順序、傳輸控制及儲存交易規則；日誌依新需求增加筆數上限。
+
+- 終端完整 UTF-8 區塊及不含 OSC 的輸出可直接交給後續處理；跨區塊的 UTF-8／OSC 殘片仍保留獨立資料。128 KiB 回放緩衝重用既有配置，截斷仍遵循換行與 UTF-8 邊界，已回傳快照不受影響。
+- 終端事件訂閱跟隨分頁及 session 的生命週期；更新工作目錄或重新排序分頁時沿用訂閱，相同路徑不建立新的 React 狀態。
+- 檔案多選及拖曳使用 Set 判斷選取狀態，右鍵批次操作以 Map 查找檔案，保留原有選取順序。右鍵選單顯示時才查詢字型樣式。
+- 傳輸佇列使用 ID 索引及有序連結，新增、更新、移除不再搬移或掃描全部項目；空佇列會釋放索引。相同的非終止進度不重複發送狀態事件。沒有 GUI 事件 context 的背景服務仍可透過 REST 讀取快照。
+- 操作日誌保存在記憶體，最多保留最近 **1,000 筆**；`internal/session/transfer_state.go` 的 `maxLogEntries` 定義上限。滿載後以循環緩衝覆寫最舊紀錄，GUI／REST 仍依最新在前輸出。清空日誌會一併重設緩衝位置。這是筆數上限，每筆訊息內容維持完整。
+- 磁碟崩潰日誌與 REST 錯誤共用 `service-crash.log`，上限 **5 MiB**。追加後將超限時，先清除舊內容再保存新紀錄；單筆超限保留尾端。GUI 與背景服務透過檔案鎖共同遵守上限，寫入後關閉檔案，避免 REST 重新啟動時累積控制代碼。macOS 安裝日誌只保留最近一次安裝執行內容。
+
+固定資料基準測試：
+
+```bash
+env -u GOROOT GOTOOLCHAIN="$(awk '$1 == "go" { print "go" $2; exit }' go.mod)" \
+  go test ./internal/session -run '^$' \
+  -bench 'Benchmark(TerminalOutput|AppendLogs|AppendTransfers)' \
+  -benchmem -benchtime=100ms -count=3
+```
+
+第一輪結果：Apple M4 Pro／darwin arm64／Go 1.27.1，三次量測取中位數；修改前以 `4dc9377` 原始碼搭配同一份 benchmark 執行。後續函式最佳化的最新數據見[函式級最佳化紀錄](function-optimization.md)：
+
+| 路徑 | 修改前耗時 | 修改後耗時 | 修改前配置量 | 修改後配置量 |
+| --- | ---: | ---: | ---: | ---: |
+| 約 4 KiB 一般終端輸出 | 18.67 µs | 1.61 µs | 315,410 B | 2 B |
+| 約 4 KiB ANSI 終端輸出 | 21.33 µs | 3.04 µs | 315,409 B | 4 B |
+| 約 4 KiB 含工作目錄 OSC 的終端輸出 | 23.54 µs | 5.08 µs | 321,569 B | 10,279 B |
+| 新增 1,000 筆日誌 | 3.33 ms | 0.145 ms | 34,683,592 B | 186,260 B |
+| 新增 10,000 筆傳輸並取得快照 | 729.14 ms | 57.60 ms | 4,045,574,960 B | 6,094,888 B |
+
+表內配置量為每次基準操作累計配置，並非常駐記憶體；終端一般輸出的少量平均配置來自緩衝首次擴充。依新上限新增 10,000 筆日誌後，實際保留 1,000 筆，本機量測約 1.38 ms、累計配置 546,474 B。這些結果只代表受測路徑，不等同整體 GUI 或網路傳輸速度。
+
+驗證包含完整 `scripts/test.sh`、51 項前端行為測試、正式前端建置，以及日誌上限加入後的 session race／vet 檢查。新增 Smoke 案例涵蓋 UTF-8／OSC 分段、回放截斷、快照獨立性、日誌多次循環覆寫與清空、訂閱清理，以及 2,000 筆檔案的多選／拖曳。檔案面板與站台列表的代表性資料亦已比對修改前後靜態 HTML，結果一致；尚未以新版原生 App 進行人工 GUI 操作驗證。
+
+函式級最佳化完成後，已再次通過完整 `scripts/test.sh`（含 54 項前端測試）及正式前端建置。函式範圍、效能與記憶體取捨、日誌上限及驗證細節記錄於[函式級最佳化紀錄](function-optimization.md)。
 
 ## 授權與內購
 
@@ -437,12 +475,16 @@ GET /api/operations/{id}
 
 ## 正式版發行
 
-目前版本為 `1.26.1001`、Build `1244`，對應標籤 `v1.26.1001.1244`。本版包含兩輪深度檢查修正與 `127.0.0.1` MCP 免金鑰規則；公開英文說明見 [Release notes](release_1.26.1001.1244.md)。
+目前版本為 `1.26.1003`、Build `2336`，對應標籤 `v1.26.1003.2336`。本版整合高頻路徑與全專案函式級效率／記憶體最佳化，並加入操作日誌 1,000 筆、磁碟崩潰日誌 5 MiB 的保存上限；維持既有操作、功能與 UI。公開說明見[版本更新紀錄](release_1.26.1003.2336.md)，量測範圍與限制見[函式級最佳化紀錄](function-optimization.md)。
 
 使用 `python3 scripts/release-macos.py --build` 產生正式發行包。發行環境由維護者在本機設定。
 公開附件僅包含 DMG 與 `SHA256SUMS.txt`，內部建置及驗證紀錄不隨 Release 公開。
 
-GitHub Release 使用 `Integrate Terminal 版本 (Build 編號)` 作為標題，內文採英文並省略重複標題；正式版本不標記為 Pre-release，附件完整上傳後才設為 Latest。App、Git 標籤與附件檔名需使用同一組版本。
+發行腳本使用 `INTEGTERM_CODESIGN_IDENTITY` 指定有效的 Developer ID Application 憑證，並以 `INTEGTERM_NOTARY_PROFILE` 指定既有 Keychain 公證設定；不將密碼或認證檔寫入原始碼。若已用 `./build.sh` 完成建置，可省略 `--build`，避免重新產生另一組 build 編號。
+
+GitHub Release 使用 `Integrate Terminal 版本 (Build 編號)` 作為標題，內文採繁體中文並省略重複標題；正式版本不標記為 Pre-release，附件完整上傳後才設為 Latest。App、Git 標籤與附件檔名需使用同一組版本。發布前須確認 Developer ID 簽章、App／DMG 公證與票根、Gatekeeper、SHA-256，以及包內程式的 MCP Smoke。
+
+`1.26.1003.2336` 發版已重新通過完整 `scripts/test.sh` 與正式建置。DMG 打包對照 YourDesk 流程，使用 ULMO 壓縮及 Applications 捷徑；App 與 DMG 均通過 Developer ID 簽章、Apple 公證、票根與 Gatekeeper。另完成 DMG 唯讀掛載、包內 App 與已驗證產物逐檔雜湊比對、版本／架構／最低系統版本核對，以及包內 MCP 啟動、10 項工具探索、RAM 檔案讀寫刪除與分塊 SHA-256 Smoke。該 Smoke 以系統 sandbox 禁止使用者資料目錄與網路存取。
 
 更新流程由「關於」頁面的檢查更新啟動。下載時透過 `update:progress` 回報實際位元組、總大小與階段；前端以每次請求 ID 過濾過期事件。下載、檔案驗證及安裝準備分別顯示，不以計時器模擬百分比。保留檔案大小與 SHA-256 驗證，下載失敗可重試，macOS 安裝失敗時回復原 App。
 

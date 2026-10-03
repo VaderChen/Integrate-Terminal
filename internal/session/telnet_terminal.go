@@ -73,6 +73,7 @@ func (m *Manager) StartTelnetSession(ctx context.Context, site model.Site) (stri
 }
 
 func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTerminalSession) {
+	outputEvent := "ssh:output:" + session.id
 	defer func() {
 		_ = session.conn.Close()
 		session.lock.Lock()
@@ -98,7 +99,7 @@ func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTermina
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, visibleChunk)
 				session.outputSequence++
 				session.maybeAutoLogin()
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk), session.outputSequence)
+				emitSessionEvent(ctx, outputEvent, string(visibleChunk), session.outputSequence)
 				session.lock.Unlock()
 			}
 		}
@@ -111,7 +112,7 @@ func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTermina
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, pending)
 				session.outputSequence++
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending), session.outputSequence)
+				emitSessionEvent(ctx, outputEvent, string(pending), session.outputSequence)
 				session.lock.Unlock()
 			}
 			if err != io.EOF {
@@ -125,13 +126,24 @@ func (m *Manager) streamTelnetOutput(ctx context.Context, session *telnetTermina
 }
 
 func (s *telnetTerminalSession) negotiate(data []byte) []byte {
-	data = append(s.negotiationPending, data...)
+	if len(s.negotiationPending) > 0 {
+		data = append(s.negotiationPending, data...)
+	}
 	s.negotiationPending = nil
-	var plain bytes.Buffer
+	// 一般輸出可直接交給同步消費者；限制容量，避免 append 改寫讀取緩衝。
+	if bytes.IndexByte(data, telnetIAC) < 0 {
+		return data[:len(data):len(data)]
+	}
+	plain := make([]byte, 0, len(data))
 	for i := 0; i < len(data); {
 		if data[i] != telnetIAC {
-			plain.WriteByte(data[i])
-			i++
+			end := bytes.IndexByte(data[i:], telnetIAC)
+			if end < 0 {
+				plain = append(plain, data[i:]...)
+				break
+			}
+			plain = append(plain, data[i:i+end]...)
+			i += end
 			continue
 		}
 		if i+1 >= len(data) {
@@ -140,7 +152,7 @@ func (s *telnetTerminalSession) negotiate(data []byte) []byte {
 		}
 		cmd := data[i+1]
 		if cmd == telnetIAC {
-			plain.WriteByte(telnetIAC)
+			plain = append(plain, telnetIAC)
 			i += 2
 			continue
 		}
@@ -188,7 +200,7 @@ func (s *telnetTerminalSession) negotiate(data []byte) []byte {
 	if len(s.negotiationPending) > 64*1024 {
 		s.negotiationPending = nil
 	}
-	return plain.Bytes()
+	return plain
 }
 
 func (m *Manager) GetTelnetOutputBuffer(sessionID string) string {
@@ -260,7 +272,7 @@ func (m *Manager) removeTelnetSession(sessionID string) {
 }
 
 func (s *telnetTerminalSession) maybeAutoLogin() {
-	if len(s.outputBuffer) == 0 {
+	if len(s.outputBuffer) == 0 || ((s.sentUsername || s.username == "") && (s.sentPassword || s.password == "")) {
 		return
 	}
 
@@ -358,24 +370,27 @@ func normalizeTelnetInput(data string) []byte {
 		return nil
 	}
 
-	var out bytes.Buffer
+	// 已有的 CRLF 不展開；依實際所需長度一次配置，避免逐字擴充緩衝。
+	extra := strings.Count(data, "\r") + strings.Count(data, "\n") - 2*strings.Count(data, "\r\n")
+	if extra == 0 {
+		return []byte(data)
+	}
+	out := make([]byte, 0, len(data)+extra)
 	for i := 0; i < len(data); i++ {
 		switch data[i] {
 		case '\r':
 			if i+1 < len(data) && data[i+1] == '\n' {
-				out.WriteString("\r\n")
 				i++
-			} else {
-				out.WriteString("\r\n")
 			}
+			out = append(out, '\r', '\n')
 		case '\n':
-			out.WriteString("\r\n")
+			out = append(out, '\r', '\n')
 		default:
-			out.WriteByte(data[i])
+			out = append(out, data[i])
 		}
 	}
 
-	return out.Bytes()
+	return out
 }
 
 func normalizeTelnetLine(data string) []byte {

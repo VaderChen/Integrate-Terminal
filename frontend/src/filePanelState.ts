@@ -37,18 +37,36 @@ export function isActionableEntry(entry: FileEntry) {
   return entry.name !== '..' && entry.name !== '.' && entry.path.length > 0;
 }
 
-export function isPathInside(path: string, directory: string) {
+function parentDepth(value: string) {
+  let depth = 0;
+  let offset = 0;
+  while (value.startsWith('../', offset)) {
+    depth += 1;
+    offset += 3;
+  }
+  return depth + (value.slice(offset) === '..' ? 1 : 0);
+}
+
+function pathInsideDirectory(directory: string) {
   const base = normalizePath(directory);
-  const target = normalizePath(path);
-  if (target === base || target.startsWith('/') !== base.startsWith('/')) return false;
-  const parentDepth = (value: string) => value.match(/^(?:\.\.(?:\/|$))*/)?.[0].split('/').filter(Boolean).length ?? 0;
-  if (parentDepth(target) !== parentDepth(base)) return false;
-  if (!base) return target.length > 0 && target !== '..' && !target.startsWith('../');
-  return target.startsWith(base === '/' ? '/' : `${base}/`);
+  const absolute = base.startsWith('/');
+  const depth = parentDepth(base);
+  const prefix = base === '/' ? '/' : `${base}/`;
+  return (path: string) => {
+    const target = normalizePath(path);
+    if (target === base || target.startsWith('/') !== absolute || parentDepth(target) !== depth) return false;
+    if (!base) return target.length > 0 && target !== '..' && !target.startsWith('../');
+    return target.startsWith(prefix);
+  };
+}
+
+export function isPathInside(path: string, directory: string) {
+  return pathInsideDirectory(directory)(path);
 }
 
 export function actionableEntries(entries: FileEntry[], side: 'local' | 'remote', basePath: string) {
-  return entries.filter(entry => isActionableEntry(entry) && entry.side === side && isPathInside(entry.path, basePath));
+  const inside = pathInsideDirectory(basePath);
+  return entries.filter(entry => isActionableEntry(entry) && entry.side === side && inside(entry.path));
 }
 
 export function decodeFileDrag(value: string): FileDragPayload | null {
@@ -56,7 +74,8 @@ export function decodeFileDrag(value: string): FileDragPayload | null {
     const item = JSON.parse(value) as FileDragPayload;
     if (!item || typeof item.tabId !== 'string' || typeof item.basePath !== 'string'
       || (item.side !== 'local' && item.side !== 'remote') || !Array.isArray(item.paths)) return null;
-    if (!item.paths.length || item.paths.some(path => typeof path !== 'string' || !isPathInside(path, item.basePath))) return null;
+    const inside = pathInsideDirectory(item.basePath);
+    if (!item.paths.length || item.paths.some(path => typeof path !== 'string' || !inside(path))) return null;
     return { ...item, paths: [...new Set(item.paths)] };
   } catch {
     return null;

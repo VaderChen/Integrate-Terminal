@@ -112,19 +112,30 @@ func collapseNestedDeleteTargets(side string, targetPaths []string) []string {
 		return len(cleaned[i]) < len(cleaned[j])
 	})
 
-	collapsed := make([]string, 0, len(cleaned))
+	separator := byte(os.PathSeparator)
+	if side == "remote" {
+		separator = '/'
+	}
+	// 以已保留的目錄前綴查表，避免每個候選路徑與所有項目互相比對。
+	clear(seen)
+	collapsed := cleaned[:0]
 	for _, candidate := range cleaned {
 		skip := false
-		for _, kept := range collapsed {
-			if deleteTargetContains(side, kept, candidate) {
+		for i := 0; i < len(candidate); i++ {
+			if candidate[i] != separator {
+				continue
+			}
+			if _, exists := seen[candidate[:i]]; exists {
 				skip = true
 				break
 			}
 		}
 		if !skip {
 			collapsed = append(collapsed, candidate)
+			seen[strings.TrimSuffix(candidate, string(separator))] = struct{}{}
 		}
 	}
+	clear(cleaned[len(collapsed):])
 
 	return collapsed
 }

@@ -74,7 +74,7 @@ mount=""
 backup=""
 committed=0
 relaunch=0
-exec >>"$log" 2>&1
+exec >"$log" 2>&1
 echo "update installer started"
 cleanup() {
   status=$?

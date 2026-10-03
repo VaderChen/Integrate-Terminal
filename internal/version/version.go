@@ -14,25 +14,31 @@ type configFile struct {
 	ProductVersion string `json:"productVersion"`
 }
 
-func ProductVersion() string {
+type versionInfo struct {
+	product string
+	display string
+	update  string
+}
+
+// 版本資料在編譯時內嵌且不變；啟動時解析一次，供托盤與更新檢查共用。
+var currentInfo = parseVersionInfo(versionJSON)
+
+func parseVersionInfo(data []byte) versionInfo {
 	var cfg configFile
-	if err := json.Unmarshal(versionJSON, &cfg); err != nil {
-		return "1.00.00"
-	}
+	err := json.Unmarshal(data, &cfg)
 	version := strings.TrimSpace(cfg.ProductVersion)
-	if version == "" {
+	if err != nil || version == "" {
 		version = "1.00.00"
 	}
-	return version
-}
-
-func Current() string { return "IntegTERM " + ProductVersion() }
-
-func UpdateVersion() string {
-	var cfg configFile
-	_ = json.Unmarshal(versionJSON, &cfg)
-	if strings.TrimSpace(cfg.Build) != "" {
-		return ProductVersion() + "." + strings.TrimSpace(cfg.Build)
+	update := version
+	if build := strings.TrimSpace(cfg.Build); build != "" {
+		update += "." + build
 	}
-	return ProductVersion()
+	return versionInfo{product: version, display: "IntegTERM " + version, update: update}
 }
+
+func ProductVersion() string { return currentInfo.product }
+
+func Current() string { return currentInfo.display }
+
+func UpdateVersion() string { return currentInfo.update }

@@ -236,17 +236,8 @@ export function sanitizeTerminalReplay(value: string) {
 }
 
 export function writeLocalEcho(term: Terminal, data: string) {
-  for (const char of data) {
-    if (char === '\r') {
-      term.write('\r\n');
-      continue;
-    }
-    if (char === '\u007f') {
-      term.write('\b \b');
-      continue;
-    }
-    term.write(char);
-  }
+  if (!data) return;
+  term.write(data.replace(/\r|\u007f/g, char => char === '\r' ? '\r\n' : '\b \b'));
 }
 
 export function getCurrentPromptPath(term: Terminal | null) {

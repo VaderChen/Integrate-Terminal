@@ -11,17 +11,23 @@ export function attachTerminalOutput(options: {
   let sequence = 0;
   const pending = new Map<number, string>();
   const flush = () => {
-    while (pending.has(sequence + 1)) {
+    let chunk: string | undefined;
+    while ((chunk = pending.get(sequence + 1)) !== undefined) {
       sequence += 1;
-      const chunk = pending.get(sequence)!;
       pending.delete(sequence);
       options.write(chunk, false);
     }
   };
   const unsubscribe = options.subscribe((chunk, nextSequence) => {
     if (disposed || !Number.isSafeInteger(nextSequence) || nextSequence <= sequence) return;
-    pending.set(nextSequence, chunk);
-    if (initialized) flush();
+    if (initialized && pending.size === 0 && nextSequence === sequence + 1) {
+      // 正常連續輸出直接寫入；只有快照尚未完成或序號缺口需要暫存。
+      sequence = nextSequence;
+      options.write(chunk, false);
+    } else {
+      pending.set(nextSequence, chunk);
+      if (initialized) flush();
+    }
   });
   const ready = (async () => {
     const snapshot = await options.readSnapshot();

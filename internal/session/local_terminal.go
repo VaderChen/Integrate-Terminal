@@ -71,6 +71,7 @@ func (m *Manager) StartLocalSession(ctx context.Context, cwd string) (string, er
 }
 
 func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalSession) {
+	outputEvent := "ssh:output:" + session.id
 	defer func() {
 		if session.outputDone != nil {
 			close(session.outputDone)
@@ -101,7 +102,7 @@ func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalS
 				if len(visibleChunk) > 0 {
 					session.outputBuffer = appendTerminalOutput(session.outputBuffer, visibleChunk)
 					session.outputSequence++
-					emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(visibleChunk), session.outputSequence)
+					emitSessionEvent(ctx, outputEvent, string(visibleChunk), session.outputSequence)
 				}
 				session.lock.Unlock()
 			}
@@ -114,7 +115,7 @@ func (m *Manager) streamLocalOutput(ctx context.Context, session *localTerminalS
 				session.lock.Lock()
 				session.outputBuffer = appendTerminalOutput(session.outputBuffer, pending)
 				session.outputSequence++
-				emitSessionEvent(ctx, fmt.Sprintf("ssh:output:%s", session.id), string(pending), session.outputSequence)
+				emitSessionEvent(ctx, outputEvent, string(pending), session.outputSequence)
 				session.lock.Unlock()
 			}
 			if err != io.EOF {

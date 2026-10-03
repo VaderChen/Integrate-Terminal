@@ -3,25 +3,22 @@ package session
 import (
 	"testing"
 
-	"IntegTERM/internal/model"
 	"IntegTERM/internal/transport"
 )
 
 func TestClearAllTransfersCancelsRunningWork(t *testing.T) {
 	manager := NewManager()
-	manager.mu.Lock()
-	manager.transfers = []model.TransferItem{{ID: "transfer-1", Status: "running"}}
-	manager.mu.Unlock()
+	itemID := manager.addTransfer("檔案", "download")
 
 	if remaining := manager.ClearAllTransfers(); len(remaining) != 0 {
 		t.Fatalf("expected empty queue, got %#v", remaining)
 	}
-	if !manager.isTransferCancelled("transfer-1") {
+	if !manager.isTransferCancelled(itemID) {
 		t.Fatal("running transfer was not marked cancelled")
 	}
 
-	manager.updateTransfer("transfer-1", 0, 0, "cancelled")
-	if manager.isTransferCancelled("transfer-1") {
+	manager.updateTransfer(itemID, 0, 0, "cancelled")
+	if manager.isTransferCancelled(itemID) {
 		t.Fatal("cancelled transfer state was not cleaned up")
 	}
 }
